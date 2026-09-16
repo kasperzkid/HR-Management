@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      String
+  createdAt DateTime @default(now())
+}
+
+model Employee {
+  id               String   @id
+  employeeId       String   @unique
+  name             String
+  gender           String
+  dateOfBirth      String
+  joinDate         String
+  jobTitle         String
+  department       String
+  employmentType   String
+  basicSalary      Float
+  transportAllowance Float
+  housingAllowance Float
+  mealAllowance    Float
+  otherAllowance   Float
+  otherDeductions  Float
+  loanDeductions   Float
+  bankName         String
+  bankAccount      String
+  tin              String
+  pensionId        String
+  phone            String
+  email            String
+  address          String
+  emergencyContact String
+  employmentStatus String
+  exitDate         String?
+  notes            String?
+  status           String
+  avatar           String
+  location         String
+  salary           Float
+  manager          String
+  roleType         String
+  initials         String
+  createdAt        DateTime @default(now())
+}
+
+model Attendance {
+  id             String   @id
+  employeeId     String
+  employeeName   String
+  department     String
+  date           String
+  status         String
+  checkIn        String?
+  checkOut       String?
+  late           Int      @default(0)
+  earlyDeparture Int      @default(0)
+  regular        Float    @default(0)
+  overtime       Float    @default(0)
+  createdAt      DateTime @default(now())
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}

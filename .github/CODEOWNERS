@@ -1,0 +1,17 @@
+# Each team owns its dashboard files. GitHub auto-requests review
+# from the owning team when a PR touches these files.
+
+# Employer team
+/src/Employer/          @your-username   # replace with employer team reviewers
+server/routes/employer.routes.js        @your-username   # replace with employer team reviewers
+server/controllers/employer.controller.js @your-username
+
+# HR-Manager team
+/src/HR-Manager/        @your-username   # replace with hr-manager team reviewers
+server/routes/hr-manager.routes.js      @your-username
+server/controllers/hr-manager.controller.js @your-username
+
+# Shared core — both teams review
+server/app.js           @your-username   # replace with both teams
+server/db.js            @your-username
+prisma/schema.prisma    @your-username   # DB changes need both teams
