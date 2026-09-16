@@ -4,15 +4,13 @@ import {
   LayoutDashboard,
   Users,
   BadgeDollarSign,
-  Headphones,
   Search,
   ChevronDown,
   Menu,
   X,
-  Check,
+Check,
   BarChart3,
   MessageSquare,
-  UserRound,
   Settings as SettingsIcon,
 } from 'lucide-react'
 import Topbar from './Topbar'
@@ -171,20 +169,6 @@ function EmployerLayout() {
               {!collapsed && <span>Dashboard</span>}
             </Link>
 
-            {/* Employee Dashboard (self-service) */}
-            <Link
-              to="/employer/employee-dashboard"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                isRouteActive('/employer/employee-dashboard') || isRouteActive('/employer/my-dashboard')
-                  ? 'bg-gray-100 text-gray-950 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-              title={collapsed ? 'Employee Dashboard' : undefined}
-            >
-              <UserRound size={16} className="shrink-0 text-gray-500" />
-              {!collapsed && <span>Employee Dashboard</span>}
-            </Link>
-
             {/* Teams Section (Expandable) */}
             <div className="pt-1">
               <button
@@ -304,14 +288,6 @@ function EmployerLayout() {
               >
                 <SettingsIcon size={16} className="shrink-0 text-gray-500" />
                 {!collapsed && <span>Settings</span>}
-              </Link>
-              <Link
-                to="/employer/help"
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
-                title={collapsed ? 'Help and support' : undefined}
-              >
-                <Headphones size={16} className="shrink-0 text-gray-500" />
-                {!collapsed && <span>Help and support</span>}
               </Link>
             </div>
           </div>

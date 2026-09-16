@@ -13,7 +13,7 @@ const NOTIF_ICONS = {
 function Topbar() {
   const [notifOpen, setNotifOpen] = useState(false)
   const notifRef = useRef(null)
-  const { totalUnread, notifications, unreadNotifications, markAllRead, dismissNotification } =
+  const { totalUnread, notifications, unreadNotifications, markAllRead, markAllNotificationsReadAndRemove, dismissNotification } =
     useMessaging()
   const navigate = useNavigate()
 
@@ -27,7 +27,7 @@ function Topbar() {
 
   const handleAllRead = (e) => {
     e.stopPropagation()
-    markAllRead()
+    markAllNotificationsReadAndRemove()
   }
 
   return (

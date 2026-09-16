@@ -80,6 +80,20 @@ export function MessagingProvider({ children }) {
     setThreads(next)
   }, [threads])
 
+  const markAllNotificationsReadAndRemove = useCallback(() => {
+    // 1. Mark all thread messages as read
+    const next = {}
+    Object.keys(threads).forEach((cid) => {
+      next[cid] = (threads[cid] || []).map((m) =>
+        m.from === 'them' ? { ...m, read: true } : m
+      )
+    })
+    setThreads(next)
+
+    // 2. Remove all notifications
+    setNotifications([])
+  }, [threads, notifications])
+
   const dismissNotification = useCallback((id) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id))
   }, [])

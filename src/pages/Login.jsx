@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Eye,
@@ -119,13 +119,13 @@ function DashboardSlide() {
       </div>
 
       {/* Main Body */}
-      <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3.5 overflow-hidden">
-        {/* 4 KPI Cards with larger height */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between space-y-2.5 overflow-hidden">
+        {/* 4 KPI Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {kpis.map((k) => (
             <div
               key={k.label}
-              className={`p-3.5 h-[116px] rounded-xl border bg-gradient-to-b ${k.color} transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xs flex flex-col justify-between`}
+              className={`p-3 h-[98px] rounded-xl border bg-gradient-to-b ${k.color} transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xs flex flex-col justify-between`}
             >
               <div className="flex items-center justify-between">
                 <div className="w-7 h-7 rounded-lg bg-white/90 backdrop-blur-xs flex items-center justify-center shadow-2xs">
@@ -146,8 +146,8 @@ function DashboardSlide() {
           ))}
         </div>
 
-        {/* Department Distribution with larger height */}
-        <div className="p-3.5 rounded-xl bg-gray-50/90 border border-gray-200/80 space-y-2.5">
+        {/* Department Distribution */}
+        <div className="p-2.5 rounded-xl bg-gray-50/90 border border-gray-200/80 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-gray-900 flex items-center gap-1.5">
               <Users size={14} className="text-gray-900" />
@@ -157,7 +157,7 @@ function DashboardSlide() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {depts.map((d) => (
-              <div key={d.name} className="p-2.5 h-[52px] rounded-lg bg-white border border-gray-200/70 flex flex-col justify-between">
+              <div key={d.name} className="p-2 h-[46px] rounded-lg bg-white border border-gray-200/70 flex flex-col justify-between">
                 <div className="flex items-center justify-between text-[9px]">
                   <span className="font-semibold text-gray-700 truncate">{d.name}</span>
                   <span className="font-bold text-gray-950">{d.count}</span>
@@ -170,28 +170,31 @@ function DashboardSlide() {
           </div>
         </div>
 
-        {/* Recent Staff Roster Preview with Auto-Scrolling Animation */}
-        <div className="border border-gray-200/80 rounded-xl overflow-hidden bg-white">
-          <div className="px-3.5 py-2 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between text-[10px] font-bold text-gray-600">
-            <span>Recent Employees</span>
-            <span>Status</span>
+        {/* Recent Staff Roster Preview with Auto-Scrolling Animation - Significantly Larger */}
+        <div className="border border-gray-200/80 rounded-xl overflow-hidden bg-white shadow-2xs flex-1 flex flex-col min-h-0">
+          <div className="px-3.5 py-2 bg-gray-50/80 border-b border-gray-100 flex items-center justify-between text-[11px] font-bold text-gray-700 shrink-0">
+            <span className="flex items-center gap-1.5">
+              <UserCheck size={13} className="text-gray-900" />
+              Recent Employees
+            </span>
+            <span className="text-[10px] font-semibold text-gray-400">Live Status</span>
           </div>
-          <div className="relative h-[120px] overflow-hidden">
+          <div className="relative h-[190px] overflow-hidden">
             {/* Gradient masks for smooth top/bottom edge transition */}
-            <div className="absolute top-0 inset-x-0 h-3 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
-            <div className="absolute bottom-0 inset-x-0 h-3 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
+            <div className="absolute top-0 inset-x-0 h-4 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
+            <div className="absolute bottom-0 inset-x-0 h-4 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
 
             <div className="animate-scroll-roster divide-y divide-gray-100">
               {[...ROSTER_EMPLOYEES, ...ROSTER_EMPLOYEES].map((emp, idx) => (
-                <div key={`${emp.id}-${idx}`} className="px-3.5 py-2 flex items-center justify-between hover:bg-gray-50/60 transition-colors">
+                <div key={`${emp.id}-${idx}`} className="px-3.5 py-2.5 flex items-center justify-between hover:bg-gray-50/60 transition-colors">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <img src={emp.avatar} alt={emp.name} className="w-7 h-7 rounded-full object-cover ring-1 ring-gray-200 shrink-0" />
+                    <img src={emp.avatar} alt={emp.name} className="w-8 h-8 rounded-full object-cover ring-1 ring-gray-200 shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[11px] font-bold text-gray-950 leading-tight truncate">{emp.name}</p>
-                      <p className="text-[9px] text-gray-500 leading-tight truncate">{emp.role} • <span className="font-mono">{emp.id}</span></p>
+                      <p className="text-[12px] font-bold text-gray-950 leading-tight truncate">{emp.name}</p>
+                      <p className="text-[10px] text-gray-500 leading-tight truncate">{emp.role} • <span className="font-mono">{emp.id}</span></p>
                     </div>
                   </div>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                  <span className={`text-[9px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${
                     emp.status === 'Active'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -203,13 +206,6 @@ function DashboardSlide() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Footer Bar */}
-      <div className="px-5 py-2.5 bg-gray-50 border-t border-gray-100 flex items-center justify-center shrink-0">
-        <span className="font-mono text-[11px] font-semibold tracking-wider text-gray-700 uppercase">
-          Ethiopian Tax & Pension Compliant
-        </span>
       </div>
     </div>
   )
@@ -379,6 +375,27 @@ function ChatSlide({ chatStep }) {
 
 /* ─────────────── Slide 3: Executive Risk & Reporting Dashboard (Matching report.png) ─────────────── */
 function ReportSlide() {
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 80)
+    return () => clearTimeout(t)
+  }, [])
+
+  const BARS = [
+    { h: [15, 12, 10, 8] },
+    { h: [13, 11, 9, 7] },
+    { h: [12, 10, 8, 6] },
+    { h: [11, 9, 7, 5] },
+    { h: [10, 8, 6, 5] },
+    { h: [9, 7, 5, 4] },
+    { h: [8, 6, 5, 4] },
+    { h: [7, 5, 4, 3] },
+    { h: [6, 5, 4, 3] },
+    { h: [5, 4, 3, 3] },
+    { h: [4, 3, 3, 2] },
+    { h: [3, 2, 2, 2] },
+  ]
+
   return (
     <div className="w-full max-w-[590px] h-[540px] bg-white text-gray-950 rounded-2xl shadow-2xl border border-gray-200/90 flex flex-col justify-between overflow-hidden">
       {/* Constant Top Header with Site Logo */}
@@ -396,7 +413,7 @@ function ReportSlide() {
 
       {/* 2x2 Grid Matching report.png in site monochrome theme */}
       <div className="flex-1 grid grid-cols-2 divide-x divide-y divide-gray-100/90 overflow-hidden">
-        {/* Quadrant 1 (Top Left): Average vendor rating */}
+        {/* Quadrant 1 (Top Left): Average vendor rating — arc draw animation */}
         <div className="p-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-semibold text-gray-700">Average vendor rating</span>
@@ -413,30 +430,56 @@ function ReportSlide() {
                   strokeWidth="8"
                   strokeLinecap="round"
                 />
-                {/* Active black arc */}
+                {/* Active black arc — animated draw */}
                 <path
                   d="M 16 64 A 44 44 0 0 1 98 38"
                   fill="none"
                   stroke="#09090b"
                   strokeWidth="8"
                   strokeLinecap="round"
+                  strokeDasharray="140"
+                  strokeDashoffset={mounted ? 0 : 140}
+                  style={{ transition: 'stroke-dashoffset 2s cubic-bezier(0.16,1,0.3,1)' }}
                 />
               </svg>
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-center">
-                <span className="text-3xl font-black text-gray-950 tracking-tight">820</span>
+                <span
+                  className="text-3xl font-black text-gray-950 tracking-tight"
+                  style={{
+                    opacity: mounted ? 1 : 0,
+                    transform: mounted ? 'translateY(0)' : 'translateY(6px)',
+                    transition: 'opacity 0.6s ease 1.2s, transform 0.6s ease 1.2s',
+                  }}
+                >
+                  820
+                </span>
               </div>
+            </div>
+            {/* Sub-labels */}
+            <div className="flex items-center gap-4 mt-2">
+              <span className="text-[9px] text-gray-400 font-mono">0</span>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-black inline-block" />
+                <span className="text-[9px] font-medium text-gray-600">Score</span>
+              </div>
+              <span className="text-[9px] text-gray-400 font-mono">1000</span>
             </div>
           </div>
         </div>
 
-        {/* Quadrant 2 (Top Right): Your risk rating over time */}
+        {/* Quadrant 2 (Top Right): Your risk rating over time — scan beam */}
         <div className="p-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-semibold text-gray-700">Your risk rating over time</span>
             <MoreHorizontal size={13} className="text-gray-400 cursor-pointer" />
           </div>
           <div className="flex flex-col justify-end h-full pt-1 pb-0.5">
-            <div className="h-20 w-full relative">
+            <div className="h-20 w-full relative overflow-hidden rounded-sm">
+              {/* Scan beam */}
+              <div
+                className="animate-scan-beam absolute top-0 bottom-0 w-px bg-gray-400/70 pointer-events-none"
+                style={{ zIndex: 5 }}
+              />
               <svg className="w-full h-full overflow-visible" viewBox="0 0 200 55" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1">
@@ -454,6 +497,9 @@ function ReportSlide() {
                   stroke="#09090b"
                   strokeWidth="2.5"
                   strokeLinecap="round"
+                  strokeDasharray="300"
+                  strokeDashoffset={mounted ? 0 : 300}
+                  style={{ transition: 'stroke-dashoffset 2.4s cubic-bezier(0.16,1,0.3,1) 0.3s' }}
                 />
               </svg>
             </div>
@@ -465,7 +511,7 @@ function ReportSlide() {
           </div>
         </div>
 
-        {/* Quadrant 3 (Bottom Left): Risk severity breakdown */}
+        {/* Quadrant 3 (Bottom Left): Risk severity breakdown — staggered fade-in rows */}
         <div className="p-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] font-semibold text-gray-700">Risk severity breakdown</span>
@@ -473,12 +519,20 @@ function ReportSlide() {
           </div>
           <div className="space-y-2 py-0.5">
             {[
-              { label: 'Critical', count: '2 issues', dot: 'bg-black text-white' },
-              { label: 'High', count: '3 issues', dot: 'bg-gray-800 text-white' },
-              { label: 'Medium', count: '5 issues', dot: 'bg-gray-500 text-white' },
-              { label: 'Low', count: '3 issues', dot: 'bg-gray-300 text-gray-800' },
+              { label: 'Critical', count: '2 issues', dot: 'bg-black text-white', delay: '0s' },
+              { label: 'High', count: '3 issues', dot: 'bg-gray-800 text-white', delay: '0.15s' },
+              { label: 'Medium', count: '5 issues', dot: 'bg-gray-500 text-white', delay: '0.3s' },
+              { label: 'Low', count: '3 issues', dot: 'bg-gray-300 text-gray-800', delay: '0.45s' },
             ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between text-[9px] py-0.5">
+              <div
+                key={item.label}
+                className="flex items-center justify-between text-[9px] py-0.5"
+                style={{
+                  opacity: mounted ? 1 : 0,
+                  transform: mounted ? 'translateX(0)' : 'translateX(-10px)',
+                  transition: `opacity 0.5s ease ${item.delay}, transform 0.5s ease ${item.delay}`,
+                }}
+              >
                 <div className="flex items-center gap-2">
                   <span className={`w-3.5 h-3.5 rounded-full ${item.dot} flex items-center justify-center text-[7px] font-bold`}>
                     •
@@ -494,7 +548,7 @@ function ReportSlide() {
           </div>
         </div>
 
-        {/* Quadrant 4 (Bottom Right): Risk severity over time */}
+        {/* Quadrant 4 (Bottom Right): Risk severity over time — bar wave + animated line */}
         <div className="p-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-semibold text-gray-700">Risk severity over time</span>
@@ -509,35 +563,59 @@ function ReportSlide() {
                   fill="none"
                   stroke="#09090b"
                   strokeWidth="1.5"
+                  strokeDasharray="220"
+                  strokeDashoffset={mounted ? 0 : 220}
+                  style={{ transition: 'stroke-dashoffset 2s cubic-bezier(0.16,1,0.3,1) 0.5s' }}
                 />
                 {[
                   [8, 16], [24, 22], [40, 25], [56, 24], [72, 23],
                   [88, 30], [104, 30], [120, 26], [136, 32], [152, 34], [168, 36]
                 ].map(([cx, cy], i) => (
-                  <circle key={i} cx={cx} cy={cy} r="2" fill="#09090b" />
+                  <circle
+                    key={i}
+                    cx={cx}
+                    cy={cy}
+                    r="2"
+                    fill="#09090b"
+                    style={{
+                      opacity: mounted ? 1 : 0,
+                      transition: `opacity 0.3s ease ${0.5 + i * 0.15}s`,
+                    }}
+                  />
                 ))}
               </svg>
 
-              {/* Stacked bars with shades of monochrome black & gray */}
-              {[
-                { h: [15, 12, 10, 8] },
-                { h: [13, 11, 9, 7] },
-                { h: [12, 10, 8, 6] },
-                { h: [11, 9, 7, 5] },
-                { h: [10, 8, 6, 5] },
-                { h: [9, 7, 5, 4] },
-                { h: [8, 6, 5, 4] },
-                { h: [7, 5, 4, 3] },
-                { h: [6, 5, 4, 3] },
-                { h: [5, 4, 3, 3] },
-                { h: [4, 3, 3, 2] },
-                { h: [3, 2, 2, 2] },
-              ].map((bar, idx) => (
+              {/* Stacked bars with staggered grow-up animation */}
+              {BARS.map((bar, idx) => (
                 <div key={idx} className="flex-1 flex flex-col justify-end h-full gap-0.5 z-0">
-                  <div className="w-full bg-gray-200 rounded-t-xs" style={{ height: `${bar.h[3] * 1.5}px` }} />
-                  <div className="w-full bg-gray-400" style={{ height: `${bar.h[2] * 1.5}px` }} />
-                  <div className="w-full bg-gray-700" style={{ height: `${bar.h[1] * 1.5}px` }} />
-                  <div className="w-full bg-black rounded-b-xs" style={{ height: `${bar.h[0] * 1.5}px` }} />
+                  <div
+                    className="w-full bg-gray-200 rounded-t-xs"
+                    style={{
+                      height: mounted ? `${bar.h[3] * 1.5}px` : '0px',
+                      transition: `height 0.6s cubic-bezier(0.34,1.56,0.64,1) ${idx * 0.06}s`,
+                    }}
+                  />
+                  <div
+                    className="w-full bg-gray-400"
+                    style={{
+                      height: mounted ? `${bar.h[2] * 1.5}px` : '0px',
+                      transition: `height 0.6s cubic-bezier(0.34,1.56,0.64,1) ${0.05 + idx * 0.06}s`,
+                    }}
+                  />
+                  <div
+                    className="w-full bg-gray-700"
+                    style={{
+                      height: mounted ? `${bar.h[1] * 1.5}px` : '0px',
+                      transition: `height 0.6s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + idx * 0.06}s`,
+                    }}
+                  />
+                  <div
+                    className="w-full bg-black rounded-b-xs"
+                    style={{
+                      height: mounted ? `${bar.h[0] * 1.5}px` : '0px',
+                      transition: `height 0.6s cubic-bezier(0.34,1.56,0.64,1) ${0.15 + idx * 0.06}s`,
+                    }}
+                  />
                 </div>
               ))}
             </div>
