@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { LifeBuoy, LogOut, ChevronDown, Mail, Lock, Save } from 'lucide-react'
+import { logout } from '../../lib/auth'
 
 function getInitials(name) {
   return (name || '?')
@@ -48,8 +49,8 @@ function ProfileMenu({ compact = false }) {
   }, [])
 
   const close = () => setOpen(false)
-  const handleLogout = () => {
-    localStorage.removeItem('user')
+  const handleLogout = async () => {
+    await logout()
     navigate('/login')
   }
 

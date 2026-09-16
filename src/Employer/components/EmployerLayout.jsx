@@ -295,7 +295,7 @@ function EmployerLayout() {
           {/* Logout */}
           <div className="px-3 pb-2">
             <button
-              onClick={() => { localStorage.removeItem('user'); window.location.href = '/login' }}
+              onClick={() => { redirectToLogin() }}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors whitespace-nowrap ${collapsed ? 'justify-center' : ''}`}
               title={collapsed ? 'Logout' : undefined}
             >

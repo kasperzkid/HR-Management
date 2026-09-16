@@ -675,24 +675,30 @@ function Login() {
     }
   }, [currentSlide])
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
-    setTimeout(() => {
-      let role = selectedRole
-      let name = role === 'EMPLOYER' ? 'Alex Johnson' : 'Sarah Jenkins'
-      if (email.toLowerCase().includes('hr')) {
-        role = 'HR_MANAGER'
-        name = 'Sarah Jenkins'
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.message || 'Login failed')
+        setLoading(false)
+        return
       }
-      localStorage.setItem(
-        'user',
-        JSON.stringify({ name, email, role, company: 'Wishbone', token: `session-${Date.now()}` })
-      )
+      const { user, token } = data
+      localStorage.setItem('user', JSON.stringify({ ...user, company: 'Wishbone', token }))
       setLoading(false)
-      navigate(role === 'HR_MANAGER' ? '/hr-manager' : '/employer/dashboard')
-    }, 400)
+      navigate(user.role === 'HR_MANAGER' ? '/hr-manager' : '/employer/dashboard')
+    } catch {
+      setError('Unable to reach server. Is the API running?')
+      setLoading(false)
+    }
   }
 
   const activeIdx = currentSlide % SLIDES.length

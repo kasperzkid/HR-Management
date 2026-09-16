@@ -18,16 +18,20 @@ import {
   Building,
 } from 'lucide-react'
 import { MOCK_EMPLOYEES } from '../data/mockData'
+import { logout } from '../../lib/auth'
 
 export default function HRManagerLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const mainScrollRef = useRef(null)
 
+  const [isHovered, setIsHovered] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSection, setActiveSection] = useState('overview')
   const [showOrgMenu, setShowOrgMenu] = useState(false)
+
+  const collapsed = !isHovered
 
   const [currentOrg, setCurrentOrg] = useState({
     name: 'Wishbone Global',
@@ -122,8 +126,8 @@ export default function HRManagerLayout() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('user')
+  const handleLogout = async () => {
+    await logout()
     window.location.href = '/login'
   }
 
@@ -167,56 +171,74 @@ export default function HRManagerLayout() {
           />
         )}
 
-        {/* Consistent Fixed-Width Sidebar Matching Employee Dashboard Design */}
+        {/* Sidebar with Hover Collapse/Expand Resizing & Black Left Border on Active Section */}
         <aside
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
           className={`
             fixed lg:static inset-y-0 left-0 z-50 bg-white border-r border-gray-200/80
-            flex flex-col shrink-0 w-[250px] min-w-[250px] max-w-[250px] h-full select-none
-            transition-transform duration-200 ease-in-out
-            ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}
+            flex flex-col shrink-0 transition-all duration-300 ease-in-out select-none
+            ${collapsed ? 'lg:w-[72px]' : 'lg:w-[250px]'}
+            ${mobileOpen ? 'translate-x-0 w-[260px] shadow-2xl' : '-translate-x-full lg:translate-x-0'}
           `}
         >
           {/* Logo & Header */}
           <div className="h-16 px-4 flex items-center justify-between border-b border-gray-100 shrink-0">
-            <div className="flex items-center gap-2.5 overflow-hidden">
+            <div
+              className={`flex items-center gap-2.5 overflow-hidden transition-all duration-200 ${
+                collapsed ? 'justify-center w-full' : ''
+              }`}
+            >
               <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 3.2L18 9l-6 3.8L6 9l6-3.8zm-6.5 5.5l5.5 3.5v7.2L5.5 18v-7.3zm13 0v7.3l-5.5 3.5v-7.2l5.5-3.6z" />
                 </svg>
               </div>
-              <div className="truncate">
-                <span className="font-extrabold tracking-tight text-gray-950 text-sm font-sans block truncate">
-                  Yanol-HR
-                </span>
-                <span className="text-[10px] font-semibold text-gray-400 block -mt-0.5 truncate">
-                  HR Management
-                </span>
-              </div>
+              {!collapsed && (
+                <div className="truncate">
+                  <span className="font-extrabold tracking-tight text-gray-950 text-sm font-sans block truncate">
+                    Yanol-HR
+                  </span>
+                  <span className="text-[10px] font-semibold text-gray-400 block -mt-0.5 truncate">
+                    HR Management
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Quick Search */}
-          <div className="px-3 pt-3 pb-1 shrink-0">
-            <div className="relative flex items-center">
-              <Search size={15} className="absolute left-3 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search dashboard..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-12 py-1.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white text-xs text-gray-800 rounded-lg border border-gray-200/70 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-400"
-              />
-              <span className="absolute right-2 text-[10px] font-medium text-gray-400 bg-white px-1.5 py-0.5 rounded border border-gray-200 shadow-2xs">
-                ⌘ K
-              </span>
+          {!collapsed ? (
+            <div className="px-3 pt-3 pb-1 shrink-0">
+              <div className="relative flex items-center">
+                <Search size={15} className="absolute left-3 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search dashboard..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-12 py-1.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white text-xs text-gray-800 rounded-lg border border-gray-200/70 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-400"
+                />
+                <span className="absolute right-2 text-[10px] font-medium text-gray-400 bg-white px-1.5 py-0.5 rounded border border-gray-200 shadow-2xs">
+                  ⌘ K
+                </span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="px-3 pt-3 flex justify-center shrink-0">
+              <div className="p-2 text-gray-400 rounded-lg" title="Hover to expand">
+                <Search size={16} />
+              </div>
+            </div>
+          )}
 
           {/* Navigation Links — Exactly the 8 Dashboard Sections */}
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 text-sm custom-scrollbar overflow-x-hidden">
-            <div className="px-2 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-              Dashboard Sections
-            </div>
+          <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1 text-sm custom-scrollbar overflow-x-hidden">
+            {!collapsed && (
+              <div className="px-2 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                Dashboard Sections
+              </div>
+            )}
 
             {sections.map((item) => {
               const isActive = activeSection === item.id
@@ -227,21 +249,30 @@ export default function HRManagerLayout() {
                   key={item.id}
                   type="button"
                   onClick={() => scrollToSection(item.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                  title={collapsed ? item.label : undefined}
+                  className={`w-full flex items-center transition-all whitespace-nowrap cursor-pointer relative py-2 rounded-r-lg ${
+                    collapsed ? 'justify-center px-1' : 'justify-between px-2.5'
+                  } ${
                     isActive
-                      ? 'bg-gray-100 text-gray-950 font-semibold'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      ? 'border-l-4 border-black bg-gray-100 text-gray-950 font-semibold pl-2'
+                      : 'border-l-4 border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Icon size={16} className={`shrink-0 ${isActive ? 'text-gray-950' : 'text-gray-500'}`} />
-                    <span className="truncate">{item.label}</span>
+                  <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3 min-w-0'}`}>
+                    <Icon
+                      size={16}
+                      className={`shrink-0 ${isActive ? 'text-gray-950' : 'text-gray-500'}`}
+                    />
+                    {!collapsed && <span className="truncate text-xs">{item.label}</span>}
                   </div>
 
-                  {item.badge && (
+                  {!collapsed && item.badge && (
                     <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-rose-500 text-white shrink-0 ml-1.5 shadow-2xs">
                       {item.badge}
                     </span>
+                  )}
+                  {collapsed && item.badge && (
+                    <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-rose-500 ring-1 ring-white" />
                   )}
                 </button>
               )
@@ -252,7 +283,10 @@ export default function HRManagerLayout() {
           <div className="px-3 pb-2 shrink-0">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors whitespace-nowrap cursor-pointer"
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors whitespace-nowrap cursor-pointer ${
+                collapsed ? 'justify-center' : ''
+              }`}
+              title={collapsed ? 'Logout' : undefined}
             >
               <svg
                 width="16"
@@ -269,30 +303,35 @@ export default function HRManagerLayout() {
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
               </svg>
-              <span>Logout</span>
+              {!collapsed && <span>Logout</span>}
             </button>
           </div>
 
           {/* Bottom Organization Card */}
           <div className="p-3 border-t border-gray-100 relative shrink-0">
             <button
-              onClick={() => setShowOrgMenu(!showOrgMenu)}
-              className="w-full flex items-center justify-between p-2 rounded-xl bg-gray-100/90 hover:bg-gray-200/70 border border-gray-200/60 transition-colors text-left cursor-pointer"
+              onClick={() => !collapsed && setShowOrgMenu(!showOrgMenu)}
+              className={`w-full flex items-center justify-between p-2 rounded-xl bg-gray-100/90 hover:bg-gray-200/70 border border-gray-200/60 transition-colors text-left cursor-pointer ${
+                collapsed ? 'justify-center p-1.5' : ''
+              }`}
+              title={collapsed ? currentOrg.name : undefined}
             >
               <div className="flex items-center gap-2.5 overflow-hidden">
                 <div className="w-8 h-8 rounded-full bg-gray-950 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
                   {currentOrg.code}
                 </div>
-                <div className="truncate">
-                  <p className="text-xs font-semibold text-gray-900 truncate">{currentOrg.name}</p>
-                  <p className="text-[11px] text-gray-500 truncate">{currentOrg.members}</p>
-                </div>
+                {!collapsed && (
+                  <div className="truncate">
+                    <p className="text-xs font-semibold text-gray-900 truncate">{currentOrg.name}</p>
+                    <p className="text-[11px] text-gray-500 truncate">{currentOrg.members}</p>
+                  </div>
+                )}
               </div>
-              <ChevronDown size={14} className="text-gray-500 shrink-0 ml-1" />
+              {!collapsed && <ChevronDown size={14} className="text-gray-500 shrink-0 ml-1" />}
             </button>
 
             {/* Org Switcher Dropdown */}
-            {showOrgMenu && (
+            {showOrgMenu && !collapsed && (
               <div className="absolute bottom-16 left-3 right-3 bg-white rounded-xl shadow-xl border border-gray-200/90 p-2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
                 <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 px-2.5 py-1">
                   Workspace
@@ -327,7 +366,7 @@ export default function HRManagerLayout() {
           </div>
         </aside>
 
-        {/* Main Workspace Area — Independent Scroll, Rock Solid Sidebar */}
+        {/* Main Workspace Area — Independent Scroll */}
         <main
           ref={mainScrollRef}
           className="flex-1 min-w-0 overflow-y-auto bg-[#f4f5f7] scroll-smooth"

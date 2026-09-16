@@ -1,22 +1,87 @@
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import EmployerApp from './Employer/EmployerApp'
 import HRManagerApp from './HR-Manager/HRManagerApp'
 
+function useAuth() {
+  const [status, setStatus] = useState(() => {
+    // loading | authenticated | anonymous — derived once from storage
+    const raw = localStorage.getItem('user')
+    if (!raw) return 'anonymous'
+    try {
+      const stored = JSON.parse(raw)
+      return stored.token ? 'loading' : 'anonymous'
+    } catch {
+      return 'anonymous'
+    }
+  })
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const raw = localStorage.getItem('user')
+
+    if (!raw) {
+      localStorage.removeItem('user')
+      return
+    }
+
+    let stored
+    try {
+      stored = JSON.parse(raw)
+    } catch {
+      localStorage.removeItem('user')
+      return
+    }
+
+    if (!stored.token) {
+      localStorage.removeItem('user')
+      return
+    }
+
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${stored.token}` } })
+      .then(async (res) => {
+        if (cancelled) return
+        if (!res.ok) {
+          localStorage.removeItem('user')
+          setStatus('anonymous')
+          return
+        }
+        const data = await res.json()
+        setUser(data.user)
+        setStatus('authenticated')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setStatus('anonymous')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return { status, user }
+}
+
 function ProtectedRoute({ children, allowedRole }) {
-  const raw = localStorage.getItem('user')
-  if (!raw) {
-    // Seamlessly allow previewing during development and review
-    return children
+  const { status, user } = useAuth()
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-950 rounded-full animate-spin" />
+      </div>
+    )
   }
 
-  try {
-    const user = JSON.parse(raw)
-    if (allowedRole && user.role && user.role !== allowedRole) {
-      return children
-    }
-  } catch {
-    // fallback
+  if (status === 'anonymous' || !user) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (allowedRole && user.role !== allowedRole) {
+    return <Navigate to="/login" replace />
   }
 
   return children
