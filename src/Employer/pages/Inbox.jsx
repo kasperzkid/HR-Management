@@ -156,10 +156,10 @@ function Inbox() {
           <div className="p-4 border-t border-gray-100 bg-gray-50/40">
             <div className="flex items-center gap-3">
               <div className="relative shrink-0">
-                <div className="w-9 h-9 rounded-full bg-emerald-500 text-white text-xs font-bold flex items-center justify-center">
+                <div className="w-9 h-9 rounded-full bg-gray-300 text-gray-700 flex items-center justify-center text-xs font-bold">
                   {CURRENT_USER.initials}
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-gray-300 ring-2 ring-gray-200" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-gray-900 truncate">{CURRENT_USER.name}</p>

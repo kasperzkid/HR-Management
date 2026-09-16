@@ -6,6 +6,10 @@ import { calcPayroll, formatETB, roundMoney, netToBasic } from '../lib/payroll'
 import { SETTINGS } from '../data/settingsData'
 
 function Payroll() {
+  const rawUser = localStorage.getItem('user')
+  const user = rawUser ? JSON.parse(rawUser) : { role: 'EMPLOYEE', employeeId: 'EMP-0001' }
+  const currentEmployeeId = user.employeeId
+
   const [month, setMonth] = useState(new Date().getMonth() + 1)
   const [year, setYear] = useState(new Date().getFullYear())
   const [finalized, setFinalized] = useState(false)
@@ -13,9 +17,13 @@ function Payroll() {
   const [reverseInput, setReverseInput] = useState('')
   const [reverseResult, setReverseResult] = useState(null)
 
+  const filteredEmployees = useMemo(() => {
+    return INITIAL_EMPLOYEES.filter((emp) => emp.employeeId === currentEmployeeId)
+  }, [currentEmployeeId])
+
   const rows = useMemo(() => {
     const attTotals = attendanceTotals(ATTENDANCE)
-    return INITIAL_EMPLOYEES.map((emp) => {
+    return filteredEmployees.map((emp) => {
       const base = calcPayroll(emp, attTotals[emp.employeeId] || { totalOtHours: 0 })
       const ov = overrides[emp.employeeId]
       const otherDeductions = ov?.otherDeductions ?? emp.otherDeductions ?? 0

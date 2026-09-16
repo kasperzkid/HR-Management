@@ -1,18 +1,26 @@
-import { Link } from 'react-router-dom'
+import React from 'react'
+import { Route, Routes, Navigate } from 'react-router-dom'
+import HRManagerLayout from './components/HRManagerLayout'
+import HRDashboard from './pages/Dashboard'
+import HREmployees from './pages/Employees'
+import HRPayroll from './pages/Payroll'
+import HRLeave from './pages/Leave'
+import HRAttendance from './pages/Attendance'
 
-function HRManagerApp() {
+export default function HRManagerApp() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-900 flex flex-col items-center justify-center text-white px-6">
-      <h1 className="text-3xl font-bold tracking-tight mb-2 text-emerald-400">HR Manager Portal</h1>
-      <p className="text-slate-400 mb-8">Coming soon — this section is under construction.</p>
-      <Link
-        to="/"
-        className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold transition-colors"
-      >
-        ← Back to Home
-      </Link>
-    </div>
+    <Routes>
+      <Route element={<HRManagerLayout />}>
+        <Route path="/" element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<HRDashboard />} />
+        <Route path="employees" element={<HREmployees />} />
+        <Route path="employees/new" element={<HREmployees />} />
+        <Route path="employee" element={<HREmployees />} />
+        <Route path="payroll" element={<HRPayroll />} />
+        <Route path="leave" element={<HRLeave />} />
+        <Route path="attendance" element={<HRAttendance />} />
+        <Route path="*" element={<Navigate to="dashboard" replace />} />
+      </Route>
+    </Routes>
   )
 }
-
-export default HRManagerApp

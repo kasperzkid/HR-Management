@@ -45,6 +45,11 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/payroll" element={<Navigate to="/hr-manager/payroll" replace />} />
+        <Route path="/leave" element={<Navigate to="/hr-manager/leave" replace />} />
+        <Route path="/attendance" element={<Navigate to="/hr-manager/attendance" replace />} />
+        <Route path="/employees/new" element={<Navigate to="/hr-manager/employees/new" replace />} />
+        <Route path="/employees" element={<Navigate to="/hr-manager/employees" replace />} />
         <Route path="*" element={<Navigate to="/employer" replace />} />
       </Routes>
     </BrowserRouter>
