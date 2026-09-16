@@ -656,7 +656,7 @@ export default function HRDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-gray-900 pb-16 antialiased">
+    <div className="min-h-screen bg-[#f4f5f7] text-gray-900 pb-16 antialiased">
       {/* ─────────────────────────────────────────────────────────────
           1. PAGE HEADER
           - Title "Dashboard"
@@ -702,7 +702,7 @@ export default function HRDashboard() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
-                const el = document.getElementById('alerts-section')
+                const el = document.getElementById('alerts-data-checks')
                 if (el) el.scrollIntoView({ behavior: 'smooth' })
               }}
               className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer ${
@@ -729,7 +729,7 @@ export default function HRDashboard() {
             Total Employees, Active Employees, Employees On Leave, Absent Today
             Responsive: 4 on desktop, 2 on tablet, 1 on mobile
            ───────────────────────────────────────────────────────────── */}
-        <section aria-labelledby="overview-heading">
+        <section id="overview" aria-labelledby="overview-heading">
           <div className="flex items-center justify-between mb-3">
             <h2 id="overview-heading" className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
               <Users size={14} className="text-gray-900" />
@@ -811,7 +811,7 @@ export default function HRDashboard() {
             Row of 3 KPI cards: Gross Payroll, Net Payroll, Overtime Hours
             Beside/below: 2 smaller cards for Income Tax & Pension Contribution
            ───────────────────────────────────────────────────────────── */}
-        <section aria-labelledby="payroll-summary-heading">
+        <section id="payroll-summary" aria-labelledby="payroll-summary-heading">
           <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden">
             <SectionHeader
               icon={Wallet}
@@ -923,7 +923,7 @@ export default function HRDashboard() {
             - Leave Requests Pending (number, links to Leave approval queue)
             - Leave Utilization (avg. days taken, number)
            ───────────────────────────────────────────────────────────── */}
-        <section aria-labelledby="leave-overview-heading">
+        <section id="leave-overview" aria-labelledby="leave-overview-heading">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Leave Requests Pending */}
             <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs p-5 flex flex-col justify-between hover:border-gray-300 transition-all">
@@ -1011,7 +1011,7 @@ export default function HRDashboard() {
            ───────────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 5. Department Breakdown */}
-          <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden flex flex-col justify-between">
+          <div id="department-breakdown" className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden flex flex-col justify-between">
             <div>
               <SectionHeader
                 icon={Building2}
@@ -1054,7 +1054,7 @@ export default function HRDashboard() {
           </div>
 
           {/* 6. Workforce Status */}
-          <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden flex flex-col justify-between">
+          <div id="workforce-status" className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden flex flex-col justify-between">
             <div>
               <SectionHeader
                 icon={PieChartIcon}
@@ -1156,13 +1156,13 @@ export default function HRDashboard() {
             Table/list of 9 checks with green "OK" / amber "REVIEW" pills
             Each row's Result count links to filtered records
            ───────────────────────────────────────────────────────────── */}
-        <section id="alerts-section" aria-labelledby="alerts-heading">
+        <section id="alerts-data-checks" aria-labelledby="alerts-heading">
           <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden">
             <SectionHeader
               icon={AlertTriangle}
               title="Alerts & Data Checks"
               subtitle="Statutory compliance audits, TIN verification, and payroll anomaly checks"
-              badge={`${dashboardData.needsReviewCount} Action Items`}
+              badge={`${dashboardData.needsReviewCount} Needs Review`}
               action={
                 <span className="text-xs text-gray-500 font-medium">
                   Click count to inspect filtered records
@@ -1236,7 +1236,7 @@ export default function HRDashboard() {
             Row of 3-4 buttons:
             Run Payroll, Add Employee, Approve Leave, Add Attendance Record
            ───────────────────────────────────────────────────────────── */}
-        <section aria-labelledby="quick-actions-heading">
+        <section id="quick-actions" aria-labelledby="quick-actions-heading">
           <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden">
             <SectionHeader icon={Calculator} title="Quick Actions" subtitle="Administrative shortcuts" />
 
@@ -1321,7 +1321,7 @@ export default function HRDashboard() {
             - Leave request approved/rejected
             - Payslip released
            ───────────────────────────────────────────────────────────── */}
-        <section aria-labelledby="recent-activity-heading">
+        <section id="recent-activity" aria-labelledby="recent-activity-heading">
           <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden">
             <SectionHeader
               icon={FileCheck2}

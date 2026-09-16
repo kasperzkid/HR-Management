@@ -8,12 +8,13 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   name      String
-  email     String   @unique
+  email     String    @unique
   password  String
   role      String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  sessions  Session[]
 }
 
 model Employee {
@@ -68,6 +69,18 @@ model Attendance {
   regular        Float    @default(0)
   overtime       Float    @default(0)
   createdAt      DateTime @default(now())
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    Int
+  jti       String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([jti])
 }
 
 model Setting {

@@ -1,37 +1,32 @@
 import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 import { INITIAL_EMPLOYEES } from '../src/Employer/data/employeeData.js'
 import { ATTENDANCE } from '../src/Employer/data/attendanceData.js'
 import { SETTINGS } from '../src/Employer/data/settingsData.js'
 
 const prisma = new PrismaClient()
 
+const SALT_ROUNDS = 10
+
+const USERS = [
+  { name: 'Employer', email: 'employer@yanol.com', password: 'employer123', role: 'EMPLOYER' },
+  { name: 'HR Manager', email: 'hr@yanol.com', password: 'hr123', role: 'HR_MANAGER' },
+  { name: 'Employee', email: 'employee@yanol.com', password: 'employee123', role: 'EMPLOYEE' },
+]
+
 async function main() {
-  // Seed Users
-  await prisma.user.upsert({
-    where: { email: 'employer@yanol.com' },
-    update: {},
-    create: {
-      name: 'Employer',
-      email: 'employer@yanol.com',
-      password: 'employer123',
-      role: 'EMPLOYER',
-    },
-  })
+  await prisma.session.deleteMany()
 
-  await prisma.user.upsert({
-    where: { email: 'hr@yanol.com' },
-    update: {},
-    create: {
-      name: 'HR Manager',
-      email: 'hr@yanol.com',
-      password: 'hr123',
-      role: 'HR_MANAGER',
-    },
-  })
+  for (const u of USERS) {
+    const hashed = await bcrypt.hash(u.password, SALT_ROUNDS)
+    await prisma.user.upsert({
+      where: { email: u.email },
+      update: { password: hashed },
+      create: { name: u.name, email: u.email, password: hashed, role: u.role },
+    })
+  }
+  console.log(`Seeded ${USERS.length} users (passwords hashed with bcrypt).`)
 
-  console.log('Seeded users successfully.')
-
-  // Seed Employees
   for (const emp of INITIAL_EMPLOYEES) {
     await prisma.employee.upsert({
       where: { employeeId: emp.employeeId },
@@ -76,7 +71,6 @@ async function main() {
   }
   console.log(`Seeded ${INITIAL_EMPLOYEES.length} employees successfully.`)
 
-  // Seed Attendance
   for (const att of ATTENDANCE) {
     await prisma.attendance.upsert({
       where: { id: att.id },
@@ -99,14 +93,10 @@ async function main() {
   }
   console.log(`Seeded ${ATTENDANCE.length} attendance records successfully.`)
 
-  // Seed Settings
   await prisma.setting.upsert({
     where: { key: 'app_settings' },
     update: { value: JSON.stringify(SETTINGS) },
-    create: {
-      key: 'app_settings',
-      value: JSON.stringify(SETTINGS),
-    },
+    create: { key: 'app_settings', value: JSON.stringify(SETTINGS) },
   })
   console.log('Seeded settings successfully.')
 }
