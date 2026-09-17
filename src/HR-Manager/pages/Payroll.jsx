@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Calculator,
   Edit3,
@@ -8,21 +8,29 @@ import {
   X,
 } from 'lucide-react'
 
-import { INITIAL_EMPLOYEES } from '../../Employer/data/employeeData'
-
-const DEPARTMENTS = [
-  'All Departments',
-  ...Array.from(
-    new Set(
-      INITIAL_EMPLOYEES
-        .map((employee) => employee.department)
-        .filter(Boolean),
-    ),
-  ),
-]
+const API_BASE = 'http://localhost:4000/api/hr-manager'
 
 const PENSION_RATE = 0.07
 const EMPLOYER_PENSION_RATE = 0.11
+
+const ATTENDANCE_CODES = {
+  PRESENT: 'P',
+  ABSENT: 'A',
+  SICK_LEAVE: 'SL',
+  ANNUAL_LEAVE: 'AL',
+  MATERNITY_LEAVE: 'ML',
+  OTHER_LEAVE: 'OL',
+  PUBLIC_HOLIDAY: 'PH',
+  WEEKEND: 'WK',
+  HALF_DAY: 'HD',
+}
+
+const LEAVE_CODES = new Set([
+  ATTENDANCE_CODES.SICK_LEAVE,
+  ATTENDANCE_CODES.ANNUAL_LEAVE,
+  ATTENDANCE_CODES.MATERNITY_LEAVE,
+  ATTENDANCE_CODES.OTHER_LEAVE,
+])
 
 function getEmployeeName(employee) {
   if (employee.name) {
@@ -68,8 +76,32 @@ function formatCurrency(value) {
   }).format(Number(value) || 0)
 }
 
+function getMonthRange(monthValue) {
+  const [year, month] = monthValue
+    .split('-')
+    .map(Number)
+
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+
+  const lastDay = new Date(
+    year,
+    month,
+    0,
+  ).getDate()
+
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(
+    lastDay,
+  ).padStart(2, '0')}`
+
+  return {
+    startDate,
+    endDate,
+  }
+}
+
 function createPayrollRecord(employee, index) {
   const basicSalary = getSalary(employee)
+  const employeeName = getEmployeeName(employee)
 
   return {
     employeeKey:
@@ -77,15 +109,20 @@ function createPayrollRecord(employee, index) {
       employee.employeeId ||
       index,
 
+    employeeDbId:
+      employee.id ||
+      employee.employeeId ||
+      '',
+
     employeeId: getEmployeeId(
       employee,
       index,
     ),
 
-    employeeName: getEmployeeName(employee),
+    employeeName,
 
     initials: getInitials(
-      getEmployeeName(employee),
+      employeeName,
     ),
 
     department:
@@ -94,15 +131,39 @@ function createPayrollRecord(employee, index) {
 
     basicSalary,
 
-    transportAllowance: 0,
+    transportAllowance:
+      Number(
+        employee.transportAllowance,
+      ) || 0,
 
-    housingAllowance: 0,
+    housingAllowance:
+      Number(
+        employee.housingAllowance,
+      ) || 0,
 
-    mealAllowance: 0,
+    mealAllowance:
+      Number(
+        employee.mealAllowance,
+      ) || 0,
 
-    otherAllowance: 0,
+    otherAllowance:
+      Number(
+        employee.otherAllowance,
+      ) || 0,
 
     overtime: 0,
+
+    overtimeHours: 0,
+
+    lateMinutes: 0,
+
+    workingDays: 0,
+
+    presentDays: 0,
+
+    absentDays: 0,
+
+    leaveDays: 0,
 
     pension: Number(
       (
@@ -113,9 +174,15 @@ function createPayrollRecord(employee, index) {
 
     incomeTax: 0,
 
-    loanAdvance: 0,
+    loanAdvance:
+      Number(
+        employee.loanDeductions,
+      ) || 0,
 
-    otherDeduction: 0,
+    otherDeduction:
+      Number(
+        employee.otherDeductions,
+      ) || 0,
   }
 }
 
@@ -134,7 +201,8 @@ function calculatePayroll(record) {
     Number(record.loanAdvance || 0) +
     Number(record.otherDeduction || 0)
 
-  const netSalary = gross - deductions
+  const netSalary =
+    gross - deductions
 
   const employerPension =
     Number(record.basicSalary || 0) *
@@ -149,6 +217,59 @@ function calculatePayroll(record) {
     netSalary,
     employerPension,
     employerCost,
+  }
+}
+
+function getAttendanceSummary(records) {
+  const summary = {
+    workingDays: 0,
+    presentDays: 0,
+    absentDays: 0,
+    leaveDays: 0,
+    overtimeHours: 0,
+    lateMinutes: 0,
+  }
+
+  for (const record of records) {
+    const status =
+      String(record.status || '')
+        .trim()
+        .toUpperCase()
+
+    if (status !== ATTENDANCE_CODES.WEEKEND) {
+      summary.workingDays += 1
+    }
+
+    if (
+      status ===
+      ATTENDANCE_CODES.PRESENT
+    ) {
+      summary.presentDays += 1
+    }
+
+    if (
+      status ===
+      ATTENDANCE_CODES.ABSENT
+    ) {
+      summary.absentDays += 1
+    }
+
+    if (LEAVE_CODES.has(status)) {
+      summary.leaveDays += 1
+    }
+
+    summary.overtimeHours +=
+      Number(record.overtime) || 0
+
+    summary.lateMinutes +=
+      Number(record.late) || 0
+  }
+
+  return {
+    ...summary,
+    overtimeHours: Number(
+      summary.overtimeHours.toFixed(2),
+    ),
   }
 }
 
@@ -321,6 +442,74 @@ function PayrollModal({
 
           <section>
             <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
+              Attendance Summary
+            </h3>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">
+                  Working Days
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-slate-950">
+                  {record.workingDays}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">
+                  Present Days
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-emerald-600">
+                  {record.presentDays}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">
+                  Absent Days
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-red-600">
+                  {record.absentDays}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">
+                  Leave Days
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-blue-600">
+                  {record.leaveDays}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">
+                  Overtime Hours
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-slate-950">
+                  {record.overtimeHours}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">
+                  Late Minutes
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-amber-600">
+                  {record.lateMinutes}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
               Deductions
             </h3>
 
@@ -431,12 +620,26 @@ function PayrollModal({
 }
 
 function Payroll() {
+  const [employees, setEmployees] =
+    useState([])
+
+  const [attendance, setAttendance] =
+    useState([])
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const [attendanceLoading, setAttendanceLoading] =
+    useState(false)
+
+  const [error, setError] =
+    useState('')
+
+  const [attendanceError, setAttendanceError] =
+    useState('')
+
   const [payroll, setPayroll] =
-    useState(() =>
-      INITIAL_EMPLOYEES.map(
-        createPayrollRecord,
-      ),
-    )
+    useState([])
 
   const [search, setSearch] =
     useState('')
@@ -455,6 +658,226 @@ function Payroll() {
 
   const [editingRecord, setEditingRecord] =
     useState(null)
+
+  useEffect(() => {
+    async function loadEmployees() {
+      try {
+        setLoading(true)
+        setError('')
+
+        const response =
+          await fetch(
+            `${API_BASE}/employees`,
+          )
+
+        if (!response.ok) {
+          throw new Error(
+            'Failed to load employees',
+          )
+        }
+
+        const data =
+          await response.json()
+
+        setEmployees(
+          Array.isArray(data)
+            ? data
+            : [],
+        )
+      } catch (loadError) {
+        console.error(
+          'Load employees error:',
+          loadError,
+        )
+
+        setError(
+          'Unable to load employees from the database.',
+        )
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadEmployees()
+  }, [])
+
+  useEffect(() => {
+    async function loadAttendance() {
+      if (!payrollMonth) {
+        return
+      }
+
+      try {
+        setAttendanceLoading(true)
+        setAttendanceError('')
+
+        const {
+          startDate,
+          endDate,
+        } = getMonthRange(
+          payrollMonth,
+        )
+
+        const response =
+          await fetch(
+            `${API_BASE}/attendance?startDate=${startDate}&endDate=${endDate}`,
+          )
+
+        if (!response.ok) {
+          throw new Error(
+            'Failed to load attendance',
+          )
+        }
+
+        const data =
+          await response.json()
+
+        setAttendance(
+          Array.isArray(data)
+            ? data
+            : [],
+        )
+      } catch (loadError) {
+        console.error(
+          'Load attendance error:',
+          loadError,
+        )
+
+        setAttendance([])
+
+        setAttendanceError(
+          'Attendance data could not be loaded for this payroll period.',
+        )
+      } finally {
+        setAttendanceLoading(false)
+      }
+    }
+
+    loadAttendance()
+  }, [payrollMonth])
+
+  const departments = useMemo(() => {
+    return [
+      'All Departments',
+      ...Array.from(
+        new Set(
+          employees
+            .map(
+              (employee) =>
+                employee.department,
+            )
+            .filter(Boolean),
+        ),
+      ),
+    ]
+  }, [employees])
+
+  useEffect(() => {
+    const attendanceByEmployee =
+      new Map()
+
+    for (const record of attendance) {
+      const employeeId =
+        String(
+          record.employeeId || '',
+        )
+
+      if (!employeeId) {
+        continue
+      }
+
+      if (
+        !attendanceByEmployee.has(
+          employeeId,
+        )
+      ) {
+        attendanceByEmployee.set(
+          employeeId,
+          [],
+        )
+      }
+
+      attendanceByEmployee
+        .get(employeeId)
+        .push(record)
+    }
+
+    const nextPayroll =
+      employees.map(
+        (employee, index) => {
+          const record =
+            createPayrollRecord(
+              employee,
+              index,
+            )
+
+          const employeeDatabaseId =
+            String(
+              employee.id || '',
+            )
+
+          const employeeBusinessId =
+            String(
+              employee.employeeId ||
+                '',
+            )
+
+          const employeeAttendance =
+            attendance.filter(
+              (item) => {
+                const attendanceEmployeeId =
+                  String(
+                    item.employeeId ||
+                      '',
+                  )
+
+                return (
+                  attendanceEmployeeId ===
+                    employeeDatabaseId ||
+                  attendanceEmployeeId ===
+                    employeeBusinessId
+                )
+              },
+            )
+
+          const summary =
+            getAttendanceSummary(
+              employeeAttendance,
+            )
+
+          return {
+            ...record,
+
+            workingDays:
+              summary.workingDays,
+
+            presentDays:
+              summary.presentDays,
+
+            absentDays:
+              summary.absentDays,
+
+            leaveDays:
+              summary.leaveDays,
+
+            overtimeHours:
+              summary.overtimeHours,
+
+            lateMinutes:
+              summary.lateMinutes,
+
+            overtime:
+              0,
+          }
+        },
+      )
+
+    setPayroll(nextPayroll)
+  }, [
+    employees,
+    attendance,
+    payrollMonth,
+  ])
 
   const filteredPayroll =
     useMemo(() => {
@@ -519,6 +942,18 @@ function Payroll() {
           employerCost:
             total.employerCost +
             calculation.employerCost,
+
+          overtimeHours:
+            total.overtimeHours +
+            Number(
+              record.overtimeHours || 0,
+            ),
+
+          lateMinutes:
+            total.lateMinutes +
+            Number(
+              record.lateMinutes || 0,
+            ),
         }
       },
       {
@@ -527,6 +962,8 @@ function Payroll() {
         deductions: 0,
         net: 0,
         employerCost: 0,
+        overtimeHours: 0,
+        lateMinutes: 0,
       },
     )
   }, [payroll])
@@ -584,6 +1021,18 @@ function Payroll() {
           </div>
         </div>
 
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {attendanceError && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {attendanceError}
+          </div>
+        )}
+
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon={Users}
@@ -620,6 +1069,38 @@ function Payroll() {
           />
         </div>
 
+        <div className="mb-6 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">
+              Overtime Hours
+            </p>
+
+            <p className="mt-2 text-2xl font-bold text-slate-950">
+              {summary.overtimeHours.toFixed(
+                2,
+              )}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              From saved attendance records
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">
+              Late Minutes
+            </p>
+
+            <p className="mt-2 text-2xl font-bold text-slate-950">
+              {summary.lateMinutes}
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              From saved attendance records
+            </p>
+          </div>
+        </div>
+
         <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_240px]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -644,7 +1125,7 @@ function Payroll() {
             }
             className="rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
-            {DEPARTMENTS.map(
+            {departments.map(
               (item) => (
                 <option
                   key={item}
@@ -671,16 +1152,44 @@ function Payroll() {
             </div>
 
             <div className="text-xs font-medium text-slate-500">
-              Period: {payrollMonth}
+              <span>
+                Period: {payrollMonth}
+              </span>
+
+              {attendanceLoading && (
+                <span className="ml-3 text-blue-600">
+                  Loading attendance...
+                </span>
+              )}
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1500px]">
+            <table className="w-full min-w-[1700px]">
               <thead className="bg-slate-50">
                 <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-4">
                     Employee
+                  </th>
+
+                  <th className="px-4 py-4">
+                    Working
+                  </th>
+
+                  <th className="px-4 py-4">
+                    Present
+                  </th>
+
+                  <th className="px-4 py-4">
+                    Absent
+                  </th>
+
+                  <th className="px-4 py-4">
+                    Leave
+                  </th>
+
+                  <th className="px-4 py-4">
+                    OT Hours
                   </th>
 
                   <th className="px-4 py-4">
@@ -730,139 +1239,183 @@ function Payroll() {
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-                {filteredPayroll.map(
-                  (record) => {
-                    const calculation =
-                      calculatePayroll(
-                        record,
-                      )
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan="17"
+                      className="px-6 py-12 text-center text-sm text-slate-500"
+                    >
+                      Loading employees from database...
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPayroll.map(
+                    (record) => {
+                      const calculation =
+                        calculatePayroll(
+                          record,
+                        )
 
-                    return (
-                      <tr
-                        key={
-                          record.employeeKey
-                        }
-                        className="transition hover:bg-slate-50"
-                      >
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
-                              {
-                                record.initials
-                              }
-                            </div>
-
-                            <div>
-                              <p className="whitespace-nowrap text-sm font-semibold text-slate-900">
+                      return (
+                        <tr
+                          key={
+                            record.employeeKey
+                          }
+                          className="transition hover:bg-slate-50"
+                        >
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
                                 {
-                                  record.employeeName
+                                  record.initials
                                 }
-                              </p>
+                              </div>
 
-                              <p className="mt-0.5 text-xs text-slate-500">
-                                {
-                                  record.employeeId
-                                }
-                              </p>
+                              <div>
+                                <p className="whitespace-nowrap text-sm font-semibold text-slate-900">
+                                  {
+                                    record.employeeName
+                                  }
+                                </p>
+
+                                <p className="mt-0.5 text-xs text-slate-500">
+                                  {
+                                    record.employeeId
+                                  }
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="px-4 py-4 text-sm text-slate-700">
-                          {formatCurrency(
-                            record.basicSalary,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm text-slate-700">
-                          {formatCurrency(
-                            record.transportAllowance,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm text-slate-700">
-                          {formatCurrency(
-                            record.housingAllowance,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm text-slate-700">
-                          {formatCurrency(
-                            record.mealAllowance,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm text-slate-700">
-                          {formatCurrency(
-                            record.otherAllowance,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm text-slate-700">
-                          {formatCurrency(
-                            record.overtime,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm font-semibold text-slate-900">
-                          {formatCurrency(
-                            calculation.gross,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm font-semibold text-red-600">
-                          {formatCurrency(
-                            calculation.deductions,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm font-bold text-emerald-600">
-                          {formatCurrency(
-                            calculation.netSalary,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-sm font-semibold text-slate-900">
-                          {formatCurrency(
-                            calculation.employerCost,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditingRecord(
-                                record,
-                              )
+                          <td className="px-4 py-4 text-sm font-semibold text-slate-700">
+                            {
+                              record.workingDays
                             }
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                            Edit
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  },
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-emerald-600">
+                            {
+                              record.presentDays
+                            }
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-red-600">
+                            {
+                              record.absentDays
+                            }
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-blue-600">
+                            {
+                              record.leaveDays
+                            }
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-slate-700">
+                            {Number(
+                              record.overtimeHours ||
+                                0,
+                            ).toFixed(2)}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-slate-700">
+                            {formatCurrency(
+                              record.basicSalary,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-slate-700">
+                            {formatCurrency(
+                              record.transportAllowance,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-slate-700">
+                            {formatCurrency(
+                              record.housingAllowance,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-slate-700">
+                            {formatCurrency(
+                              record.mealAllowance,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-slate-700">
+                            {formatCurrency(
+                              record.otherAllowance,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-slate-700">
+                            {formatCurrency(
+                              record.overtime,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-slate-900">
+                            {formatCurrency(
+                              calculation.gross,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-red-600">
+                            {formatCurrency(
+                              calculation.deductions,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-bold text-emerald-600">
+                            {formatCurrency(
+                              calculation.netSalary,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-slate-900">
+                            {formatCurrency(
+                              calculation.employerCost,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingRecord(
+                                  record,
+                                )
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    },
+                  )
                 )}
               </tbody>
             </table>
           </div>
 
-          {filteredPayroll.length === 0 && (
-            <div className="px-6 py-12 text-center">
-              <Users className="mx-auto h-10 w-10 text-slate-300" />
+          {!loading &&
+            filteredPayroll.length ===
+              0 && (
+              <div className="px-6 py-12 text-center">
+                <Users className="mx-auto h-10 w-10 text-slate-300" />
 
-              <h3 className="mt-3 font-semibold text-slate-900">
-                No payroll records found
-              </h3>
+                <h3 className="mt-3 font-semibold text-slate-900">
+                  No payroll records found
+                </h3>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Try changing your search or department filter.
-              </p>
-            </div>
-          )}
+                <p className="mt-1 text-sm text-slate-500">
+                  Try changing your search or department filter.
+                </p>
+              </div>
+            )}
         </div>
 
         <div className="mt-6 rounded-2xl border border-amber-100 bg-amber-50 p-4">
@@ -871,16 +1424,16 @@ function Payroll() {
 
             <div>
               <p className="text-sm font-semibold text-amber-900">
-                Payroll calculation — Phase 1
+                Payroll calculation — Phase 2
               </p>
 
               <p className="mt-1 text-sm leading-6 text-amber-800">
-                The current screen provides the payroll structure and
-                basic calculation flow. Statutory income-tax brackets,
-                pension rules, taxable benefits, attendance-based
-                deductions, overtime rules and Ethiopian payroll
-                compliance will be implemented in the business-logic
-                phase.
+                Payroll now reads employee and attendance data from the
+                shared database. Attendance summaries include working,
+                present, absent and leave days, overtime hours and late
+                minutes. Ethiopian statutory tax, pension, taxable
+                benefits and final payroll compliance rules will be
+                implemented in the business-logic phase.
               </p>
             </div>
           </div>
