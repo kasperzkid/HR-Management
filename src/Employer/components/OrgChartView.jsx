@@ -24,15 +24,15 @@ function OrgChartView({ employees, onSelectEmployee }) {
   ]
 
   return (
-    <div className="bg-white rounded-2xl p-6 border border-gray-200/90 shadow-2xs space-y-8 overflow-x-auto">
+    <div className="bg-white dark:bg-[#15181d] rounded-2xl p-6 border border-gray-200/90 dark:border-[#262b31] shadow-2xs space-y-8 overflow-x-auto">
       <div>
-        <h3 className="font-bold text-gray-900 text-base">Organizational Hierarchy</h3>
-        <p className="text-xs text-gray-500 mt-0.5">Visual representation of team reporting structure and roles</p>
+        <h3 className="font-bold text-gray-900 dark:text-gray-100 text-base">Organizational Hierarchy</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Visual representation of team reporting structure and roles</p>
       </div>
 
       {/* Root Node / Executive */}
       <div className="flex flex-col items-center">
-        <div className="bg-gray-950 text-white p-4 rounded-2xl shadow-md flex items-center gap-3 w-64">
+        <div className="bg-gray-950 dark:bg-[#1c2026] text-white p-4 rounded-2xl shadow-md flex items-center gap-3 w-64">
           <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center">
             WB
           </div>
@@ -41,7 +41,7 @@ function OrgChartView({ employees, onSelectEmployee }) {
             <p className="text-sm font-bold text-white">Wishbone Global Org</p>
           </div>
         </div>
-        <div className="w-0.5 h-8 bg-gray-300" />
+        <div className="w-0.5 h-8 bg-gray-300 dark:bg-[#3a4149]" />
       </div>
 
       {/* Departments Grid */}
@@ -51,13 +51,13 @@ function OrgChartView({ employees, onSelectEmployee }) {
             {/* Department Lead Card */}
             <div
               onClick={() => dept.lead && onSelectEmployee(dept.lead)}
-              className="w-full bg-gray-50 hover:bg-gray-100/80 p-4 rounded-xl border border-gray-200 cursor-pointer transition-all hover:shadow-xs group"
+              className="w-full bg-gray-50 dark:bg-[#1c2026] hover:bg-gray-100/80 dark:hover:bg-[#2a3139]/80 p-4 rounded-xl border border-gray-200 dark:border-[#33383f] cursor-pointer transition-all hover:shadow-xs group"
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
                   {dept.name}
                 </span>
-                <span className="text-xs text-gray-400">{dept.members.length} members</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">{dept.members.length} members</span>
               </div>
               {dept.lead && (
                 <div className="flex items-center gap-2.5 mt-2">
@@ -67,17 +67,17 @@ function OrgChartView({ employees, onSelectEmployee }) {
                     className="w-9 h-9 rounded-lg object-cover"
                   />
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-gray-900 truncate group-hover:text-indigo-600">
+                    <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate group-hover:text-indigo-600">
                       {dept.lead.name}
                     </p>
-                    <p className="text-[11px] text-gray-500 truncate">{dept.lead.jobTitle}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{dept.lead.jobTitle}</p>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Connecting line */}
-            <div className="w-0.5 h-4 bg-gray-200" />
+            <div className="w-0.5 h-4 bg-gray-200 dark:bg-[#3a4149]" />
 
             {/* Department Members List */}
             <div className="w-full space-y-2">
@@ -85,7 +85,7 @@ function OrgChartView({ employees, onSelectEmployee }) {
                 <div
                   key={member.id}
                   onClick={() => onSelectEmployee(member)}
-                  className="bg-white p-2.5 rounded-lg border border-gray-100 hover:border-gray-300 flex items-center justify-between cursor-pointer transition-colors"
+                  className="bg-white dark:bg-[#15181d] p-2.5 rounded-lg border border-gray-100 dark:border-[#262b31] hover:border-gray-300 dark:hover:border-gray-700 flex items-center justify-between cursor-pointer transition-colors"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <img
@@ -94,8 +94,8 @@ function OrgChartView({ employees, onSelectEmployee }) {
                       className="w-7 h-7 rounded-md object-cover"
                     />
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-gray-800 truncate">{member.name}</p>
-                      <p className="text-[10px] text-gray-400 truncate">{member.jobTitle}</p>
+                      <p className="text-xs font-semibold text-gray-800 dark:text-gray-300 truncate">{member.name}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{member.jobTitle}</p>
                     </div>
                   </div>
                   <span

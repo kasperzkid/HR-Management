@@ -18,9 +18,11 @@ import AddEmployeeModal from '../components/AddEmployeeModal'
 import EmployeeDetailsModal from '../components/EmployeeDetailsModal'
 import DirectoryView from '../components/DirectoryView'
 import OrgChartView from '../components/OrgChartView'
+import { getCurrentEmployee } from '../lib/currentUser'
 
 function Employees() {
-  const [employees, setEmployees] = useState(INITIAL_EMPLOYEES)
+  const currentEmployee = getCurrentEmployee()
+  const [employees, setEmployees] = useState(() => [currentEmployee])
   const [activeTab, setActiveTab] = useState('list')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedDept, setSelectedDept] = useState('All Departments')
@@ -140,7 +142,7 @@ function Employees() {
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto">
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-gray-950 text-white px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2.5 text-xs font-medium animate-in fade-in duration-200">
+        <div className="fixed top-5 right-5 z-50 bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2.5 text-xs font-medium animate-in fade-in duration-200">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span>{toastMessage}</span>
         </div>
@@ -149,14 +151,14 @@ function Employees() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-950">Employees</h1>
-          <p className="text-xs text-gray-500 mt-1">Master employee registry — {employees.length} records, {SETTINGS.standardMonthlyHours} standard hours/mo</p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-950 dark:text-gray-100">Employees</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Master employee registry — {employees.length} records, {SETTINGS.standardMonthlyHours} standard hours/mo</p>
         </div>
 
         <div className="flex items-center gap-2.5">
           <button
             onClick={handleExportCSV}
-            className="px-4 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-semibold transition-colors flex items-center gap-2"
+            className="px-4 py-2 rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d] hover:bg-gray-50 dark:hover:bg-[#1c2026] text-gray-800 dark:text-gray-200 text-xs font-semibold transition-colors flex items-center gap-2"
           >
             <Download size={14} />
             Export CSV
@@ -173,7 +175,7 @@ function Employees() {
 
       {/* View switcher + controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="inline-flex p-1 bg-[#eceef1] rounded-xl border border-gray-200/70 w-fit">
+        <div className="inline-flex p-1 bg-[#eceef1] dark:bg-[#1a1d21] rounded-xl border border-gray-200/70 dark:border-[#262b31] w-fit">
           {[
             { id: 'list', label: 'Employee list' },
             { id: 'directory', label: 'Directory' },
@@ -183,7 +185,7 @@ function Employees() {
               key={t.id}
               onClick={() => setActiveTab(t.id)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === t.id ? 'bg-white text-gray-950 shadow-2xs' : 'text-gray-600 hover:text-gray-950'
+                activeTab === t.id ? 'bg-white dark:bg-[#15181d] text-gray-950 dark:text-gray-100 shadow-2xs' : 'text-gray-600 dark:text-gray-400 hover:text-gray-950 dark:hover:text-gray-100'
               }`}
             >
               {t.label}
@@ -193,16 +195,16 @@ function Employees() {
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
               placeholder="Search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 pr-3 py-1.5 w-48 sm:w-56 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 shadow-2xs"
+              className="pl-8 pr-3 py-1.5 w-48 sm:w-56 text-xs bg-white dark:bg-[#15181d] border border-gray-200 dark:border-[#33383f] rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 dark:text-gray-200 shadow-2xs"
             />
             {searchTerm && (
-              <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400">
                 <X size={12} />
               </button>
             )}
@@ -214,30 +216,30 @@ function Employees() {
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border flex items-center gap-1.5 transition-colors shadow-2xs ${
                 selectedDept !== 'All Departments' || selectedStatus !== 'All Statuses'
                   ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold'
-                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                  : 'bg-white dark:bg-[#15181d] border-gray-200 dark:border-[#262b31] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
               }`}
             >
               <SlidersHorizontal size={13} />
               <span>Filter</span>
             </button>
             {showFilterPopover && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-50">
-                <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-100">
-                  <span className="text-xs font-bold text-gray-900">Filters</span>
-                  <button onClick={() => { setSelectedDept('All Departments'); setSelectedStatus('All Statuses') }} className="text-[10px] text-gray-500 hover:text-gray-800 underline">
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] p-4 z-50">
+                <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-100 dark:border-[#262b31]">
+                  <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Filters</span>
+                  <button onClick={() => { setSelectedDept('All Departments'); setSelectedStatus('All Statuses') }} className="text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline">
                     Reset
                   </button>
                 </div>
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Department</label>
-                    <select value={selectedDept} onChange={(e) => setSelectedDept(e.target.value)} className="w-full p-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white">
+                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Department</label>
+                    <select value={selectedDept} onChange={(e) => setSelectedDept(e.target.value)} className="w-full p-1.5 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-gray-50 dark:bg-[#1c2026] focus:bg-white dark:focus:bg-gray-900 dark:text-gray-200">
                       {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Status</label>
-                    <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="w-full p-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white">
+                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Status</label>
+                    <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="w-full p-1.5 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-gray-50 dark:bg-[#1c2026] focus:bg-white dark:focus:bg-gray-900 dark:text-gray-200">
                       {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
@@ -249,14 +251,14 @@ function Employees() {
           <div className="relative">
             <button
               onClick={() => { setShowSortPopover(!showSortPopover); setShowFilterPopover(false) }}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 flex items-center gap-1.5 shadow-2xs"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d] hover:bg-gray-50 dark:hover:bg-[#1c2026] text-gray-700 dark:text-gray-300 flex items-center gap-1.5 shadow-2xs"
             >
               <ArrowUpDown size={13} />
               <span>Sort</span>
             </button>
             {showSortPopover && (
-              <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 p-2 z-50">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">Sort By</p>
+              <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] p-2 z-50">
+                <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-2 py-1">Sort By</p>
                 {[
                   { label: 'Name', field: 'name' },
                   { label: 'Employee ID', field: 'employeeId' },
@@ -268,12 +270,12 @@ function Employees() {
                     key={opt.field}
                     onClick={() => { handleSort(opt.field); setShowSortPopover(false) }}
                     className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition-colors ${
-                      sortField === opt.field ? 'bg-gray-100 text-gray-950 font-semibold' : 'text-gray-600 hover:bg-gray-50'
+                      sortField === opt.field ? 'bg-gray-100 text-gray-950 font-semibold dark:bg-[#1c2026] dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
                     }`}
                   >
                     <span>{opt.label}</span>
                     {sortField === opt.field && (
-                      <span className="text-[10px] text-gray-500 font-mono">{sortDirection === 'asc' ? '↑ ASC' : '↓ DESC'}</span>
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">{sortDirection === 'asc' ? '↑ ASC' : '↓ DESC'}</span>
                     )}
                   </button>
                 ))}
@@ -296,63 +298,63 @@ function Employees() {
           onSelectEmployee={(emp) => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
         />
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden">
+        <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-gray-100 text-[11px] font-medium text-gray-500 select-none">
+                <tr className="border-b border-gray-100 dark:border-[#262b31] text-[11px] font-medium text-gray-500 dark:text-gray-400 select-none">
                   <th className="py-3.5 pl-5 pr-2 w-10">
                     <input
                       type="checkbox"
                       checked={filteredEmployees.length > 0 && selectedIds.length === filteredEmployees.length}
                       onChange={handleSelectAll}
-                      className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 cursor-pointer"
+                      className="w-4 h-4 rounded border-gray-300 dark:border-[#33383f] text-gray-900 dark:text-gray-100 focus:ring-gray-900 cursor-pointer"
                     />
                   </th>
                   <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('name')} className="flex items-center gap-1.5 hover:text-gray-900">
+                    <button onClick={() => handleSort('name')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
                       <span>Name of employee</span>
-                      <ArrowUpDown size={12} className="text-gray-400" />
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
                     </button>
                   </th>
                   <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('employeeId')} className="flex items-center gap-1.5 hover:text-gray-900">
+                    <button onClick={() => handleSort('employeeId')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
                       <span>Employee ID</span>
-                      <ArrowUpDown size={12} className="text-gray-400" />
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
                     </button>
                   </th>
                   <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('jobTitle')} className="flex items-center gap-1.5 hover:text-gray-900">
+                    <button onClick={() => handleSort('jobTitle')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
                       <span>Job title</span>
-                      <ArrowUpDown size={12} className="text-gray-400" />
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
                     </button>
                   </th>
                   <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('department')} className="flex items-center gap-1.5 hover:text-gray-900">
+                    <button onClick={() => handleSort('department')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
                       <span>Department</span>
-                      <ArrowUpDown size={12} className="text-gray-400" />
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
                     </button>
                   </th>
                   <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('basicSalary')} className="flex items-center gap-1.5 hover:text-gray-900">
+                    <button onClick={() => handleSort('basicSalary')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
                       <span>Basic</span>
-                      <ArrowUpDown size={12} className="text-gray-400" />
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
                     </button>
                   </th>
                   <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('joinDate')} className="flex items-center gap-1.5 hover:text-gray-900">
+                    <button onClick={() => handleSort('joinDate')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
                       <span>Join date</span>
-                      <ArrowUpDown size={12} className="text-gray-400" />
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
                     </button>
                   </th>
                   <th className="py-3.5 px-3 text-center">Status</th>
                   <th className="py-3.5 pr-5 pl-2 text-right w-12"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-xs">
+              <tbody className="divide-y divide-gray-100 dark:divide-[#262b31] text-xs">
                 {filteredEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-12 text-gray-400">No employees match your search or filter criteria.</td>
+                    <td colSpan={9} className="text-center py-12 text-gray-400 dark:text-gray-500">No employees match your search or filter criteria.</td>
                   </tr>
                 ) : (
                   filteredEmployees.map((emp) => {
@@ -364,13 +366,13 @@ function Employees() {
                           ? 'border-amber-300 text-amber-600'
                           : 'border-rose-300 text-rose-500'
                     return (
-                      <tr key={emp.id} className={`hover:bg-gray-50/70 transition-colors ${isSelected ? 'bg-gray-50/90' : ''}`}>
+                      <tr key={emp.id} className={`hover:bg-gray-50/70 dark:hover:bg-[#1c2026] transition-colors ${isSelected ? 'bg-gray-50/90 dark:bg-[#1c2026]' : ''}`}>
                         <td className="py-3.5 pl-5 pr-2">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => handleSelectRow(emp.id)}
-                            className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 cursor-pointer"
+                            className="w-4 h-4 rounded border-gray-300 dark:border-[#33383f] text-gray-900 dark:text-gray-100 focus:ring-gray-900 cursor-pointer"
                           />
                         </td>
                         <td className="py-3.5 px-3">
@@ -378,53 +380,53 @@ function Employees() {
                             <img
                               src={emp.avatar}
                               alt={emp.name}
-                              className="w-8 h-8 rounded-full object-cover bg-gray-100 shrink-0"
+                              className="w-8 h-8 rounded-full object-cover bg-gray-100 dark:bg-[#1c2026] shrink-0"
                               onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' }}
                             />
                             <div className="min-w-0">
                               <p
                                 onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
-                                className="font-semibold text-gray-950 hover:text-indigo-600 cursor-pointer truncate"
+                                className="font-semibold text-gray-950 dark:text-gray-100 hover:text-indigo-600 cursor-pointer truncate"
                               >
                                 {emp.name}
                               </p>
-                              <p className="text-[11px] text-gray-400 truncate">{emp.email}</p>
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{emp.email}</p>
                             </div>
                           </div>
                         </td>
                         <td className="py-3.5 px-3">
                           <span
                             onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
-                            className="font-medium text-gray-900 underline underline-offset-2 decoration-gray-400 cursor-pointer hover:text-indigo-600 transition-colors"
+                            className="font-medium text-gray-900 dark:text-gray-100 underline underline-offset-2 decoration-gray-400 dark:decoration-gray-600 cursor-pointer hover:text-indigo-600 transition-colors"
                           >
                             {emp.employeeId}
                           </span>
                         </td>
-                        <td className="py-3.5 px-3 text-gray-700">{emp.jobTitle}</td>
-                        <td className="py-3.5 px-3 text-gray-700">{emp.department}</td>
-                        <td className="py-3.5 px-3 text-gray-700 whitespace-nowrap">{formatETB(emp.basicSalary)}</td>
-                        <td className="py-3.5 px-3 text-gray-700 whitespace-nowrap">{emp.joinDate}</td>
+                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300">{emp.jobTitle}</td>
+                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300">{emp.department}</td>
+                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatETB(emp.basicSalary)}</td>
+                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{emp.joinDate}</td>
                         <td className="py-3.5 px-3 text-center">
-                          <span className={`border rounded-full px-3 py-0.5 text-[11px] font-medium inline-block text-center w-24 bg-white ${badgeColor}`}>
+                          <span className={`border rounded-full px-3 py-0.5 text-[11px] font-medium inline-block text-center w-24 bg-white dark:bg-[#15181d] ${badgeColor}`}>
                             {emp.employmentStatus === 'On Leave' && emp.status === 'Inactive' ? 'Inactive' : emp.employmentStatus}
                           </span>
                         </td>
                         <td className="py-3.5 pr-5 pl-2 text-right relative">
-                          <button onClick={() => setActiveMenuId(activeMenuId === emp.id ? null : emp.id)} className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                          <button onClick={() => setActiveMenuId(activeMenuId === emp.id ? null : emp.id)} className="p-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors">
                             <MoreVertical size={16} />
                           </button>
                           {activeMenuId === emp.id && (
-                            <div className="absolute right-6 top-8 w-40 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-40 text-left">
-                              <button onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true); setActiveMenuId(null) }} className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 text-left">
+                            <div className="absolute right-6 top-8 w-40 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] py-1.5 z-40 text-left">
+                              <button onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true); setActiveMenuId(null) }} className="w-full px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] text-left">
                                 View details
                               </button>
                               <button
                                 onClick={() => { handleUpdateStatus(emp.id, emp.status === 'Active' ? 'Inactive' : 'Active'); setActiveMenuId(null) }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 text-left"
+                                className="w-full px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] text-left"
                               >
                                 Toggle Active/Inactive
                               </button>
-                              <div className="my-1 border-t border-gray-100" />
+                              <div className="my-1 border-t border-gray-100 dark:border-[#262b31]" />
                               <button onClick={() => { handleDeleteEmployee(emp.id); setActiveMenuId(null) }} className="w-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 text-left">
                                 Delete
                               </button>
@@ -439,12 +441,12 @@ function Employees() {
             </table>
           </div>
 
-          <div className="px-5 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-            <div className="flex items-center gap-2 text-gray-600">
+          <div className="px-5 py-4 border-t border-gray-100 dark:border-[#262b31] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
               <select
                 value={recordsPerPage}
                 onChange={(e) => setRecordsPerPage(Number(e.target.value))}
-                className="bg-transparent text-gray-700 font-medium py-1 px-2 rounded-lg border border-gray-200 hover:border-gray-300 focus:outline-none"
+                className="bg-transparent text-gray-700 dark:text-gray-300 font-medium py-1 px-2 rounded-lg border border-gray-200 dark:border-[#262b31] hover:border-gray-300 dark:hover:border-gray-700 focus:outline-none"
               >
                 <option value={10}>10 records</option>
                 <option value={20}>20 records</option>
@@ -452,27 +454,27 @@ function Employees() {
               </select>
             </div>
             <div className="flex items-center gap-1.5">
-              <button disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+              <button disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} className="w-7 h-7 rounded-lg border border-gray-200 dark:border-[#262b31] flex items-center justify-center text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026] disabled:opacity-40">
                 <ChevronLeft size={14} />
               </button>
-              <button onClick={() => setCurrentPage(1)} className={`w-7 h-7 rounded-lg text-xs font-semibold ${currentPage === 1 ? 'bg-gray-950 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <button onClick={() => setCurrentPage(1)} className={`w-7 h-7 rounded-lg text-xs font-semibold ${currentPage === 1 ? 'bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c2026]'}`}>
                 1
               </button>
-              <button onClick={() => setCurrentPage(2)} className={`w-7 h-7 rounded-lg text-xs font-semibold ${currentPage === 2 ? 'bg-gray-950 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <button onClick={() => setCurrentPage(2)} className={`w-7 h-7 rounded-lg text-xs font-semibold ${currentPage === 2 ? 'bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c2026]'}`}>
                 2
               </button>
-              <button disabled={currentPage === 2} onClick={() => setCurrentPage((p) => Math.min(2, p + 1))} className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+              <button disabled={currentPage === 2} onClick={() => setCurrentPage((p) => Math.min(2, p + 1))} className="w-7 h-7 rounded-lg border border-gray-200 dark:border-[#262b31] flex items-center justify-center text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026] disabled:opacity-40">
                 <ChevronRight size={14} />
               </button>
             </div>
-            <div className="text-gray-500 font-medium">1 - {employees.length} of {employees.length}</div>
+            <div className="text-gray-500 dark:text-gray-400 font-medium">1 - {employees.length} of {employees.length}</div>
           </div>
         </div>
       )}
 
       {/* Bulk action bar */}
       {selectedIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-950 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-bottom-3 duration-200">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-bottom-3 duration-200">
           <span className="text-xs font-medium text-gray-300">{selectedIds.length} employee(s) selected</span>
           <div className="h-4 w-px bg-gray-800" />
           <button onClick={handleExportCSV} className="flex items-center gap-1.5 text-xs font-semibold text-white hover:text-gray-300">
