@@ -1,17 +1,90 @@
-import { Link } from 'react-router-dom'
+
+import { Navigate, Route, Routes } from 'react-router-dom'
+
+import HRLayout from './layouts/HRLayout'
+import HRDashboard from './pages/HRDashboard'
+import Employees from './pages/Employees'
+import Attendance from './pages/Attendance'
+import Leave from './pages/Leave'
+import Payroll from './pages/Payroll'
+import PaymentSlips from './pages/PaymentSlips'
+import HRReports from './pages/HRReports'
+import HRSettings from './pages/HRSettings'
+
+function ComingSoon({ title }) {
+  return (
+    <div className="min-h-full bg-[#F3F4F6] p-6 sm:p-8">
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-bold text-slate-950">
+          {title}
+        </h1>
+
+        <p className="mt-2 text-sm text-slate-500">
+          This module will be built in the next Phase 1 step.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 function HRManagerApp() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-900 flex flex-col items-center justify-center text-white px-6">
-      <h1 className="text-3xl font-bold tracking-tight mb-2 text-emerald-400">HR Manager Portal</h1>
-      <p className="text-slate-400 mb-8">Coming soon — this section is under construction.</p>
-      <Link
-        to="/"
-        className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold transition-colors"
-      >
-        ← Back to Home
-      </Link>
-    </div>
+    <Routes>
+      <Route element={<HRLayout />}>
+        {/* HR Dashboard */}
+        <Route
+          index
+          element={<HRDashboard />}
+        />
+
+        {/* Future HR modules */}
+      <Route
+  path="employees"
+  element={<Employees />}
+/>
+
+     <Route
+  path="attendance"
+  element={<Attendance />}
+/>
+
+     <Route
+  path="leave"
+  element={<Leave />}
+/>
+
+      <Route
+  path="payroll"
+  element={<Payroll />}
+/>
+
+      <Route
+  path="payslips"
+  element={<PaymentSlips />}
+/>
+
+    <Route
+  path="reports"
+  element={<HRReports />}
+/>
+
+      <Route
+  path="settings"
+  element={<HRSettings />}
+/>
+      </Route>
+
+      {/* Unknown HR route */}
+      <Route
+        path="*"
+        element={
+          <Navigate
+            to="/hr-manager"
+            replace
+          />
+        }
+      />
+    </Routes>
   )
 }
 

@@ -17,57 +17,115 @@ model User {
 }
 
 model Employee {
-  id               String   @id
-  employeeId       String   @unique
-  name             String
-  gender           String
-  dateOfBirth      String
-  joinDate         String
-  jobTitle         String
-  department       String
-  employmentType   String
-  basicSalary      Float
-  transportAllowance Float
-  housingAllowance Float
-  mealAllowance    Float
-  otherAllowance   Float
-  otherDeductions  Float
-  loanDeductions   Float
-  bankName         String
-  bankAccount      String
-  tin              String
-  pensionId        String
-  phone            String
-  email            String
-  address          String
-  emergencyContact String
-  employmentStatus String
-  exitDate         String?
-  notes            String?
-  status           String
-  avatar           String
-  location         String
-  salary           Float
-  manager          String
-  roleType         String
-  initials         String
-  createdAt        DateTime @default(now())
+  id                  String   @id
+  employeeId          String   @unique
+  name                String
+  gender              String
+  dateOfBirth         String
+  joinDate            String
+  jobTitle            String
+  department          String
+  employmentType      String
+  basicSalary         Float
+  transportAllowance  Float
+  housingAllowance    Float
+  mealAllowance       Float
+  otherAllowance      Float
+  otherDeductions     Float
+  loanDeductions      Float
+  bankName            String
+  bankAccount         String
+  tin                 String
+  pensionId           String
+  phone               String
+  email               String
+  address             String
+  emergencyContact    String
+  employmentStatus    String
+  exitDate            String?
+  notes               String?
+  status              String
+  avatar              String
+  location            String
+  salary              Float
+  manager             String
+  roleType            String
+  initials             String
+  createdAt            DateTime @default(now())
+
+  attendance           Attendance[]
+  leaveRequests        LeaveRequest[]
+  payrollRecords       PayrollRecord[]
 }
 
 model Attendance {
+  id               String   @id
+  employeeId       String
+  employeeName     String
+  department       String
+  date             String
+  status            String
+  checkIn          String?
+  checkOut         String?
+  late             Int      @default(0)
+  earlyDeparture   Int      @default(0)
+  regular          Float    @default(0)
+  overtime         Float    @default(0)
+  createdAt        DateTime @default(now())
+
+  employee         Employee @relation(fields: [employeeId], references: [id])
+}
+
+model LeaveRequest {
   id             String   @id
   employeeId     String
   employeeName   String
   department     String
-  date           String
-  status         String
-  checkIn        String?
-  checkOut       String?
-  late           Int      @default(0)
-  earlyDeparture Int      @default(0)
-  regular        Float    @default(0)
-  overtime       Float    @default(0)
+  leaveType      String
+  requestDate    String
+  startDate      String
+  endDate        String
+  days           Float
+  approvalStatus String
+  approvedBy     String?
+  approvedDate   String?
+  remarks        String?
+  balance        Float?
   createdAt      DateTime @default(now())
+
+  employee       Employee @relation(fields: [employeeId], references: [id])
+}
+
+model PayrollRecord {
+  id                   String   @id
+  employeeId           String
+  employeeName         String
+  department           String
+  payrollMonth         String
+
+  basicSalary          Float
+  transportAllowance   Float
+  housingAllowance     Float
+  mealAllowance        Float
+  otherAllowance       Float
+  overtimePay          Float
+  grossSalary          Float
+
+  pensionDeduction     Float
+  incomeTax            Float
+  loanDeduction        Float
+  otherDeduction       Float
+  totalDeductions      Float
+  netSalary            Float
+
+  employerPension      Float
+  employerCost         Float
+
+  createdAt            DateTime @default(now())
+
+  employee             Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, payrollMonth])
 }
 
 model Setting {
