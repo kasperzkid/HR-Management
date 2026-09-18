@@ -11,6 +11,8 @@ import {
   DollarSign,
   CreditCard,
   FileText,
+  UploadCloud,
+  Trash2,
   AlertTriangle,
   CheckCircle2,
   AlertCircle,
@@ -86,6 +88,9 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
       bankAccount: '',
       tin: '',
       pensionId: '',
+
+      certificates: [],
+      cv: [],
 
       // 5. Notes
       notes: '',
@@ -204,6 +209,33 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
     }
   }
 
+  const handleFileChange = (field, e) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    if (field === 'cv') {
+      setFormData((prev) => ({ ...prev, cv: [files[0]] }))
+    } else {
+      setFormData((prev) => ({ ...prev, certificates: [...prev.certificates, ...files] }))
+    }
+    e.target.value = ''
+  }
+
+  const removeFile = (field, index) => {
+    setFormData((prev) => {
+      const list = [...prev[field]]
+      list.splice(index, 1)
+      return { ...prev, [field]: list }
+    })
+  }
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
 
@@ -247,6 +279,18 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
       emergencyContact: formData.emergencyContact.trim(),
       employmentStatus: formData.employmentStatus,
       exitDate: shouldShowExitDate && formData.exitDate ? formData.exitDate : null,
+      certificates: formData.certificates.map((f) => ({
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        lastModified: f.lastModified,
+      })),
+      cv: formData.cv.map((f) => ({
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        lastModified: f.lastModified,
+      })),
       notes: formData.notes.trim(),
       dataCheck: dataCheckBadge.status,
       dataCheckWarnings: auditWarnings,
@@ -828,13 +872,127 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
             </div>
           </div>
 
-          {/* Section 5: Notes */}
+          {/* Section 5: Certificates & CV Documents */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-gray-100 dark:border-[#262b31]">
+              <div className="flex items-center gap-2">
+                <UploadCloud size={15} className="text-gray-900 dark:text-gray-100" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 dark:text-gray-100">
+                  5. Certificates &amp; CV Documents
+                </h4>
+              </div>
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">Optional</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* CV Upload */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-gray-800 dark:text-gray-200">
+                  Curriculum Vitae (CV)
+                </label>
+                {formData.cv.length === 0 ? (
+                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 dark:border-[#33383f] rounded-xl cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 bg-gray-50/50 dark:bg-[#1c2026] transition-colors">
+                    <UploadCloud size={20} className="text-gray-400 mb-1" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Upload CV (PDF, DOC)</span>
+                    <span className="text-[10px] text-gray-400">Max file size 10MB</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      className="hidden"
+                      onChange={(e) => handleFileChange('cv', e)}
+                    />
+                  </label>
+                ) : (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg border border-gray-200 dark:border-[#262b31] bg-gray-50 dark:bg-[#1c2026]">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <FileText size={16} className="text-blue-600 shrink-0" />
+                      <div className="truncate">
+                        <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                          {formData.cv[0].name}
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          {formatFileSize(formData.cv[0].size)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile('cv', 0)}
+                      className="text-gray-400 hover:text-rose-600 p-1 transition-colors"
+                      title="Remove CV"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Certificates Upload */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-800 dark:text-gray-200">
+                    Certificates &amp; Credentials
+                  </label>
+                  <span className="text-[10px] text-gray-400">Multiple allowed</span>
+                </div>
+                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 dark:border-[#33383f] rounded-xl cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 bg-gray-50/50 dark:bg-[#1c2026] transition-colors">
+                  <UploadCloud size={20} className="text-gray-400 mb-1" />
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Add Certificates</span>
+                  <span className="text-[10px] text-gray-400">PDF, Images, etc.</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                    className="hidden"
+                    onChange={(e) => handleFileChange('certificates', e)}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Certificates List */}
+            {formData.certificates.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400">
+                  Uploaded Certificates ({formData.certificates.length})
+                </span>
+                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                  {formData.certificates.map((file, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2 rounded-lg border border-gray-200 dark:border-[#262b31] bg-gray-50 dark:bg-[#1c2026]"
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <FileText size={15} className="text-emerald-600 shrink-0" />
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                            {file.name}
+                          </p>
+                          <p className="text-[10px] text-gray-400">{formatFileSize(file.size)}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile('certificates', idx)}
+                        className="text-gray-400 hover:text-rose-600 p-1 transition-colors"
+                        title="Remove Certificate"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 6: Notes */}
           <div className="space-y-2 pt-2">
             <div className="flex items-center justify-between pb-1.5 border-b border-gray-100 dark:border-[#262b31]">
               <div className="flex items-center gap-2">
                 <FileText size={15} className="text-gray-900 dark:text-gray-100" />
                 <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 dark:text-gray-100">
-                  5. Notes &amp; Remarks
+                  6. Notes &amp; Remarks
                 </h4>
               </div>
               <span className="text-[10px] text-gray-400 dark:text-gray-500">Optional</span>
@@ -848,14 +1006,14 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
             />
           </div>
 
-          {/* Section 6: Data Check & Statutory Audit Summary Box */}
+          {/* Section 7: Data Check & Statutory Audit Summary Box */}
           <div className="pt-2">
             <div className="rounded-xl border border-gray-200 dark:border-[#262b31] bg-gray-50/80 dark:bg-[#1c2026] p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={16} className="text-gray-900 dark:text-gray-100" />
                   <span className="text-xs font-bold text-gray-950 dark:text-gray-100">
-                    6. Data Check &amp; Statutory Audit Preview
+                    7. Data Check &amp; Statutory Audit Preview
                   </span>
                 </div>
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${dataCheckBadge.color}`}>

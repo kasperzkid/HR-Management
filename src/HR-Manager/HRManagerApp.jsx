@@ -1,6 +1,7 @@
 
 import { Navigate, Route, Routes } from 'react-router-dom'
 
+import { MessagingProvider } from '../Employer/context/MessagingContext'
 import HRLayout from './layouts/HRLayout'
 import HRDashboard from './pages/HRDashboard'
 import Employees from './pages/Employees'
@@ -10,6 +11,7 @@ import Payroll from './pages/Payroll'
 import PaymentSlips from './pages/PaymentSlips'
 import HRReports from './pages/HRReports'
 import HRSettings from './pages/HRSettings'
+import HRInbox from './pages/Inbox'
 
 function ComingSoon({ title }) {
   return (
@@ -29,11 +31,17 @@ function ComingSoon({ title }) {
 
 function HRManagerApp() {
   return (
-    <Routes>
+    <MessagingProvider>
+      <Routes>
       <Route element={<HRLayout />}>
         {/* HR Dashboard */}
         <Route
           index
+          element={<HRDashboard />}
+        />
+
+        <Route
+          path="dashboard"
           element={<HRDashboard />}
         />
 
@@ -72,6 +80,17 @@ function HRManagerApp() {
   path="settings"
   element={<HRSettings />}
 />
+
+      {/* Inbox / messages */}
+      <Route
+  path="inbox"
+  element={<HRInbox />}
+/>
+
+      <Route
+  path="inbox/:contactId"
+  element={<HRInbox />}
+/>
       </Route>
 
       {/* Unknown HR route */}
@@ -84,7 +103,8 @@ function HRManagerApp() {
           />
         }
       />
-    </Routes>
+      </Routes>
+    </MessagingProvider>
   )
 }
 

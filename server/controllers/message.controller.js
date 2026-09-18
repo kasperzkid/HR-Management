@@ -1,14 +1,10 @@
 import prisma from '../db.js'
-import bcrypt from 'bcryptjs'
 import { io, isUserOnline } from '../socket.js'
 
 const ROLE_LABELS = {
   EMPLOYER: 'Employer',
   HR_MANAGER: 'HR Manager',
-  EMPLOYEE: 'Employee',
 }
-
-const DEFAULT_EMPLOYEE_PASSWORD = 'yanol123'
 
 function initials(name = '') {
   return name
@@ -82,7 +78,7 @@ export async function getContacts(req, res) {
     meta[otherId] = { last, unread }
   })
 
-  const result = contacts
+  let result = contacts
     .map((c) => ({
       id: c.id,
       name: c.name,
@@ -104,10 +100,16 @@ export async function getContacts(req, res) {
           }
         : null,
     }))
-    .sort((a, b) => {
-      if (a.lastMessage && b.lastMessage) return b.lastMessage.time.localeCompare(a.lastMessage.time)
-      return a.lastMessage ? -1 : 1
-    })
+
+  // For Employee / Employer: ONLY return contacts with whom there is an active conversation with HR
+  if (req.user.role !== 'HR_MANAGER') {
+    result = result.filter((c) => c.lastMessage !== null)
+  }
+
+  result.sort((a, b) => {
+    if (a.lastMessage && b.lastMessage) return b.lastMessage.time.localeCompare(a.lastMessage.time)
+    return a.lastMessage ? -1 : 1
+  })
 
   res.json({ contacts: result })
 }
@@ -156,24 +158,14 @@ export async function getUsers(req, res) {
 
 export async function startConversation(req, res) {
   const meId = req.user.id
-  const { userId, employeeId } = req.body || {}
+  const { userId } = req.body || {}
 
   let user
   if (userId) {
     user = await prisma.user.findUnique({ where: { id: Number(userId) } })
     if (!user) return res.status(404).json({ message: 'User not found' })
-  } else if (employeeId) {
-    const employee = await prisma.employee.findUnique({ where: { id: employeeId } })
-    if (!employee) return res.status(404).json({ message: 'Employee not found' })
-    user = await prisma.user.findUnique({ where: { email: employee.email } })
-    if (!user) {
-      const hashed = await bcrypt.hash(DEFAULT_EMPLOYEE_PASSWORD, 10)
-      user = await prisma.user.create({
-        data: { name: employee.name, email: employee.email, password: hashed, role: 'EMPLOYEE' },
-      })
-    }
   } else {
-    return res.status(400).json({ message: 'Provide either userId or employeeId' })
+    return res.status(400).json({ message: 'Provide a userId' })
   }
 
   await findOrCreateConversation(meId, user.id)

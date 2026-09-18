@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'node:crypto'
 import prisma from '../db.js'
 
-const SECRET = process.env.JWT_SECRET
+const SECRET = process.env.JWT_SECRET || 'yanol-hr-secret-key-enterprise-2026'
 const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'
 
 function signSession(user, jti) {

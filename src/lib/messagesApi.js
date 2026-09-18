@@ -1,13 +1,19 @@
 import { getToken } from './auth'
 
 function authHeaders(extra = {}) {
+  const token = getToken()
   return {
-    Authorization: `Bearer ${getToken()}`,
+    ...(token && !token.startsWith('session-') ? { Authorization: `Bearer ${token}` } : {}),
     ...extra,
   }
 }
 
 export async function apiFetch(path, options = {}) {
+  const token = getToken()
+  if (!token || token.startsWith('session-')) {
+    throw new Error('Local session mode')
+  }
+
   const res = await fetch(`/api/messages${path}`, {
     ...options,
     headers: authHeaders(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),

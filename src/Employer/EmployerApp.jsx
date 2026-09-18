@@ -15,7 +15,7 @@ import Inbox from './pages/Inbox'
 
 function EmployerApp() {
   return (
-    <MessagingProvider>
+    <MessagingProvider portalType="employer">
       <Routes>
         <Route element={<EmployerLayout />}>
           <Route path="/" element={<Navigate to="dashboard" replace />} />

@@ -712,7 +712,7 @@ function Login() {
     }
 
     // Seamless client-side demo login (only reached if the server is unreachable)
-    const name = role === 'EMPLOYER' ? 'Alex Johnson' : 'Sarah Jenkins'
+    const name = role === 'HR_MANAGER' ? 'Sarah Jenkins' : 'Alex Johnson'
     const token = `session-${Date.now()}`
     localStorage.setItem(
       'user',
@@ -747,7 +747,7 @@ function Login() {
           </div>
 
           {/* Role Tabs */}
-          <div className="mb-6 p-1 bg-gray-100/90 rounded-xl border border-gray-200/80 grid grid-cols-2 gap-1.5">
+          <div className="mb-6 p-1 bg-gray-100/90 rounded-xl border border-gray-200/80 grid grid-cols-2 gap-1">
             {[
               { role: 'EMPLOYER', icon: Building, label: 'Employer', email: 'employer@yanol.com', pw: 'employer123' },
               { role: 'HR_MANAGER', icon: Users, label: 'HR Manager', email: 'hr@yanol.com', pw: 'hr123' },
@@ -760,13 +760,13 @@ function Login() {
                   setEmail(e)
                   setPassword(pw)
                 }}
-                className={`py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`py-2 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1 transition-all cursor-pointer ${
                   selectedRole === role
                     ? 'bg-white text-gray-950 shadow-xs font-semibold'
                     : 'text-gray-600 hover:text-gray-950'
                 }`}
               >
-                <Icon size={14} />
+                <Icon size={13} />
                 <span>{label}</span>
               </button>
             ))}

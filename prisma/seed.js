@@ -136,13 +136,16 @@ async function main() {
   }
   console.log(`Seeded ${INITIAL_EMPLOYEES.length} employees successfully.`)
 
+  const empIdByCode = new Map(INITIAL_EMPLOYEES.map((emp) => [emp.employeeId, emp.id]))
+
   for (const att of ATTENDANCE) {
+    const employeeDbId = empIdByCode.get(att.employeeId) || att.employeeId
     await prisma.attendance.upsert({
       where: { id: att.id },
       update: {},
       create: {
         id: att.id,
-        employeeId: att.employeeId,
+        employeeId: employeeDbId,
         employeeName: att.employeeName,
         department: att.department,
         date: att.date,

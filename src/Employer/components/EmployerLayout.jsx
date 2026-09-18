@@ -23,9 +23,6 @@ function EmployerLayout() {
   const [isHovered, setIsHovered] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [showOrgMenu, setShowOrgMenu] = useState(false)
-  const [currentOrg, setCurrentOrg] = useState({ name: 'Wishbone', members: '61 members', code: 'WB' })
-
   // Expandable sections in the sidebar
   const [expandedSections, setExpandedSections] = useState({
     teams: true,
@@ -39,12 +36,6 @@ function EmployerLayout() {
     }))
   }
 
-  const organizations = [
-    { name: 'Wishbone', members: '61 members', code: 'WB', active: true },
-    { name: 'Acme Corp', members: '142 members', code: 'AC', active: false },
-    { name: 'Starlight Inc', members: '34 members', code: 'SI', active: false },
-  ]
-
   const isRouteActive = (path) => {
     if (path === '/employer/dashboard' && (location.pathname === '/employer/dashboard' || location.pathname === '/employer' || location.pathname === '/employer/')) {
       return true
@@ -55,9 +46,9 @@ function EmployerLayout() {
   const collapsed = !isHovered
 
   return (
-    <div className="h-screen overflow-hidden bg-[#f4f5f7] dark:bg-[#0a0d10] text-gray-800 dark:text-gray-200 flex flex-col antialiased">
+    <div className="h-screen overflow-hidden bg-[#f4f5f7] dark:bg-[#0a0d10] text-gray-800 dark:text-gray-200 flex flex-col antialiased print:h-auto print:overflow-visible print:bg-white">
       {/* Mobile Top Navigation Header */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white dark:bg-[#15181d] border-b border-gray-200 dark:border-[#262b31] sticky top-0 z-40 shadow-xs">
+      <div className="lg:hidden print:hidden flex items-center justify-between px-4 py-3 bg-white dark:bg-[#15181d] border-b border-gray-200 dark:border-[#262b31] sticky top-0 z-40 shadow-xs">
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -107,7 +98,7 @@ function EmployerLayout() {
           onMouseLeave={() => setIsHovered(false)}
           className={`
             fixed lg:static inset-y-0 left-0 z-50 bg-white dark:bg-[#0d1014] border-r border-gray-200/80 dark:border-[#262b31]
-            flex flex-col shrink-0 transition-all duration-300 ease-in-out select-none
+            flex flex-col shrink-0 transition-all duration-300 ease-in-out select-none print:hidden
             ${collapsed ? 'lg:w-[72px]' : 'lg:w-[250px]'}
             ${mobileOpen ? 'translate-x-0 w-[260px] shadow-2xl' : '-translate-x-full lg:translate-x-0'}
           `}
@@ -196,7 +187,12 @@ function EmployerLayout() {
                 <div className="pl-4 pr-1 mt-0.5 space-y-0.5 whitespace-nowrap">
                   <Link
                     to="/employer/employee"
-                    className="relative flex items-center px-3 py-1.5 text-xs rounded-md text-gray-950 dark:text-white font-semibold bg-gray-50/60 dark:bg-[#1c2026] hover:bg-gray-100/70 dark:hover:bg-[#1c2026] transition-colors group"
+                    data-nav-active={isRouteActive('/employer/employee') ? 'true' : undefined}
+                    className={`relative flex items-center px-3 py-1.5 text-xs rounded-md ${
+                      isRouteActive('/employer/employee')
+                        ? 'text-gray-950 dark:text-white font-semibold bg-gray-50/60 dark:bg-[#1c2026]'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                    }`}
                   >
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-gray-950 dark:bg-gray-100 rounded-r-full" />
                     <span className="ml-1">Employee</span>
@@ -277,79 +273,36 @@ function EmployerLayout() {
                 <BarChart3 size={16} className="shrink-0 text-gray-500" />
                 {!collapsed && <span>Reports</span>}
               </Link>
-              <Link
-                to="/employer/settings"
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                  isRouteActive('/employer/settings') || isRouteActive('/employer/admin')
-                    ? 'bg-gray-100 text-gray-950 font-semibold dark:bg-[#1c2026] dark:text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
-                }`}
-                title={collapsed ? 'Settings' : undefined}
-              >
-                <SettingsIcon size={16} className="shrink-0 text-gray-500" />
-                {!collapsed && <span>Settings</span>}
-              </Link>
             </div>
           </div>
 
-          {/* Bottom Organization Card */}
-          <div className="p-3 border-t border-gray-100 dark:border-[#262b31] relative">
-            <button
-              onClick={() => setShowOrgMenu(!showOrgMenu)}
-              className={`w-full flex items-center justify-between p-2 rounded-xl bg-gray-100/90 hover:bg-gray-200/70 dark:bg-[#15181d] dark:hover:bg-[#1c2026] border border-gray-200/60 dark:border-[#262b31] transition-colors text-left ${
-                collapsed ? 'justify-center p-1.5' : ''
-              }`}
+          {/* Bottom Settings Button */}
+          <div className="p-3 border-t border-gray-100 dark:border-[#262b31]">
+            <Link
+              to="/employer/settings"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                isRouteActive('/employer/settings') || isRouteActive('/employer/admin')
+                  ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950 font-bold shadow-xs'
+                  : 'text-gray-600 hover:text-gray-950 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#1c2026] font-medium'
+              } ${collapsed ? 'justify-center px-2' : ''}`}
+              title={collapsed ? 'Settings' : undefined}
             >
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="w-8 h-8 rounded-full bg-gray-950 dark:bg-[#3a4149] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                  {currentOrg.code}
+              <SettingsIcon size={18} className="shrink-0" />
+              {!collapsed && (
+                <div className="flex-1 min-w-0 flex items-center justify-between">
+                  <span className="text-xs">Settings</span>
+                  <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 uppercase font-semibold">Config</span>
                 </div>
-                {!collapsed && (
-                  <div className="truncate">
-                    <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{currentOrg.name}</p>
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{currentOrg.members}</p>
-                  </div>
-                )}
-              </div>
-              {!collapsed && <ChevronDown size={14} className="text-gray-500 shrink-0 ml-1" />}
-            </button>
-
-            {/* Org Switcher Dropdown */}
-            {showOrgMenu && !collapsed && (
-              <div className="absolute bottom-16 left-3 right-3 bg-white dark:bg-[#15181d] rounded-xl shadow-xl border border-gray-200/90 dark:border-[#33383f] p-2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 dark:text-gray-500 px-2.5 py-1">
-                  Organizations
-                </p>
-                {organizations.map((org) => (
-                  <button
-                    key={org.name}
-                    onClick={() => {
-                      setCurrentOrg(org)
-                      setShowOrgMenu(false)
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors ${
-                      org.name === currentOrg.name
-                        ? 'bg-gray-100 text-gray-950 font-semibold dark:bg-[#1c2026] dark:text-white'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-gray-950 dark:bg-[#3a4149] text-white text-[10px] font-bold flex items-center justify-center">
-                        {org.code}
-                      </div>
-                      <span>{org.name}</span>
-                    </div>
-                    {org.name === currentOrg.name && <Check size={14} className="text-gray-900 dark:text-white" />}
-                  </button>
-                ))}
-              </div>
-            )}
+              )}
+            </Link>
           </div>
         </aside>
 
         {/* Main Workspace Area */}
-        <main className="flex-1 min-w-0 overflow-y-auto bg-[#f4f5f7] dark:bg-[#0a0d10]">
-          <Topbar />
+        <main className="flex-1 min-w-0 overflow-y-auto bg-[#f4f5f7] dark:bg-[#0a0d10] print:overflow-visible print:bg-white print:h-auto print:p-0">
+          <div className="print:hidden">
+            <Topbar />
+          </div>
           <Outlet />
         </main>
       </div>

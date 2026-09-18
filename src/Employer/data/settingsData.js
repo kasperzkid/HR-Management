@@ -9,12 +9,12 @@
 
 export const SETTINGS = {
   company: {
-    name: 'Yanol Technology PLC',
-    shortName: 'Yanol',
-    address: 'Bole Road, Addis Ababa, Ethiopia',
-    phone: '+251 11 551 2345',
+    name: 'YANOLTECH SOLUTIONS PLC',
+    shortName: 'YANOLTECH',
+    address: 'Bole sub,w07,A.A, Ethiopia',
+    phone: '0942497990',
     email: 'payroll@yanol.com',
-    tin: '0001234567',
+    tin: '',
   },
 
   standardMonthlyHours: 208, // 26 working days × 8 hrs

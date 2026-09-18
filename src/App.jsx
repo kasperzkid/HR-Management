@@ -84,12 +84,12 @@ function useAuth() {
   return { status, user }
 }
 
-function ProtectedRoute({ children, allowedRole }) {
+function ProtectedRoute({ children, allowedRole, allowedRoles }) {
   const { status, user } = useAuth()
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-white dark:bg-[#0a0d10] flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-950 rounded-full animate-spin" />
       </div>
     )
@@ -99,7 +99,8 @@ function ProtectedRoute({ children, allowedRole }) {
     return <Navigate to="/login" replace />
   }
 
-  if (allowedRole && user.role && user.role !== allowedRole) {
+  const validRoles = allowedRoles || (allowedRole ? [allowedRole] : null)
+  if (validRoles && user.role && !validRoles.includes(user.role)) {
     return <Navigate to={user.role === 'HR_MANAGER' ? '/hr-manager/dashboard' : '/employer/dashboard'} replace />
   }
 
@@ -116,7 +117,7 @@ function App() {
         <Route
           path="/employer/*"
           element={
-            <ProtectedRoute allowedRole="EMPLOYER">
+            <ProtectedRoute allowedRoles={['EMPLOYER']}>
               <EmployerApp />
             </ProtectedRoute>
           }

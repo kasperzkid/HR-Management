@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 import prisma from '../db.js'
 
-const SECRET = process.env.JWT_SECRET
+const SECRET = process.env.JWT_SECRET || 'yanol-hr-secret-key-enterprise-2026'
 
 export function authenticate(req, res, next) {
   const header = req.headers.authorization

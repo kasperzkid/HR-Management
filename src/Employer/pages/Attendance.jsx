@@ -116,18 +116,6 @@ function Attendance() {
         ))}
       </div>
 
-      {/* Daily log (Qirb-Alga Luxury Pension Table) */}
-      <section id="daily-log-section">
-        <DailyLogTable
-          initialLogs={filtered}
-          employees={[currentEmployee]}
-          title="My Daily Log"
-          subtitle={`Check-in and punch records for ${currentEmployee.name}`}
-          showActions={false}
-          tableId="employer-daily-log-table"
-        />
-      </section>
-
       {/* Current Employee Monthly Hours Summary */}
       <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs p-5 dark:bg-[#15181d] dark:border-[#262b31] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -153,6 +141,18 @@ function Attendance() {
           </div>
         </div>
       </div>
+
+      {/* Daily log (Qirb-Alga Luxury Pension Table) */}
+      <section id="daily-log-section">
+        <DailyLogTable
+          initialLogs={filtered}
+          employees={[currentEmployee]}
+          title="My Daily Log"
+          subtitle={`Check-in and punch records for ${currentEmployee.name}`}
+          showActions={false}
+          tableId="employer-daily-log-table"
+        />
+      </section>
     </div>
   )
 }

@@ -8,18 +8,22 @@ function HRLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6]">
-      <HRSidebar
-        mobileOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F3F4F6]">
+      <div className="relative flex flex-1 overflow-hidden">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-      <div className="min-h-screen lg:pl-64">
-        <HRTopbar
-          onMenuClick={() => setSidebarOpen(true)}
+        <HRSidebar
+          mobileOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
 
-        <main className="min-h-[calc(100vh-4rem)]">
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <HRTopbar onMenuClick={() => setSidebarOpen(true)} />
           <Outlet />
         </main>
       </div>

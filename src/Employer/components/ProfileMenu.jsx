@@ -46,7 +46,7 @@ function ThemeToggle() {
   )
 }
 
-function ProfileMenu({ compact = false }) {
+function ProfileMenu({ compact = false, basePath = '/employer', profilePath }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const navigate = useNavigate()
@@ -141,10 +141,12 @@ function ProfileMenu({ compact = false }) {
 
           {/* Account shortcuts */}
           <div className="p-2 border-b border-gray-100 dark:border-[#262b31]">
-            <Link to="/employer/profile" onClick={close} className={menuItemClass}>
-              <CircleUserRound size={14} className="text-gray-400 shrink-0" /> My Profile
-            </Link>
-            <Link to="/employer/settings" onClick={close} className={menuItemClass}>
+            {profilePath && (
+              <Link to={profilePath} onClick={close} className={menuItemClass}>
+                <CircleUserRound size={14} className="text-gray-400 shrink-0" /> My Profile
+              </Link>
+            )}
+            <Link to={`${basePath}/settings`} onClick={close} className={menuItemClass}>
               <SettingsIcon size={14} className="text-gray-400 shrink-0" /> Settings
             </Link>
           </div>
@@ -158,7 +160,7 @@ function ProfileMenu({ compact = false }) {
           {/* Support */}
           <div className="px-3 pb-1">
             <span className={`${sectionLabelClass} mb-1`}>Support</span>
-            <Link to="/employer/inbox" onClick={close} className={menuItemClass}>
+            <Link to={`${basePath}/inbox`} onClick={close} className={menuItemClass}>
               <LifeBuoy size={14} className="text-gray-400 shrink-0" /> Help & Support
             </Link>
           </div>

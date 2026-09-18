@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
-import { Play, CheckCircle2, RefreshCw, Calculator, AlertTriangle } from 'lucide-react'
+import { Play, CheckCircle2, RefreshCw } from 'lucide-react'
 import { INITIAL_EMPLOYEES } from '../data/employeeData'
 import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
-import { calcPayroll, formatETB, roundMoney, netToBasic } from '../lib/payroll'
+import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import { SETTINGS } from '../data/settingsData'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 import { getCurrentEmployee } from '../lib/currentUser'
@@ -15,8 +15,6 @@ function Payroll() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [finalized, setFinalized] = useState(false)
   const [overrides, setOverrides] = useState({})
-  const [reverseInput, setReverseInput] = useState('')
-  const [reverseResult, setReverseResult] = useState(null)
 
   const filteredEmployees = useMemo(() => {
     return INITIAL_EMPLOYEES.filter((emp) => emp.employeeId === currentEmployeeId)
@@ -55,16 +53,6 @@ function Payroll() {
   const handleOverride = (employeeId, field, value) => {
     const num = Number(value) || 0
     setOverrides((prev) => ({ ...prev, [employeeId]: { ...(prev[employeeId] || {}), [field]: num } }))
-  }
-
-  const handleReverse = () => {
-    const net = Number(reverseInput)
-    if (!net || net <= 0) return
-    setReverseResult({
-      net,
-      basic: netToBasic(net),
-      hourly: roundMoney(netToBasic(net) / SETTINGS.standardMonthlyHours),
-    })
   }
 
   return (
@@ -271,52 +259,6 @@ function Payroll() {
         ]}
       />
 
-      {/* Reverse calculator */}
-      <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Calculator size={15} className="text-gray-500 dark:text-gray-400" />
-          <h3 className="text-sm font-bold text-gray-950 dark:text-gray-100">Net-to-Basic Reverse Calculator</h3>
-          <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-1">Given desired net salary → required basic (Permanent, no allowances/OT)</span>
-        </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-          <div className="flex-1 w-full max-w-xs">
-            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Desired Net Salary (ETB)</label>
-            <input
-              type="number"
-              value={reverseInput}
-              onChange={(e) => setReverseInput(e.target.value)}
-              placeholder="e.g. 30000"
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-[#33383f] rounded-lg bg-white dark:bg-[#15181d] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300"
-            />
-          </div>
-          <button onClick={handleReverse} className="px-4 py-2 rounded-lg bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 text-xs font-semibold hover:bg-gray-800 transition-colors">
-            Calculate
-          </button>
-          {reverseResult && (
-            <div className="flex gap-4 text-xs">
-              <div>
-                <p className="text-gray-500 dark:text-gray-400">Required Basic</p>
-                <p className="font-bold text-gray-950 dark:text-gray-100 text-sm">{formatETB(reverseResult.basic)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500 dark:text-gray-400">Hourly Rate ({SETTINGS.standardMonthlyHours}h)</p>
-                <p className="font-bold text-gray-950 dark:text-gray-100 text-sm">{formatETB(reverseResult.hourly)}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Business rule note */}
-      <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-xs text-amber-800">
-        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-        <p>
-          Business rules applied: only <strong>Active</strong> employees count in totals · <strong>Contractual / Intern</strong> are
-          force-exempt from tax &amp; pension · allowances are 100% taxable · pension on basic only · overtime uses a flat{' '}
-          {SETTINGS.overtimeMultiplier}x multiplier (law defines 1.25x / 1.5x / 2.0x tiers). Verify brackets against the Negarit Gazeta
-          before statutory filing.
-        </p>
-      </div>
     </div>
   )
 }

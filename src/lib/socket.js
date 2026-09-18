@@ -21,6 +21,13 @@ export function connectSocket() {
     auth: { token },
     transports: ['websocket', 'polling'],
   })
+
+  socket.on('connect_error', (err) => {
+    if (err.message === 'Invalid token' || err.message === 'Missing token') {
+      socket.close()
+    }
+  })
+
   return socket
 }
 

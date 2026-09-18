@@ -123,3 +123,68 @@
   animation: pulseMonochrome 2.5s ease-in-out infinite;
 }
 
+/* Payment Slip Print Media Styles */
+@media print {
+  @page {
+    size: auto;
+    margin: 8mm 10mm;
+  }
+
+  *, *::before, *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Unconditionally hide all website navigation, headers, sidebars, toolbars, buttons */
+  header,
+  nav,
+  aside,
+  footer,
+  .no-print,
+  button,
+  [role="banner"],
+  [role="navigation"] {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Universal container reset for printable slips */
+  #printable-payment-slips {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: grid !important;
+    visibility: visible !important;
+  }
+
+  #printable-payment-slips * {
+    visibility: visible !important;
+  }
+
+  .payment-slip-card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1.5px solid #000000 !important;
+    border-radius: 0 !important;
+    margin-bottom: 12px !important;
+    padding: 16px !important;
+  }
+}

@@ -167,8 +167,27 @@ function ExportModal({ open, onClose, rows = [], columns = [], filename = 'Expor
 }
 
 /**
- * Luxury Actions Dropdown (Qirb-Alga blue button with popover)
+ * Luxury Actions Dropdown — site theme (gray-950 trigger, emerald accent,
+ * rose destructive). Actions accept an optional `tone`: 'success' | 'danger'.
  */
+const ACTION_TONES = {
+  success: {
+    item: 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300',
+    icon: 'text-emerald-600 dark:text-emerald-400',
+  },
+  danger: {
+    item: 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300',
+    icon: 'text-rose-500 dark:text-rose-400',
+  },
+  default: {
+    item: 'text-slate-700 hover:bg-slate-50 hover:text-slate-950 dark:text-gray-200 dark:hover:bg-[#1c2026] dark:hover:text-gray-100',
+    icon: 'text-slate-400 dark:text-gray-400',
+  },
+}
+
+const toneOf = (action) =>
+  ACTION_TONES[action.destructive || action.tone === 'danger' ? 'danger' : action.tone === 'success' ? 'success' : 'default']
+
 function RowActionsDropdown({ primaryAction, dropdownActions = [], row }) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef(null)
@@ -188,6 +207,8 @@ function RowActionsDropdown({ primaryAction, dropdownActions = [], row }) {
   const visibleDropdown = dropdownActions.filter((a) => !a.hidden || !a.hidden(row))
   if (!primaryAction && visibleDropdown.length === 0) return null
 
+  const primaryTone = toneOf(primaryAction || {})
+
   return (
     <div className="relative inline-block text-left" ref={menuRef}>
       <button
@@ -196,56 +217,62 @@ function RowActionsDropdown({ primaryAction, dropdownActions = [], row }) {
           e.stopPropagation()
           setOpen((v) => !v)
         }}
-        className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-2xs cursor-pointer focus:outline-none"
+        className={`inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-lg text-[11px] font-semibold transition-all shadow-2xs cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 ${
+          open
+            ? 'bg-gray-800 text-white dark:bg-[#4a525c]'
+            : 'bg-gray-950 text-white hover:bg-gray-800 dark:bg-[#3a4149] dark:hover:bg-[#4a525c]'
+        }`}
         title="Row actions"
+        aria-expanded={open}
+        aria-haspopup="menu"
       >
         <span>Actions</span>
-        <ChevronDown className={`w-3 h-3 text-white/90 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          className={`w-3 h-3 text-white/80 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {open && (
         <div
-          className="absolute right-0 mt-1 w-48 p-1 rounded-lg text-xs z-50 bg-white dark:bg-[#15181d] shadow-xl border border-slate-200 dark:border-[#262b31] animate-in fade-in zoom-in-95 duration-100"
+          role="menu"
+          className="absolute right-0 mt-1.5 w-44 p-1.5 rounded-xl text-xs z-50 bg-white dark:bg-[#1c2026] shadow-xl border border-slate-200/80 dark:border-[#262b31] ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100 origin-top-right"
           onClick={(e) => e.stopPropagation()}
         >
           {primaryAction && (
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setOpen(false)
                 primaryAction.onClick(row)
               }}
-              className="w-full text-left flex items-center gap-2 p-2 rounded-md text-slate-700 dark:text-gray-200 hover:bg-blue-50 hover:text-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-400 font-medium cursor-pointer transition-colors"
+              className={`w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-semibold cursor-pointer transition-colors ${primaryTone.item}`}
             >
-              {primaryAction.icon && <primaryAction.icon className="w-3.5 h-3.5 shrink-0 text-blue-600" />}
+              {primaryAction.icon && (
+                <primaryAction.icon className={`w-3.5 h-3.5 shrink-0 ${primaryTone.icon}`} />
+              )}
               <span>{primaryAction.label}</span>
             </button>
           )}
 
-          {visibleDropdown.map((action, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => {
-                setOpen(false)
-                action.onClick(row)
-              }}
-              className={`w-full text-left flex items-center gap-2 p-2 rounded-md font-medium cursor-pointer transition-colors ${
-                action.destructive
-                  ? 'text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/40'
-                  : 'text-slate-700 dark:text-gray-200 hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-[#1c2026] dark:hover:text-gray-100'
-              }`}
-            >
-              {action.icon && (
-                <action.icon
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    action.destructive ? 'text-rose-500' : 'text-slate-400 dark:text-gray-400'
-                  }`}
-                />
-              )}
-              <span>{action.label}</span>
-            </button>
-          ))}
+          {visibleDropdown.map((action, idx) => {
+            const tone = toneOf(action)
+            return (
+              <button
+                key={idx}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false)
+                  action.onClick(row)
+                }}
+                className={`w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-medium cursor-pointer transition-colors ${tone.item}`}
+              >
+                {action.icon && <action.icon className={`w-3.5 h-3.5 shrink-0 ${tone.icon}`} />}
+                <span>{action.label}</span>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
@@ -306,6 +333,10 @@ export default function LuxuryDataTable({
   emptyMessage = 'No matching records found.',
   onResetFilters,
   className = '',
+  // Wide-table mode: keep horizontal scrolling on desktop instead of clipping.
+  // Pair with `minWidth` (e.g. "1900px") to guarantee comfortable column spacing.
+  scrollable = false,
+  minWidth,
 }) {
   // 1. View Mode (list vs grid)
   const [viewMode, setViewMode] = useState(defaultViewMode)
@@ -440,6 +471,8 @@ export default function LuxuryDataTable({
 
   const hasActiveFilters = Boolean(searchTerm || (filterControls && onResetFilters))
 
+  const badgeText = countBadge !== undefined ? countBadge : `${totalItems} total`
+
   return (
     <div
       className={`bg-white dark:bg-[#15181d] rounded-2xl border border-slate-200 dark:border-[#262b31] shadow-2xs overflow-hidden text-slate-800 dark:text-gray-200 ${className}`}
@@ -454,9 +487,11 @@ export default function LuxuryDataTable({
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
                   <span>{title}</span>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60">
-                    {countBadge !== undefined ? countBadge : `${totalItems} total`}
-                  </span>
+                  {badgeText && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60">
+                      {badgeText}
+                    </span>
+                  )}
                 </h2>
                 {subtitle && (
                   <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">{subtitle}</p>
@@ -587,8 +622,11 @@ export default function LuxuryDataTable({
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto md:overflow-x-clip">
-          <table className="w-full text-left text-xs border-collapse min-w-[700px] md:min-w-0">
+        <div className={scrollable ? 'overflow-x-auto' : 'overflow-x-auto md:overflow-x-clip'}>
+          <table
+            className={`w-full text-left text-xs border-collapse ${scrollable ? '' : 'min-w-[700px] md:min-w-0'}`}
+            style={scrollable && minWidth ? { minWidth } : undefined}
+          >
             <thead>
               <tr className="border-b-2 border-slate-100 dark:border-[#262b31] bg-slate-50/80 dark:bg-[#1c2026] text-slate-500 dark:text-gray-400">
                 {/* Mandatory Sequential ID Column # (1, 2, 3...) */}
