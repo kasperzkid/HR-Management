@@ -1,20 +1,19 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle,
   CalendarDays,
   Check,
   ChevronDown,
   Clock3,
   Edit3,
   FileText,
-  Filter,
-  Plus,
   Search,
   UserCheck,
   Users,
   X,
   XCircle,
 } from 'lucide-react'
+
+const API_BASE = 'http://localhost:4000/api/hr-manager'
 
 const LEAVE_TYPES = [
   'Annual Leave',
@@ -23,173 +22,147 @@ const LEAVE_TYPES = [
   'Other Leave',
 ]
 
-const STATUSES = ['Pending', 'Approved', 'Rejected']
-
-const DEPARTMENTS = [
-  'All Departments',
-  'Engineering',
-  'Human Resources',
-  'Finance',
-  'Operations',
-  'Sales',
-  'Marketing',
-  'IT',
+const APPROVAL_STATUSES = [
+  'Pending',
+  'Approved',
+  'Rejected',
 ]
 
-const INITIAL_EMPLOYEES = [
-  {
-    id: '1',
-    employeeId: 'EMP001',
-    name: 'Abebe Kebede',
-    department: 'Engineering',
-    jobTitle: 'Software Engineer',
-    joinDate: '2024-01-15',
-    employmentStatus: 'Active',
-  },
-  {
-    id: '2',
-    employeeId: 'EMP002',
-    name: 'Sara Mohammed',
-    department: 'Human Resources',
-    jobTitle: 'HR Specialist',
-    joinDate: '2023-06-12',
-    employmentStatus: 'Active',
-  },
-  {
-    id: '3',
-    employeeId: 'EMP003',
-    name: 'Daniel Tesfaye',
-    department: 'Finance',
-    jobTitle: 'Accountant',
-    joinDate: '2022-03-20',
-    employmentStatus: 'Active',
-  },
-  {
-    id: '4',
-    employeeId: 'EMP004',
-    name: 'Hanna Bekele',
-    department: 'Operations',
-    jobTitle: 'Operations Officer',
-    joinDate: '2025-02-01',
-    employmentStatus: 'Active',
-  },
-  {
-    id: '5',
-    employeeId: 'EMP005',
-    name: 'Yonas Alemu',
-    department: 'Sales',
-    jobTitle: 'Sales Executive',
-    joinDate: '2024-08-10',
-    employmentStatus: 'Active',
-  },
-]
+const ALL_OPTION = 'All'
 
-const INITIAL_LEAVE_REQUESTS = [
-  {
-    id: 'LR0001',
-    employeeId: 'EMP001',
-    employeeName: 'Abebe Kebede',
-    department: 'Engineering',
-    leaveType: 'Annual Leave',
-    requestDate: '2026-07-20',
-    startDate: '2026-08-03',
-    endDate: '2026-08-07',
-    days: 5,
-    approvalStatus: 'Approved',
-    approvedBy: 'HR Manager',
-    approvedDate: '2026-07-21',
-    remarks: 'Family trip',
-  },
-  {
-    id: 'LR0002',
-    employeeId: 'EMP001',
-    employeeName: 'Abebe Kebede',
-    department: 'Engineering',
-    leaveType: 'Sick Leave',
-    requestDate: '2026-08-12',
-    startDate: '2026-08-12',
-    endDate: '2026-08-12',
-    days: 1,
-    approvalStatus: 'Approved',
-    approvedBy: 'HR Manager',
-    approvedDate: '2026-08-12',
-    remarks: 'Flu',
-  },
-  {
-    id: 'LR0003',
-    employeeId: 'EMP002',
-    employeeName: 'Sara Mohammed',
-    department: 'Human Resources',
-    leaveType: 'Annual Leave',
-    requestDate: '2026-08-10',
-    startDate: '2026-09-01',
-    endDate: '2026-09-05',
-    days: 5,
-    approvalStatus: 'Pending',
-    approvedBy: '',
-    approvedDate: '',
-    remarks: 'Awaiting approval',
-  },
-]
-
-const EMPTY_FORM = {
+const emptyForm = {
   employeeId: '',
   leaveType: 'Annual Leave',
   requestDate: new Date().toISOString().slice(0, 10),
   startDate: '',
   endDate: '',
+  days: 0,
   approvalStatus: 'Pending',
   approvedBy: '',
   approvedDate: '',
   remarks: '',
+  balance: '',
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
 }
 
 function getEmployeeName(employee) {
-  return (
-    employee?.name ||
-    [employee?.firstName, employee?.lastName].filter(Boolean).join(' ') ||
-    'Unknown Employee'
-  )
+  if (employee?.name) {
+    return employee.name
+  }
+
+  return [
+    employee?.firstName,
+    employee?.lastName,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim() || 'Unnamed Employee'
 }
 
 function getEmployeeId(employee) {
   return employee?.employeeId || employee?.id || ''
 }
 
-function getDepartment(employee) {
-  return employee?.department || 'Unassigned'
+function getEmployeeInitials(employee) {
+  if (employee?.initials) {
+    return employee.initials
+  }
+
+  return getEmployeeName(employee)
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
 }
 
-function formatDate(value) {
-  if (!value) return '—'
+function normalizeEmployee(employee) {
+  const name = getEmployeeName(employee)
 
-  const date = new Date(`${value}T00:00:00`)
+  return {
+    ...employee,
+    name,
+    employeeId: employee.employeeId || employee.id || '',
+    department: employee.department || '—',
+    annualLeaveEntitled: Number(
+      employee.annualLeaveEntitled || 0,
+    ),
+    annualLeaveTaken: Number(
+      employee.annualLeaveTaken || 0,
+    ),
+  }
+}
 
-  if (Number.isNaN(date.getTime())) return value
-
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+function normalizeLeaveRequest(request) {
+  return {
+    ...request,
+    id: request.id,
+    employeeId:
+      request.employeeId ||
+      request.employee?.employeeId ||
+      '',
+    employeeName:
+      request.employeeName ||
+      request.employee?.name ||
+      'Unnamed Employee',
+    department:
+      request.department ||
+      request.employee?.department ||
+      '—',
+    leaveType:
+      request.leaveType || 'Annual Leave',
+    requestDate:
+      request.requestDate || '',
+    startDate:
+      request.startDate || '',
+    endDate:
+      request.endDate || '',
+    days: Number(request.days || 0),
+    approvalStatus:
+      request.approvalStatus || 'Pending',
+    approvedBy:
+      request.approvedBy || '',
+    approvedDate:
+      request.approvedDate || '',
+    remarks:
+      request.remarks || '',
+    balance:
+      request.balance === null ||
+      request.balance === undefined
+        ? null
+        : Number(request.balance),
+  }
 }
 
 /*
- * The workbook uses NETWORKDAYS for Number of Days.
- * This implementation mirrors the weekday behavior:
- * Monday-Friday count as working days.
+ * Workbook rule:
+ * Count weekdays only.
+ *
+ * Monday-Friday = working day
+ * Saturday-Sunday = weekend
  */
 function calculateWorkingDays(startDate, endDate) {
-  if (!startDate || !endDate) return 0
+  if (!startDate || !endDate) {
+    return 0
+  }
 
   const start = new Date(`${startDate}T00:00:00`)
   const end = new Date(`${endDate}T00:00:00`)
 
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    end < start
+  ) {
     return 0
   }
-
-  if (end < start) return 0
 
   let days = 0
   const current = new Date(start)
@@ -207,81 +180,46 @@ function calculateWorkingDays(startDate, endDate) {
   return days
 }
 
-function calculateAnnualEntitlement(joinDate) {
-  if (!joinDate) return 16
-
-  const joined = new Date(`${joinDate}T00:00:00`)
-
-  if (Number.isNaN(joined.getTime())) return 16
-
-  const today = new Date()
-
-  if (joined > today) return 0
-
-  let years =
-    today.getFullYear() -
-    joined.getFullYear()
-
-  let months =
-    today.getMonth() -
-    joined.getMonth()
-
-  if (today.getDate() < joined.getDate()) {
-    months -= 1
+function rangesOverlap(
+  startA,
+  endA,
+  startB,
+  endB,
+) {
+  if (
+    !startA ||
+    !endA ||
+    !startB ||
+    !endB
+  ) {
+    return false
   }
 
-  if (months < 0) {
-    years -= 1
-    months += 12
-  }
-
-  /*
-   * Mirrors the workbook's structure:
-   * Less than one year:
-   *   16 days annual entitlement prorated by completed months.
-   *
-   * One year and beyond:
-   *   16 days plus one additional day for each completed
-   *   two-year period after the first year.
-   */
-  if (years < 1) {
-    return Number(((16 * months) / 12).toFixed(1))
-  }
-
-  return 16 + Math.floor((years - 1) / 2)
+  return (
+    startA <= endB &&
+    endA >= startB
+  )
 }
 
-function getInitials(name) {
-  if (!name) return '??'
-
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-}
-
-function getStatusClass(status) {
+function getStatusClasses(status) {
   if (status === 'Approved') {
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    return 'bg-emerald-50 text-emerald-700'
   }
 
   if (status === 'Rejected') {
-    return 'bg-red-50 text-red-700 border-red-200'
+    return 'bg-red-50 text-red-700'
   }
 
-  return 'bg-amber-50 text-amber-700 border-amber-200'
+  return 'bg-amber-50 text-amber-700'
 }
 
-function getLeaveTypeClass(type) {
+function getLeaveTypeClasses(type) {
   if (type === 'Annual Leave') {
-    return 'bg-blue-50 text-blue-700'
+    return 'bg-indigo-50 text-indigo-700'
   }
 
   if (type === 'Sick Leave') {
-    return 'bg-red-50 text-red-700'
+    return 'bg-rose-50 text-rose-700'
   }
 
   if (type === 'Maternity Leave') {
@@ -291,69 +229,40 @@ function getLeaveTypeClass(type) {
   return 'bg-slate-100 text-slate-700'
 }
 
-function hasOverlap(request, requests, excludeId = '') {
-  if (
-    !request.employeeId ||
-    !request.startDate ||
-    !request.endDate ||
-    request.approvalStatus !== 'Approved'
-  ) {
-    return false
-  }
-
-  const start = new Date(`${request.startDate}T00:00:00`)
-  const end = new Date(`${request.endDate}T00:00:00`)
-
-  return requests.some((existing) => {
-    if (existing.id === excludeId) return false
-    if (existing.employeeId !== request.employeeId) return false
-    if (existing.approvalStatus !== 'Approved') return false
-    if (!existing.startDate || !existing.endDate) return false
-
-    const existingStart = new Date(`${existing.startDate}T00:00:00`)
-    const existingEnd = new Date(`${existing.endDate}T00:00:00`)
-
-    return existingStart <= end && existingEnd >= start
-  })
-}
-
 function Field({
   label,
   children,
   required = false,
-  hint = '',
-  className = '',
 }) {
   return (
-    <div className={className}>
-      <label className="mb-1.5 block text-sm font-medium text-slate-700">
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
-      </label>
+        {required && (
+          <span className="ml-1 text-red-500">
+            *
+          </span>
+        )}
+      </span>
 
       {children}
-
-      {hint && (
-        <p className="mt-1 text-xs text-slate-500">
-          {hint}
-        </p>
-      )}
-    </div>
+    </label>
   )
 }
 
-const inputClassName =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
-
-function SectionTitle({ icon: Icon, title, description }) {
+function SectionTitle({
+  icon: Icon,
+  title,
+  description,
+}) {
   return (
     <div className="mb-4 flex items-start gap-3">
-      <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
         <Icon size={18} />
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-slate-900">
+        <h3 className="text-sm font-bold text-slate-900">
           {title}
         </h3>
 
@@ -367,117 +276,93 @@ function SectionTitle({ icon: Icon, title, description }) {
   )
 }
 
-function StatCard({
-  icon: Icon,
-  label,
+function SelectField({
   value,
-  description,
+  onChange,
+  children,
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-500">
-            {label}
-          </p>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={onChange}
+        className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 pr-10 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
+      >
+        {children}
+      </select>
 
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {value}
-          </p>
-
-          {description && (
-            <p className="mt-1 text-xs text-slate-500">
-              {description}
-            </p>
-          )}
-        </div>
-
-        <div className="rounded-lg bg-blue-50 p-2.5 text-blue-600">
-          <Icon size={20} />
-        </div>
-      </div>
+      <ChevronDown
+        size={16}
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+      />
     </div>
   )
 }
 
-function LeaveRequestModal({
+function LeaveModal({
   open,
   form,
   employees,
-  requests,
-  editingRequest,
+  editing,
+  saving,
+  error,
+  overlapWarning,
   onClose,
   onChange,
-  onSave,
+  onSubmit,
 }) {
-  if (!open) return null
+  if (!open) {
+    return null
+  }
 
   const selectedEmployee = employees.find(
     (employee) =>
       getEmployeeId(employee) === form.employeeId,
   )
 
-  const numberOfDays = calculateWorkingDays(
-    form.startDate,
-    form.endDate,
-  )
-
-  const overlap = hasOverlap(
-    {
-      ...form,
-      approvalStatus: form.approvalStatus,
-    },
-    requests,
-    editingRequest?.id || '',
-  )
-
-  const invalidDates =
-    form.startDate &&
-    form.endDate &&
-    form.endDate < form.startDate
-
-  const isApproved = form.approvalStatus === 'Approved'
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">
-              {editingRequest
+            <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+              Leave Management
+            </p>
+
+            <h2 className="mt-1 text-xl font-bold text-slate-950">
+              {editing
                 ? 'Edit Leave Request'
                 : 'New Leave Request'}
             </h2>
-
-            <p className="mt-0.5 text-sm text-slate-500">
-              Enter the leave request details below.
-            </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={onSave} className="p-6">
+        <form
+          onSubmit={onSubmit}
+          className="p-6"
+        >
           <div className="space-y-7">
             <section>
               <SectionTitle
-                icon={Users}
+                icon={UserCheck}
                 title="Employee Information"
                 description="Select the employee requesting leave."
               />
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="Employee"
                   required
                 >
-                  <select
+                  <SelectField
                     value={form.employeeId}
                     onChange={(event) =>
                       onChange(
@@ -485,8 +370,6 @@ function LeaveRequestModal({
                         event.target.value,
                       )
                     }
-                    className={inputClassName}
-                    required
                   >
                     <option value="">
                       Select employee
@@ -494,66 +377,41 @@ function LeaveRequestModal({
 
                     {employees.map((employee) => (
                       <option
-                        key={getEmployeeId(employee)}
+                        key={employee.id || employee.employeeId}
                         value={getEmployeeId(employee)}
                       >
                         {getEmployeeId(employee)} —{' '}
                         {getEmployeeName(employee)}
                       </option>
                     ))}
-                  </select>
+                  </SelectField>
                 </Field>
 
                 <Field label="Department">
                   <input
-                    value={
-                      selectedEmployee
-                        ? getDepartment(selectedEmployee)
-                        : ''
-                    }
-                    className={`${inputClassName} bg-slate-50`}
                     readOnly
-                    placeholder="Auto-filled"
+                    value={
+                      selectedEmployee?.department || ''
+                    }
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600 outline-none"
                   />
                 </Field>
               </div>
-
-              {selectedEmployee && (
-                <div className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
-                    {getInitials(
-                      getEmployeeName(selectedEmployee),
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {getEmployeeName(selectedEmployee)}
-                    </p>
-
-                    <p className="text-xs text-slate-500">
-                      {selectedEmployee.jobTitle ||
-                        'Employee'}{' '}
-                      · {getDepartment(selectedEmployee)}
-                    </p>
-                  </div>
-                </div>
-              )}
             </section>
 
             <section>
               <SectionTitle
                 icon={CalendarDays}
                 title="Leave Details"
-                description="The number of days is calculated using working days."
+                description="Working days are calculated using weekdays only."
               />
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Field
                   label="Leave Type"
                   required
                 >
-                  <select
+                  <SelectField
                     value={form.leaveType}
                     onChange={(event) =>
                       onChange(
@@ -561,15 +419,16 @@ function LeaveRequestModal({
                         event.target.value,
                       )
                     }
-                    className={inputClassName}
-                    required
                   >
                     {LEAVE_TYPES.map((type) => (
-                      <option key={type} value={type}>
+                      <option
+                        key={type}
+                        value={type}
+                      >
                         {type}
                       </option>
                     ))}
-                  </select>
+                  </SelectField>
                 </Field>
 
                 <Field
@@ -585,9 +444,31 @@ function LeaveRequestModal({
                         event.target.value,
                       )
                     }
-                    className={inputClassName}
-                    required
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
                   />
+                </Field>
+
+                <Field label="Approval Status">
+                  <SelectField
+                    value={form.approvalStatus}
+                    onChange={(event) =>
+                      onChange(
+                        'approvalStatus',
+                        event.target.value,
+                      )
+                    }
+                  >
+                    {APPROVAL_STATUSES.map(
+                      (status) => (
+                        <option
+                          key={status}
+                          value={status}
+                        >
+                          {status}
+                        </option>
+                      ),
+                    )}
+                  </SelectField>
                 </Field>
 
                 <Field
@@ -603,8 +484,7 @@ function LeaveRequestModal({
                         event.target.value,
                       )
                     }
-                    className={inputClassName}
-                    required
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
                   />
                 </Field>
 
@@ -622,83 +502,34 @@ function LeaveRequestModal({
                         event.target.value,
                       )
                     }
-                    className={inputClassName}
-                    required
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
                   />
                 </Field>
 
-                <Field
-                  label="Number of Days"
-                  hint="Weekends are excluded."
-                >
-                  <div className="flex h-[42px] items-center rounded-lg border border-blue-100 bg-blue-50 px-3 text-sm font-semibold text-blue-700">
-                    {invalidDates
-                      ? 'Invalid dates'
-                      : numberOfDays > 0
-                        ? `${numberOfDays} working ${
-                            numberOfDays === 1
-                              ? 'day'
-                              : 'days'
-                          }`
-                        : '—'}
-                  </div>
-                </Field>
-
-                <Field label="Overlap Check">
-                  <div
-                    className={`flex h-[42px] items-center gap-2 rounded-lg border px-3 text-sm font-medium ${
-                      overlap
-                        ? 'border-red-200 bg-red-50 text-red-700'
-                        : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    }`}
-                  >
-                    {overlap ? (
-                      <>
-                        <AlertTriangle size={16} />
-                        CHECK — overlapping approved leave
-                      </>
-                    ) : (
-                      <>
-                        <Check size={16} />
-                        OK
-                      </>
-                    )}
-                  </div>
+                <Field label="Number of Working Days">
+                  <input
+                    readOnly
+                    value={form.days}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none"
+                  />
                 </Field>
               </div>
+
+              {overlapWarning && (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                  {overlapWarning}
+                </div>
+              )}
             </section>
 
             <section>
               <SectionTitle
                 icon={FileText}
-                title="Approval"
-                description="Only approved leave is counted against the employee balance."
+                title="Approval & Remarks"
+                description="Approval information and additional notes."
               />
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field
-                  label="Approval Status"
-                  required
-                >
-                  <select
-                    value={form.approvalStatus}
-                    onChange={(event) =>
-                      onChange(
-                        'approvalStatus',
-                        event.target.value,
-                      )
-                    }
-                    className={inputClassName}
-                    required
-                  >
-                    {STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Approved By">
                   <input
                     value={form.approvedBy}
@@ -708,8 +539,8 @@ function LeaveRequestModal({
                         event.target.value,
                       )
                     }
-                    className={inputClassName}
                     placeholder="HR Manager"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
                   />
                 </Field>
 
@@ -723,67 +554,56 @@ function LeaveRequestModal({
                         event.target.value,
                       )
                     }
-                    className={inputClassName}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
                   />
                 </Field>
 
-                <Field label="Remarks">
-                  <textarea
-                    value={form.remarks}
-                    onChange={(event) =>
-                      onChange(
-                        'remarks',
-                        event.target.value,
-                      )
-                    }
-                    rows={3}
-                    className={`${inputClassName} resize-none`}
-                    placeholder="Add remarks..."
-                  />
-                </Field>
-              </div>
-
-              {isApproved && overlap && (
-                <div className="mt-4 flex gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                  <AlertTriangle
-                    size={18}
-                    className="mt-0.5 shrink-0"
-                  />
-
-                  <div>
-                    <p className="font-semibold">
-                      Overlapping approved leave detected
-                    </p>
-
-                    <p className="mt-1 text-xs leading-5">
-                      This request overlaps another approved
-                      leave request for the same employee.
-                      Review the dates before approving.
-                    </p>
-                  </div>
+                <div className="sm:col-span-2">
+                  <Field label="Remarks">
+                    <textarea
+                      rows={4}
+                      value={form.remarks}
+                      onChange={(event) =>
+                        onChange(
+                          'remarks',
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Additional remarks..."
+                      className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
+                    />
+                  </Field>
                 </div>
-              )}
+              </div>
             </section>
           </div>
 
-          <div className="mt-8 flex items-center justify-end gap-3 border-t border-slate-200 pt-5">
+          {error && (
+            <div className="mt-6 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              disabled={saving}
+              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancel
             </button>
 
             <button
               type="submit"
-              disabled={Boolean(invalidDates) || numberOfDays <= 0}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={saving}
+              className="rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Check size={17} />
-              {editingRequest
-                ? 'Save Changes'
-                : 'Create Leave Request'}
+              {saving
+                ? 'Saving...'
+                : editing
+                  ? 'Save Changes'
+                  : 'Create Leave Request'}
             </button>
           </div>
         </form>
@@ -792,336 +612,405 @@ function LeaveRequestModal({
   )
 }
 
-function LeaveBalancePanel({
-  employees,
-  requests,
-  selectedEmployeeId,
-  onSelectEmployee,
-}) {
-  const balances = useMemo(() => {
-    return employees.map((employee) => {
-      const employeeId = getEmployeeId(employee)
+function Leave() {
+  const [employees, setEmployees] = useState([])
+  const [requests, setRequests] = useState([])
 
-      const employeeRequests = requests.filter(
-        (request) =>
-          request.employeeId === employeeId &&
-          request.approvalStatus === 'Approved',
-      )
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-      const annualTaken = employeeRequests
-        .filter(
-          (request) =>
-            request.leaveType === 'Annual Leave',
-        )
-        .reduce(
-          (total, request) =>
-            total + Number(request.days || 0),
-          0,
-        )
-
-      const sickUsed = employeeRequests
-        .filter(
-          (request) =>
-            request.leaveType === 'Sick Leave',
-        )
-        .reduce(
-          (total, request) =>
-            total + Number(request.days || 0),
-          0,
-        )
-
-      const entitled = calculateAnnualEntitlement(
-        employee.joinDate,
-      )
-
-      return {
-        employee,
-        employeeId,
-        employeeName: getEmployeeName(employee),
-        entitled,
-        taken: annualTaken,
-        remaining: entitled - annualTaken,
-        sickUsed,
-      }
-    })
-  }, [employees, requests])
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-semibold text-slate-900">
-              Employee Leave Balance
-            </h2>
-
-            <p className="mt-1 text-xs text-slate-500">
-              Annual leave balance based on approved requests.
-            </p>
-          </div>
-
-          <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
-            <CalendarDays size={18} />
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Employee ID
-              </th>
-
-              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Employee Name
-              </th>
-
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Entitled
-              </th>
-
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Taken
-              </th>
-
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Remaining
-              </th>
-
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Sick Used
-              </th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-100">
-            {balances.map((balance) => {
-              const selected =
-                selectedEmployeeId === balance.employeeId
-
-              return (
-                <tr
-                  key={balance.employeeId}
-                  onClick={() =>
-                    onSelectEmployee(
-                      selected
-                        ? ''
-                        : balance.employeeId,
-                    )
-                  }
-                  className={`cursor-pointer transition hover:bg-slate-50 ${
-                    selected ? 'bg-blue-50/50' : ''
-                  }`}
-                >
-                  <td className="px-5 py-3 text-sm font-medium text-blue-600">
-                    {balance.employeeId}
-                  </td>
-
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
-                        {getInitials(
-                          balance.employeeName,
-                        )}
-                      </div>
-
-                      <span className="text-sm font-medium text-slate-800">
-                        {balance.employeeName}
-                      </span>
-                    </div>
-                  </td>
-
-                  <td className="px-5 py-3 text-right text-sm text-slate-700">
-                    {balance.entitled}
-                  </td>
-
-                  <td className="px-5 py-3 text-right text-sm text-slate-700">
-                    {balance.taken}
-                  </td>
-
-                  <td
-                    className={`px-5 py-3 text-right text-sm font-semibold ${
-                      balance.remaining < 0
-                        ? 'text-red-600'
-                        : 'text-emerald-600'
-                    }`}
-                  >
-                    {balance.remaining}
-                  </td>
-
-                  <td className="px-5 py-3 text-right text-sm text-slate-700">
-                    {balance.sickUsed}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {balances.length === 0 && (
-        <div className="p-8 text-center text-sm text-slate-500">
-          No employees available.
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default function Leave() {
-  const [employees] = useState(INITIAL_EMPLOYEES)
-  const [requests, setRequests] = useState(
-    INITIAL_LEAVE_REQUESTS,
-  )
+  const [error, setError] = useState('')
 
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] =
-    useState('All Statuses')
-  const [leaveTypeFilter, setLeaveTypeFilter] =
-    useState('All Leave Types')
   const [departmentFilter, setDepartmentFilter] =
-    useState('All Departments')
+    useState(ALL_OPTION)
+  const [statusFilter, setStatusFilter] =
+    useState(ALL_OPTION)
+  const [leaveTypeFilter, setLeaveTypeFilter] =
+    useState(ALL_OPTION)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingRequest, setEditingRequest] =
     useState(null)
-  const [form, setForm] = useState(EMPTY_FORM)
 
   const [selectedEmployeeId, setSelectedEmployeeId] =
     useState('')
 
+  const [form, setForm] = useState(emptyForm)
+
+  async function fetchEmployees() {
+    const response = await fetch(
+      `${API_BASE}/employees`,
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        data.message || 'Failed to load employees',
+      )
+    }
+
+    return data
+  }
+
+  async function fetchLeaveRequests() {
+    const response = await fetch(
+      `${API_BASE}/leave`,
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+          'Failed to load leave requests',
+      )
+    }
+
+    return data
+  }
+
+  async function createLeaveRequest(payload) {
+    const response = await fetch(
+      `${API_BASE}/leave`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+          'Failed to create leave request',
+      )
+    }
+
+    return data
+  }
+
+  async function updateLeaveRequest(
+    id,
+    payload,
+  ) {
+    const response = await fetch(
+      `${API_BASE}/leave/${id}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+          'Failed to update leave request',
+      )
+    }
+
+    return data
+  }
+
+  async function deleteLeaveRequest(id) {
+    const response = await fetch(
+      `${API_BASE}/leave/${id}`,
+      {
+        method: 'DELETE',
+      },
+    )
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+          'Failed to delete leave request',
+      )
+    }
+
+    return data
+  }
+
+  async function loadData() {
+    setLoading(true)
+    setError('')
+
+    try {
+      const [
+        employeeData,
+        requestData,
+      ] = await Promise.all([
+        fetchEmployees(),
+        fetchLeaveRequests(),
+      ])
+
+      setEmployees(
+        employeeData.map(normalizeEmployee),
+      )
+
+      setRequests(
+        requestData.map(
+          normalizeLeaveRequest,
+        ),
+      )
+    } catch (err) {
+      console.error(
+        'Load leave data error:',
+        err,
+      )
+
+      setError(
+        err.message ||
+          'Failed to load leave data',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const departments = useMemo(() => {
+    return [
+      ALL_OPTION,
+      ...Array.from(
+        new Set(
+          employees
+            .map(
+              (employee) =>
+                employee.department,
+            )
+            .filter(Boolean),
+        ),
+      ),
+    ]
+  }, [employees])
+
   const filteredRequests = useMemo(() => {
-    const searchValue = search.trim().toLowerCase()
+    const query = search
+      .trim()
+      .toLowerCase()
 
     return requests.filter((request) => {
       const matchesSearch =
-        !searchValue ||
-        request.id.toLowerCase().includes(searchValue) ||
-        request.employeeId
+        !query ||
+        String(
+          request.employeeId || '',
+        )
           .toLowerCase()
-          .includes(searchValue) ||
-        request.employeeName
+          .includes(query) ||
+        String(
+          request.employeeName || '',
+        )
           .toLowerCase()
-          .includes(searchValue) ||
-        request.department
+          .includes(query) ||
+        String(
+          request.department || '',
+        )
           .toLowerCase()
-          .includes(searchValue)
-
-      const matchesStatus =
-        statusFilter === 'All Statuses' ||
-        request.approvalStatus === statusFilter
-
-      const matchesLeaveType =
-        leaveTypeFilter === 'All Leave Types' ||
-        request.leaveType === leaveTypeFilter
+          .includes(query) ||
+        String(
+          request.id || '',
+        )
+          .toLowerCase()
+          .includes(query)
 
       const matchesDepartment =
-        departmentFilter === 'All Departments' ||
-        request.department === departmentFilter
+        departmentFilter === ALL_OPTION ||
+        request.department ===
+          departmentFilter
+
+      const matchesStatus =
+        statusFilter === ALL_OPTION ||
+        request.approvalStatus ===
+          statusFilter
+
+      const matchesLeaveType =
+        leaveTypeFilter === ALL_OPTION ||
+        request.leaveType ===
+          leaveTypeFilter
 
       return (
         matchesSearch &&
+        matchesDepartment &&
         matchesStatus &&
-        matchesLeaveType &&
-        matchesDepartment
+        matchesLeaveType
       )
     })
   }, [
     requests,
     search,
+    departmentFilter,
     statusFilter,
     leaveTypeFilter,
-    departmentFilter,
   ])
 
-  const stats = useMemo(() => {
-    return {
-      total: requests.length,
-      pending: requests.filter(
-        (request) =>
-          request.approvalStatus === 'Pending',
-      ).length,
-      approved: requests.filter(
-        (request) =>
-          request.approvalStatus === 'Approved',
-      ).length,
-      rejected: requests.filter(
-        (request) =>
-          request.approvalStatus === 'Rejected',
-      ).length,
-    }
-  }, [requests])
+  const pendingCount = requests.filter(
+    (request) =>
+      request.approvalStatus === 'Pending',
+  ).length
 
-  const selectedBalance = useMemo(() => {
-    if (!selectedEmployeeId) return null
+  const approvedCount = requests.filter(
+    (request) =>
+      request.approvalStatus === 'Approved',
+  ).length
 
-    const employee = employees.find(
-      (item) =>
-        getEmployeeId(item) === selectedEmployeeId,
-    )
+  const rejectedCount = requests.filter(
+    (request) =>
+      request.approvalStatus === 'Rejected',
+  ).length
 
-    if (!employee) return null
-
-    const approvedRequests = requests.filter(
+  const totalApprovedDays = requests
+    .filter(
       (request) =>
-        request.employeeId === selectedEmployeeId &&
         request.approvalStatus === 'Approved',
     )
-
-    const annualTaken = approvedRequests
-      .filter(
-        (request) =>
-          request.leaveType === 'Annual Leave',
-      )
-      .reduce(
-        (total, request) =>
-          total + Number(request.days || 0),
-        0,
-      )
-
-    const sickUsed = approvedRequests
-      .filter(
-        (request) =>
-          request.leaveType === 'Sick Leave',
-      )
-      .reduce(
-        (total, request) =>
-          total + Number(request.days || 0),
-        0,
-      )
-
-    const entitled = calculateAnnualEntitlement(
-      employee.joinDate,
+    .reduce(
+      (total, request) =>
+        total + Number(request.days || 0),
+      0,
     )
 
-    return {
-      employee,
-      entitled,
-      taken: annualTaken,
-      remaining: entitled - annualTaken,
-      sickUsed,
+  const selectedEmployee =
+    employees.find(
+      (employee) =>
+        getEmployeeId(employee) ===
+        selectedEmployeeId,
+    ) || null
+
+  const selectedEmployeeRequests =
+    selectedEmployee
+      ? requests.filter(
+          (request) =>
+            request.employeeId ===
+            getEmployeeId(
+              selectedEmployee,
+            ),
+        )
+      : []
+
+  const selectedEmployeeApprovedAnnual =
+    selectedEmployeeRequests
+      .filter(
+        (request) =>
+          request.approvalStatus ===
+            'Approved' &&
+          request.leaveType ===
+            'Annual Leave',
+      )
+      .reduce(
+        (total, request) =>
+          total +
+          Number(request.days || 0),
+        0,
+      )
+
+  const selectedEmployeeApprovedSick =
+    selectedEmployeeRequests
+      .filter(
+        (request) =>
+          request.approvalStatus ===
+            'Approved' &&
+          request.leaveType ===
+            'Sick Leave',
+      )
+      .reduce(
+        (total, request) =>
+          total +
+          Number(request.days || 0),
+        0,
+      )
+
+  const selectedEmployeeEntitlement =
+    Number(
+      selectedEmployee?.annualLeaveEntitled ||
+        0,
+    )
+
+  const selectedEmployeeRemaining =
+    Math.max(
+      selectedEmployeeEntitlement -
+        selectedEmployeeApprovedAnnual,
+      0,
+    )
+
+  const overlapWarning = useMemo(() => {
+    if (
+      !form.employeeId ||
+      !form.startDate ||
+      !form.endDate
+    ) {
+      return ''
     }
-  }, [employees, requests, selectedEmployeeId])
 
-  function updateForm(field, value) {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }))
-  }
+    const overlappingRequest =
+      requests.find((request) => {
+        if (
+          request.id ===
+          editingRequest?.id
+        ) {
+          return false
+        }
 
-  function openCreateModal() {
+        if (
+          request.employeeId !==
+          form.employeeId
+        ) {
+          return false
+        }
+
+        if (
+          request.approvalStatus !==
+          'Approved'
+        ) {
+          return false
+        }
+
+        return rangesOverlap(
+          form.startDate,
+          form.endDate,
+          request.startDate,
+          request.endDate,
+        )
+      })
+
+    if (!overlappingRequest) {
+      return ''
+    }
+
+    return `This date range overlaps an approved leave request (${overlappingRequest.id}).`
+  }, [
+    form.employeeId,
+    form.startDate,
+    form.endDate,
+    requests,
+    editingRequest,
+  ])
+
+  function openAddModal() {
     setEditingRequest(null)
 
     setForm({
-      ...EMPTY_FORM,
+      ...emptyForm,
       requestDate: new Date()
         .toISOString()
         .slice(0, 10),
     })
 
+    setError('')
     setModalOpen(true)
   }
 
@@ -1129,786 +1018,1217 @@ export default function Leave() {
     setEditingRequest(request)
 
     setForm({
-      employeeId: request.employeeId,
-      leaveType: request.leaveType,
-      requestDate: request.requestDate,
-      startDate: request.startDate,
-      endDate: request.endDate,
-      approvalStatus: request.approvalStatus,
-      approvedBy: request.approvedBy || '',
-      approvedDate: request.approvedDate || '',
-      remarks: request.remarks || '',
+      employeeId:
+        request.employeeId || '',
+      leaveType:
+        request.leaveType ||
+        'Annual Leave',
+      requestDate:
+        request.requestDate ||
+        new Date()
+          .toISOString()
+          .slice(0, 10),
+      startDate:
+        request.startDate || '',
+      endDate:
+        request.endDate || '',
+      days:
+        Number(request.days || 0),
+      approvalStatus:
+        request.approvalStatus ||
+        'Pending',
+      approvedBy:
+        request.approvedBy || '',
+      approvedDate:
+        request.approvedDate || '',
+      remarks:
+        request.remarks || '',
+      balance:
+        request.balance === null ||
+        request.balance ===
+          undefined
+          ? ''
+          : request.balance,
     })
 
+    setError('')
     setModalOpen(true)
   }
 
   function closeModal() {
+    if (saving) {
+      return
+    }
+
     setModalOpen(false)
     setEditingRequest(null)
-    setForm(EMPTY_FORM)
+    setForm(emptyForm)
+    setError('')
   }
 
-  function saveRequest(event) {
-    event.preventDefault()
-
-    const employee = employees.find(
-      (item) =>
-        getEmployeeId(item) === form.employeeId,
-    )
-
-    if (!employee) {
-      window.alert('Please select an employee.')
-      return
-    }
-
-    if (!form.startDate || !form.endDate) {
-      window.alert(
-        'Please select the start and end dates.',
-      )
-      return
-    }
-
-    if (form.endDate < form.startDate) {
-      window.alert(
-        'End Date cannot be before Start Date.',
-      )
-      return
-    }
-
-    const days = calculateWorkingDays(
-      form.startDate,
-      form.endDate,
-    )
-
-    if (days <= 0) {
-      window.alert(
-        'The selected period contains no working days.',
-      )
-      return
-    }
-
-    const requestForCheck = {
-      ...form,
-      approvalStatus: form.approvalStatus,
-    }
-
-    if (
-      hasOverlap(
-        requestForCheck,
-        requests,
-        editingRequest?.id || '',
-      )
-    ) {
-      const proceed = window.confirm(
-        'This request overlaps another approved leave request for the same employee. Continue anyway?',
-      )
-
-      if (!proceed) return
-    }
-
-    let approvedBy = form.approvedBy
-    let approvedDate = form.approvedDate
-
-    if (form.approvalStatus === 'Approved') {
-      if (!approvedBy) {
-        approvedBy = 'HR Manager'
-      }
-
-      if (!approvedDate) {
-        approvedDate = new Date()
-          .toISOString()
-          .slice(0, 10)
-      }
-    }
-
-    const nextRequest = {
-      id:
-        editingRequest?.id ||
-        `LR${String(
-          Math.max(
-            0,
-            ...requests.map((request) => {
-              const numeric = Number(
-                request.id.replace('LR', ''),
-              )
-
-              return Number.isNaN(numeric)
-                ? 0
-                : numeric
-            }),
-          ) + 1,
-        ).padStart(4, '0')}`,
-      employeeId: form.employeeId,
-      employeeName: getEmployeeName(employee),
-      department: getDepartment(employee),
-      leaveType: form.leaveType,
-      requestDate: form.requestDate,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      days,
-      approvalStatus: form.approvalStatus,
-      approvedBy,
-      approvedDate,
-      remarks: form.remarks,
-    }
-
-    if (editingRequest) {
-      setRequests((current) =>
-        current.map((request) =>
-          request.id === editingRequest.id
-            ? nextRequest
-            : request,
-        ),
-      )
-    } else {
-      setRequests((current) => [
-        nextRequest,
+  function handleFormChange(
+    field,
+    value,
+  ) {
+    setForm((current) => {
+      const next = {
         ...current,
-      ])
-    }
+        [field]: value,
+      }
 
-    closeModal()
-  }
+      if (
+        field === 'startDate' ||
+        field === 'endDate'
+      ) {
+        next.days =
+          calculateWorkingDays(
+            field === 'startDate'
+              ? value
+              : current.startDate,
+            field === 'endDate'
+              ? value
+              : current.endDate,
+          )
+      }
 
-  function updateStatus(request, status) {
-    const approved =
-      status === 'Approved'
+      if (
+        field === 'approvalStatus'
+      ) {
+        if (value === 'Approved') {
+          next.approvedBy =
+            current.approvedBy ||
+            'HR Manager'
 
-    setRequests((current) =>
-      current.map((item) => {
-        if (item.id !== request.id) {
-          return item
+          next.approvedDate =
+            current.approvedDate ||
+            new Date()
+              .toISOString()
+              .slice(0, 10)
         }
 
-        return {
-          ...item,
-          approvalStatus: status,
-          approvedBy: approved
-            ? item.approvedBy || 'HR Manager'
-            : '',
-          approvedDate: approved
-            ? item.approvedDate ||
+        if (value === 'Pending') {
+          next.approvedBy = ''
+          next.approvedDate = ''
+        }
+      }
+
+      return next
+    })
+  }
+
+  async function saveRequest(
+    event,
+  ) {
+    event.preventDefault()
+
+    setSaving(true)
+    setError('')
+
+    try {
+      if (!form.employeeId) {
+        throw new Error(
+          'Please select an employee.',
+        )
+      }
+
+      if (!form.leaveType) {
+        throw new Error(
+          'Please select a leave type.',
+        )
+      }
+
+      if (!form.requestDate) {
+        throw new Error(
+          'Request date is required.',
+        )
+      }
+
+      if (
+        !form.startDate ||
+        !form.endDate
+      ) {
+        throw new Error(
+          'Start date and end date are required.',
+        )
+      }
+
+      if (
+        form.endDate <
+        form.startDate
+      ) {
+        throw new Error(
+          'End date cannot be before start date.',
+        )
+      }
+
+      const days =
+        calculateWorkingDays(
+          form.startDate,
+          form.endDate,
+        )
+
+      if (days <= 0) {
+        throw new Error(
+          'The selected dates contain no working days.',
+        )
+      }
+
+      if (overlapWarning) {
+        throw new Error(
+          overlapWarning,
+        )
+      }
+
+      const employee =
+        employees.find(
+          (item) =>
+            getEmployeeId(item) ===
+            form.employeeId,
+        )
+
+      if (!employee) {
+        throw new Error(
+          'Selected employee was not found.',
+        )
+      }
+
+      const payload = {
+        employeeId:
+          getEmployeeId(employee),
+
+        leaveType:
+          form.leaveType,
+
+        requestDate:
+          form.requestDate,
+
+        startDate:
+          form.startDate,
+
+        endDate:
+          form.endDate,
+
+        days,
+
+        approvalStatus:
+          form.approvalStatus ||
+          'Pending',
+
+        approvedBy:
+          form.approvalStatus ===
+          'Approved'
+            ? form.approvedBy ||
+              'HR Manager'
+            : null,
+
+        approvedDate:
+          form.approvalStatus ===
+          'Approved'
+            ? form.approvedDate ||
               new Date()
                 .toISOString()
                 .slice(0, 10)
-            : '',
-        }
-      }),
-    )
-  }
+            : null,
 
-  function approveRequest(request) {
-    const overlap = hasOverlap(
-      {
-        ...request,
-        approvalStatus: 'Approved',
-      },
-      requests,
-      request.id,
-    )
+        remarks:
+          form.remarks || null,
 
-    if (overlap) {
-      const proceed = window.confirm(
-        'This request overlaps another approved leave request for the same employee. Approve anyway?',
+        balance:
+          form.balance === '' ||
+          form.balance === null ||
+          form.balance ===
+            undefined
+            ? null
+            : Number(form.balance),
+      }
+
+      if (editingRequest) {
+        await updateLeaveRequest(
+          editingRequest.id,
+          payload,
+        )
+      } else {
+        await createLeaveRequest(
+          payload,
+        )
+      }
+
+      const updatedRequests =
+        await fetchLeaveRequests()
+
+      setRequests(
+        updatedRequests.map(
+          normalizeLeaveRequest,
+        ),
       )
 
-      if (!proceed) return
+      closeModal()
+    } catch (err) {
+      console.error(
+        'Save leave request error:',
+        err,
+      )
+
+      setError(
+        err.message ||
+          'Failed to save leave request.',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function updateStatus(
+    request,
+    approvalStatus,
+  ) {
+    setSaving(true)
+    setError('')
+
+    try {
+      const approved =
+        approvalStatus === 'Approved'
+
+      await updateLeaveRequest(
+        request.id,
+        {
+          approvalStatus,
+          approvedBy: approved
+            ? 'HR Manager'
+            : null,
+          approvedDate: approved
+            ? new Date()
+                .toISOString()
+                .slice(0, 10)
+            : null,
+        },
+      )
+
+      const updatedRequests =
+        await fetchLeaveRequests()
+
+      setRequests(
+        updatedRequests.map(
+          normalizeLeaveRequest,
+        ),
+      )
+    } catch (err) {
+      console.error(
+        'Update leave status error:',
+        err,
+      )
+
+      setError(
+        err.message ||
+          'Failed to update leave request.',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function approveRequest(
+    request,
+  ) {
+    await updateStatus(
+      request,
+      'Approved',
+    )
+  }
+
+  async function rejectRequest(
+    request,
+  ) {
+    await updateStatus(
+      request,
+      'Rejected',
+    )
+  }
+
+  async function handleDelete(
+    request,
+  ) {
+    const confirmed =
+      window.confirm(
+        `Delete leave request ${request.id}? This action cannot be undone.`,
+      )
+
+    if (!confirmed) {
+      return
     }
 
-    updateStatus(request, 'Approved')
-  }
+    setSaving(true)
+    setError('')
 
-  function rejectRequest(request) {
-    updateStatus(request, 'Rejected')
-  }
+    try {
+      await deleteLeaveRequest(
+        request.id,
+      )
 
-  function resetFilters() {
-    setSearch('')
-    setStatusFilter('All Statuses')
-    setLeaveTypeFilter('All Leave Types')
-    setDepartmentFilter('All Departments')
+      const updatedRequests =
+        await fetchLeaveRequests()
+
+      setRequests(
+        updatedRequests.map(
+          normalizeLeaveRequest,
+        ),
+      )
+    } catch (err) {
+      console.error(
+        'Delete leave request error:',
+        err,
+      )
+
+      setError(
+        err.message ||
+          'Failed to delete leave request.',
+      )
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="min-h-full bg-slate-50 p-4 md:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1600px]">
-        {/* Header */}
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-              <CalendarDays size={16} />
-              <span>HR Management</span>
-              <span>/</span>
-              <span className="text-slate-700">
-                Leave
-              </span>
-            </div>
+    <div className="min-h-screen bg-[#F3F4F6] text-slate-950">
+      <main className="mx-auto max-w-[1600px] px-5 py-6 sm:px-8">
+        {/* =====================================================
+            HEADER
+        ====================================================== */}
 
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+        <header className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+              HR Management
+            </p>
+
+            <h1 className="mt-1 text-2xl font-bold tracking-tight">
               Leave Management
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              Manage employee leave requests, approvals,
-              overlaps, and leave balances.
+              Manage leave requests, approvals and employee leave balances.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            onClick={openAddModal}
+            className="flex w-fit items-center gap-2 rounded-xl bg-[#4755AE] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998]"
           >
-            <Plus size={18} />
+            <CalendarDays size={17} />
             New Leave Request
           </button>
-        </div>
+        </header>
 
-        {/* KPI Cards */}
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            icon={FileText}
-            label="Total Requests"
-            value={stats.total}
-            description="All leave requests"
-          />
+        {/* =====================================================
+            ERROR
+        ====================================================== */}
 
-          <StatCard
-            icon={Clock3}
-            label="Pending"
-            value={stats.pending}
-            description="Awaiting approval"
-          />
+        {error && (
+          <div className="mb-6 flex items-start justify-between gap-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <span>{error}</span>
 
-          <StatCard
-            icon={Check}
-            label="Approved"
-            value={stats.approved}
-            description="Approved requests"
-          />
+            <button
+              type="button"
+              onClick={() =>
+                setError('')
+              }
+              className="shrink-0 text-red-400 hover:text-red-700"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
-          <StatCard
-            icon={XCircle}
-            label="Rejected"
-            value={stats.rejected}
-            description="Rejected requests"
-          />
-        </div>
+        {/* =====================================================
+            KPI CARDS
+        ====================================================== */}
 
-        {/* Filters */}
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <Filter size={17} className="text-slate-500" />
+        <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Total Requests
+                </p>
 
-            <h2 className="text-sm font-semibold text-slate-800">
-              Filter Leave Requests
-            </h2>
+                <p className="mt-2 text-2xl font-bold text-slate-950">
+                  {requests.length}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
+                <FileText size={20} />
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <div className="relative xl:col-span-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Pending
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-slate-950">
+                  {pendingCount}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                <Clock3 size={20} />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Approved
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-slate-950">
+                  {approvedCount}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <Check size={20} />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Approved Leave Days
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-slate-950">
+                  {formatNumber(
+                    totalApprovedDays,
+                  )}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                <CalendarDays size={20} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* =====================================================
+            FILTERS
+        ====================================================== */}
+
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="grid gap-4 lg:grid-cols-[minmax(240px,1.5fr)_repeat(3,minmax(150px,1fr))]">
+            <div className="relative">
               <Search
                 size={17}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
               />
 
               <input
                 value={search}
                 onChange={(event) =>
-                  setSearch(event.target.value)
+                  setSearch(
+                    event.target.value,
+                  )
                 }
-                placeholder="Search request ID, employee, department..."
-                className={`${inputClassName} pl-9`}
+                placeholder="Search employee, ID or request..."
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
               />
             </div>
 
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value)
-                }
-                className={inputClassName}
-              >
-                <option>All Statuses</option>
-
-                {STATUSES.map((status) => (
-                  <option key={status}>{status}</option>
-                ))}
-              </select>
-
-              <ChevronDown
-                size={15}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-            </div>
-
-            <div>
-              <select
-                value={leaveTypeFilter}
-                onChange={(event) =>
-                  setLeaveTypeFilter(event.target.value)
-                }
-                className={inputClassName}
-              >
-                <option>All Leave Types</option>
-
-                {LEAVE_TYPES.map((type) => (
-                  <option key={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <select
-                value={departmentFilter}
-                onChange={(event) =>
-                  setDepartmentFilter(event.target.value)
-                }
-                className={inputClassName}
-              >
-                {DEPARTMENTS.map((department) => (
-                  <option key={department}>
-                    {department}
+            <SelectField
+              value={departmentFilter}
+              onChange={(event) =>
+                setDepartmentFilter(
+                  event.target.value,
+                )
+              }
+            >
+              {departments.map(
+                (department) => (
+                  <option
+                    key={department}
+                    value={department}
+                  >
+                    {department ===
+                    ALL_OPTION
+                      ? 'All Departments'
+                      : department}
                   </option>
-                ))}
-              </select>
-            </div>
+                ),
+              )}
+            </SelectField>
+
+            <SelectField
+              value={leaveTypeFilter}
+              onChange={(event) =>
+                setLeaveTypeFilter(
+                  event.target.value,
+                )
+              }
+            >
+              <option value={ALL_OPTION}>
+                All Leave Types
+              </option>
+
+              {LEAVE_TYPES.map(
+                (type) => (
+                  <option
+                    key={type}
+                    value={type}
+                  >
+                    {type}
+                  </option>
+                ),
+              )}
+            </SelectField>
+
+            <SelectField
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(
+                  event.target.value,
+                )
+              }
+            >
+              <option value={ALL_OPTION}>
+                All Statuses
+              </option>
+
+              {APPROVAL_STATUSES.map(
+                (status) => (
+                  <option
+                    key={status}
+                    value={status}
+                  >
+                    {status}
+                  </option>
+                ),
+              )}
+            </SelectField>
           </div>
+        </section>
 
-          {(search ||
-            statusFilter !== 'All Statuses' ||
-            leaveTypeFilter !== 'All Leave Types' ||
-            departmentFilter !== 'All Departments') && (
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="text-xs font-medium text-blue-600 hover:text-blue-700"
-              >
-                Clear filters
-              </button>
-            </div>
-          )}
-        </div>
+        {/* =====================================================
+            LEAVE REQUESTS
+        ====================================================== */}
 
-        {/* Leave Requests */}
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-200 p-5 md:flex-row md:items-center md:justify-between">
+        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center">
             <div>
-              <h2 className="font-semibold text-slate-900">
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
                 Leave Requests
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                {filteredRequests.length} request
-                {filteredRequests.length === 1
-                  ? ''
-                  : 's'} shown
               </p>
+
+              <h2 className="mt-1 text-lg font-bold">
+                Requests & Approvals
+              </h2>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
-              Approved leave affects balance
+            <p className="text-sm text-slate-500">
+              {filteredRequests.length}{' '}
+              request
+              {filteredRequests.length ===
+              1
+                ? ''
+                : 's'}
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="flex min-h-[300px] items-center justify-center">
+              <div className="text-center">
+                <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#4755AE]" />
+
+                <p className="text-sm font-medium text-slate-500">
+                  Loading leave data...
+                </p>
+              </div>
             </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1300px] text-left">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Request ID
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Employee
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Department
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Leave Type
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Request Date
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Leave Period
-                  </th>
-
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Days
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Status
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Approved By
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Approval Date
-                  </th>
-
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Overlap?
-                  </th>
-
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {filteredRequests.map((request) => {
-                  const overlap = hasOverlap(
-                    request,
-                    requests,
-                    request.id,
-                  )
-
-                  return (
-                    <tr
-                      key={request.id}
-                      className="transition hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-4">
-                        <span className="font-mono text-sm font-semibold text-blue-600">
-                          {request.id}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">
-                            {getInitials(
-                              request.employeeName,
-                            )}
-                          </div>
-
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">
-                              {request.employeeName}
-                            </p>
-
-                            <p className="text-xs text-slate-500">
-                              {request.employeeId}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-slate-600">
-                        {request.department}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getLeaveTypeClass(
-                            request.leaveType,
-                          )}`}
-                        >
-                          {request.leaveType}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-slate-600">
-                        {formatDate(
-                          request.requestDate,
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="text-sm text-slate-700">
-                          {formatDate(request.startDate)}
-                        </div>
-
-                        <div className="text-xs text-slate-400">
-                          to {formatDate(request.endDate)}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        <span className="font-semibold text-slate-800">
-                          {request.days}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClass(
-                            request.approvalStatus,
-                          )}`}
-                        >
-                          {request.approvalStatus}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-slate-600">
-                        {request.approvedBy || '—'}
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-slate-600">
-                        {formatDate(
-                          request.approvedDate,
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        {overlap ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
-                            <AlertTriangle size={13} />
-                            CHECK
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                            <Check size={13} />
-                            OK
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex items-center justify-end gap-1">
-                          {request.approvalStatus ===
-                            'Pending' && (
-                            <>
-                              <button
-                                type="button"
-                                title="Approve"
-                                onClick={() =>
-                                  approveRequest(
-                                    request,
-                                  )
-                                }
-                                className="rounded-lg p-2 text-emerald-600 transition hover:bg-emerald-50"
-                              >
-                                <Check size={17} />
-                              </button>
-
-                              <button
-                                type="button"
-                                title="Reject"
-                                onClick={() =>
-                                  rejectRequest(
-                                    request,
-                                  )
-                                }
-                                className="rounded-lg p-2 text-red-600 transition hover:bg-red-50"
-                              >
-                                <XCircle size={17} />
-                              </button>
-                            </>
-                          )}
-
-                          <button
-                            type="button"
-                            title="Edit"
-                            onClick={() =>
-                              openEditModal(request)
-                            }
-                            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                          >
-                            <Edit3 size={17} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredRequests.length === 0 && (
-            <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-              <div className="mb-3 rounded-full bg-slate-100 p-4 text-slate-400">
-                <FileText size={25} />
+          ) : filteredRequests.length ===
+            0 ? (
+            <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                <CalendarDays size={24} />
               </div>
 
-              <h3 className="font-semibold text-slate-800">
+              <h3 className="mt-4 text-sm font-bold text-slate-900">
                 No leave requests found
               </h3>
 
               <p className="mt-1 max-w-md text-sm text-slate-500">
-                Try changing your filters or create a
-                new leave request.
+                Create a leave request or adjust your filters to see records.
               </p>
             </div>
-          )}
-        </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1150px]">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60 text-left">
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Request
+                    </th>
 
-        {/* Balance + selected employee details */}
-        <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
-          <LeaveBalancePanel
-            employees={employees}
-            requests={requests}
-            selectedEmployeeId={selectedEmployeeId}
-            onSelectEmployee={setSelectedEmployeeId}
-          />
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Employee
+                    </th>
 
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 p-5">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
-                  <UserCheck size={18} />
-                </div>
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Leave Type
+                    </th>
 
-                <div>
-                  <h2 className="font-semibold text-slate-900">
-                    Leave Balance Details
-                  </h2>
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Dates
+                    </th>
 
-                  <p className="mt-1 text-xs text-slate-500">
-                    Select an employee from the balance
-                    table.
-                  </p>
-                </div>
-              </div>
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Days
+                    </th>
+
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Status
+                    </th>
+
+                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Approved By
+                    </th>
+
+                    <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredRequests.map(
+                    (request) => (
+                      <tr
+                        key={request.id}
+                        className="border-b border-slate-50 transition hover:bg-slate-50/60"
+                      >
+                        <td className="px-5 py-4">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {request.id}
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-slate-400">
+                            Requested{' '}
+                            {request.requestDate ||
+                              '—'}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-[#4755AE]">
+                              {getEmployeeInitials(
+                                employees.find(
+                                  (
+                                    employee,
+                                  ) =>
+                                    getEmployeeId(
+                                      employee,
+                                    ) ===
+                                    request.employeeId,
+                                ) || {
+                                  name: request.employeeName,
+                                },
+                              )}
+                            </div>
+
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {request.employeeName}
+                              </p>
+
+                              <div className="mt-0.5 flex items-center gap-2">
+                                <span className="text-xs font-medium text-slate-400">
+                                  {request.employeeId ||
+                                    '—'}
+                                </span>
+
+                                <span className="text-slate-300">
+                                  •
+                                </span>
+
+                                <span className="text-xs text-slate-400">
+                                  {request.department ||
+                                    '—'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex rounded-lg px-2.5 py-1.5 text-xs font-semibold ${getLeaveTypeClasses(
+                              request.leaveType,
+                            )}`}
+                          >
+                            {request.leaveType}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="text-sm font-medium text-slate-700">
+                            {request.startDate ||
+                              '—'}
+                          </p>
+
+                          <p className="mt-0.5 text-xs text-slate-400">
+                            to{' '}
+                            {request.endDate ||
+                              '—'}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span className="text-sm font-bold text-slate-900">
+                            {formatNumber(
+                              request.days,
+                            )}
+                          </span>
+
+                          <span className="ml-1 text-xs text-slate-400">
+                            days
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                              request.approvalStatus,
+                            )}`}
+                          >
+                            {request.approvalStatus}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="text-sm text-slate-700">
+                            {request.approvedBy ||
+                              '—'}
+                          </p>
+
+                          {request.approvedDate && (
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              {request.approvedDate}
+                            </p>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex justify-end gap-1">
+                            {request.approvalStatus ===
+                              'Pending' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    approveRequest(
+                                      request,
+                                    )
+                                  }
+                                  disabled={
+                                    saving
+                                  }
+                                  title="Approve request"
+                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-emerald-500 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-40"
+                                >
+                                  <Check
+                                    size={16}
+                                  />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    rejectRequest(
+                                      request,
+                                    )
+                                  }
+                                  disabled={
+                                    saving
+                                  }
+                                  title="Reject request"
+                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                                >
+                                  <XCircle
+                                    size={16}
+                                  />
+                                </button>
+                              </>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openEditModal(
+                                  request,
+                                )
+                              }
+                              disabled={
+                                saving
+                              }
+                              title="Edit request"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                            >
+                              <Edit3
+                                size={16}
+                              />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDelete(
+                                  request,
+                                )
+                              }
+                              disabled={
+                                saving
+                              }
+                              title="Delete request"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                            >
+                              <X
+                                size={16}
+                              />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
             </div>
+          )}
+        </section>
 
-            {selectedBalance ? (
-              <div className="p-5">
-                <div className="mb-5 flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
-                    {getInitials(
-                      getEmployeeName(
-                        selectedBalance.employee,
-                      ),
-                    )}
-                  </div>
+        {/* =====================================================
+            EMPLOYEE LEAVE BALANCE
+        ====================================================== */}
 
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      {getEmployeeName(
-                        selectedBalance.employee,
-                      )}
-                    </p>
-
-                    <p className="text-xs text-slate-500">
-                      {getEmployeeId(
-                        selectedBalance.employee,
-                      )}{' '}
-                      ·{' '}
-                      {getDepartment(
-                        selectedBalance.employee,
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                    <span className="text-sm text-slate-500">
-                      Entitled (Annual)
-                    </span>
-
-                    <span className="font-semibold text-slate-900">
-                      {selectedBalance.entitled}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                    <span className="text-sm text-slate-500">
-                      Taken (Approved)
-                    </span>
-
-                    <span className="font-semibold text-slate-900">
-                      {selectedBalance.taken}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3">
-                    <span className="text-sm text-emerald-700">
-                      Remaining
-                    </span>
-
-                    <span className="font-bold text-emerald-700">
-                      {selectedBalance.remaining}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                    <span className="text-sm text-slate-500">
-                      Sick Days Used
-                    </span>
-
-                    <span className="font-semibold text-slate-900">
-                      {selectedBalance.sickUsed}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-700">
-                  Only leave requests with{' '}
-                  <strong>Approved</strong> status are
-                  included in the balance calculations.
-                </div>
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
+                <Users size={18} />
               </div>
-            ) : (
-              <div className="flex min-h-[250px] flex-col items-center justify-center p-6 text-center">
-                <div className="mb-3 rounded-full bg-slate-100 p-4 text-slate-400">
-                  <Users size={25} />
-                </div>
 
-                <p className="text-sm font-medium text-slate-700">
-                  No employee selected
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+                  Employee Leave Balance
                 </p>
 
-                <p className="mt-1 max-w-xs text-xs leading-5 text-slate-500">
-                  Click an employee in the balance table
-                  to see detailed leave balance information.
+                <h2 className="mt-1 text-lg font-bold">
+                  Balance Summary
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Only approved leave is counted against the employee balance.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="mb-5 max-w-md">
+              <Field label="Select Employee">
+                <SelectField
+                  value={
+                    selectedEmployeeId
+                  }
+                  onChange={(event) =>
+                    setSelectedEmployeeId(
+                      event.target.value,
+                    )
+                  }
+                >
+                  <option value="">
+                    Select employee
+                  </option>
+
+                  {employees.map(
+                    (employee) => (
+                      <option
+                        key={
+                          employee.id ||
+                          employee.employeeId
+                        }
+                        value={getEmployeeId(
+                          employee,
+                        )}
+                      >
+                        {getEmployeeId(
+                          employee,
+                        )}{' '}
+                        —{' '}
+                        {getEmployeeName(
+                          employee,
+                        )}
+                      </option>
+                    ),
+                  )}
+                </SelectField>
+              </Field>
+            </div>
+
+            {selectedEmployee ? (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Annual Entitled
+                    </p>
+
+                    <p className="mt-2 text-xl font-bold text-slate-900">
+                      {formatNumber(
+                        selectedEmployeeEntitlement,
+                      )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      working days
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Annual Taken
+                    </p>
+
+                    <p className="mt-2 text-xl font-bold text-slate-900">
+                      {formatNumber(
+                        selectedEmployeeApprovedAnnual,
+                      )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      approved
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
+                      Remaining
+                    </p>
+
+                    <p className="mt-2 text-xl font-bold text-emerald-700">
+                      {formatNumber(
+                        selectedEmployeeRemaining,
+                      )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-emerald-600/70">
+                      annual leave
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-rose-100 bg-rose-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-rose-600">
+                      Sick Days Used
+                    </p>
+
+                    <p className="mt-2 text-xl font-bold text-rose-700">
+                      {formatNumber(
+                        selectedEmployeeApprovedSick,
+                      )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-rose-600/70">
+                      approved
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 overflow-x-auto">
+                  <table className="w-full min-w-[800px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-left">
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Request
+                        </th>
+
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Leave Type
+                        </th>
+
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Start
+                        </th>
+
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          End
+                        </th>
+
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Days
+                        </th>
+
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {selectedEmployeeRequests.length ===
+                      0 ? (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="px-4 py-8 text-center text-sm text-slate-400"
+                          >
+                            No leave requests for this employee.
+                          </td>
+                        </tr>
+                      ) : (
+                        selectedEmployeeRequests.map(
+                          (request) => (
+                            <tr
+                              key={
+                                request.id
+                              }
+                              className="border-b border-slate-50"
+                            >
+                              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+                                {request.id}
+                              </td>
+
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${getLeaveTypeClasses(
+                                    request.leaveType,
+                                  )}`}
+                                >
+                                  {
+                                    request.leaveType
+                                  }
+                                </span>
+                              </td>
+
+                              <td className="px-4 py-3 text-sm text-slate-600">
+                                {
+                                  request.startDate
+                                }
+                              </td>
+
+                              <td className="px-4 py-3 text-sm text-slate-600">
+                                {
+                                  request.endDate
+                                }
+                              </td>
+
+                              <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+                                {formatNumber(
+                                  request.days,
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                                    request.approvalStatus,
+                                  )}`}
+                                >
+                                  {
+                                    request.approvalStatus
+                                  }
+                                </span>
+                              </td>
+                            </tr>
+                          ),
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+                <Users
+                  size={24}
+                  className="mx-auto text-slate-300"
+                />
+
+                <p className="mt-3 text-sm font-semibold text-slate-600">
+                  Select an employee
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  The employee's annual and sick leave balances will appear here.
                 </p>
               </div>
             )}
           </div>
-        </div>
+        </section>
 
-        {/* Workbook logic note */}
-        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <div className="flex gap-3">
-            <AlertTriangle
-              size={18}
-              className="mt-0.5 shrink-0 text-amber-600"
-            />
+        {/* =====================================================
+            WORKBOOK LOGIC NOTE
+        ====================================================== */}
+
+        <section className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#4755AE] shadow-sm">
+              <Clock3 size={17} />
+            </div>
 
             <div>
-              <p className="text-sm font-semibold text-amber-800">
+              <h3 className="text-sm font-bold text-slate-900">
                 Leave calculation rules
-              </p>
+              </h3>
 
-              <p className="mt-1 text-xs leading-5 text-amber-700">
-                Number of Days uses working days, weekends
-                are excluded, and only Approved leave is
-                counted against the annual leave balance.
-                Approved overlapping requests are flagged
-                for review.
-              </p>
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+                <li>
+                  • Number of leave days uses working days only.
+                </li>
+
+                <li>
+                  • Saturday and Sunday are excluded from the day count.
+                </li>
+
+                <li>
+                  • Only Approved leave counts against the employee leave balance.
+                </li>
+
+                <li>
+                  • Approved overlapping leave requests are prevented.
+                </li>
+
+                <li>
+                  • Leave data is now persisted through the Prisma/API layer.
+                </li>
+              </ul>
             </div>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
 
-      <LeaveRequestModal
+      <LeaveModal
         open={modalOpen}
         form={form}
         employees={employees}
-        requests={requests}
-        editingRequest={editingRequest}
+        editing={Boolean(editingRequest)}
+        saving={saving}
+        error={error}
+        overlapWarning={overlapWarning}
         onClose={closeModal}
-        onChange={updateForm}
-        onSave={saveRequest}
+        onChange={handleFormChange}
+        onSubmit={saveRequest}
       />
     </div>
   )
 }
+
+export default Leave

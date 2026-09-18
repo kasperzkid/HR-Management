@@ -1705,33 +1705,77 @@ function Attendance() {
 
                               return (
                                 <td
-                                  key={
-                                    dateKey
-                                  }
+                                  key={dateKey}
                                   className={`border-b border-r border-slate-200 px-1 py-2 text-center ${
                                     info.isWeekend
                                       ? 'bg-slate-50'
                                       : ''
                                   }`}
                                 >
-                                  <CodePicker
-                                    value={
-                                      record?.code ||
-                                      ''
-                                    }
-                                    disabled={
-                                      info.isWeekend
-                                    }
-                                    onChange={(
-                                      code,
-                                    ) =>
-                                      updateAttendanceCode(
-                                        row.employeeKey,
-                                        dateKey,
-                                        code,
-                                      )
-                                    }
-                                  />
+                                  <div className="flex min-w-[58px] flex-col items-center gap-1">
+                                    <CodePicker
+                                      value={
+                                        record?.code ||
+                                        ''
+                                      }
+                                      disabled={info.isWeekend}
+                                      onChange={(code) =>
+                                        updateAttendanceCode(
+                                          row.employeeKey,
+                                          dateKey,
+                                          code,
+                                        )
+                                      }
+                                    />
+
+                                    {!info.isWeekend && (
+                                      <>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="24"
+                                          step="0.5"
+                                          value={
+                                            record?.overtime ??
+                                            ''
+                                          }
+                                          onChange={(event) =>
+                                            updateAttendanceExtra(
+                                              row.employeeKey,
+                                              dateKey,
+                                              'overtime',
+                                              event.target.value,
+                                            )
+                                          }
+                                          placeholder="OT"
+                                          aria-label={`Overtime hours for ${row.name} on ${dateKey}`}
+                                          className="h-7 w-14 rounded-md border border-slate-200 bg-white px-1 text-center text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400"
+                                        />
+
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="1440"
+                                          step="1"
+                                          value={
+                                            record?.late ??
+                                            ''
+                                          }
+                                          onChange={(event) =>
+                                            updateAttendanceExtra(
+                                              row.employeeKey,
+                                              dateKey,
+                                              'late',
+                                              event.target.value,
+                                            )
+                                          }
+                                          placeholder="Late"
+                                          aria-label={`Late minutes for ${row.name} on ${dateKey}`}
+                                          className="h-7 w-14 rounded-md border border-slate-200 bg-white px-1 text-center text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400"
+                                        />
+                                      </>
+                                    )}
+                                  </div>
                                 </td>
                               )
                             },
