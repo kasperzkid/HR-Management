@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: Yanol HR Management API
+  version: 1.0.0
+  description: |
+    REST API for the Yanol HR Management system.
+
+    ## Authentication
+    All endpoints except `POST /api/auth/login` require a **Bearer session token**:
+
+    1. `POST /api/auth/login` with email + password → receive `{ user, token }`
+    2. Send `Authorization: Bearer <token>` on every request
+
+    Tokens are JWTs (`type: session`) backed by a server-side `Session` row.
+    A token can fail with three distinct 401s:
+    - `TOKEN_EXPIRED` — JWT `exp` has passed
+    - `SESSION_EXPIRED` — session row past `expiresAt`
+    - `SESSION_REVOKED` — session revoked (logout)
+
+    ## Roles
+    | Role | Access |
+    |------|--------|
+    | `EMPLOYER` | `/api/employer/*`, `/api/messages/*` |
+    | `HR_MANAGER` | `/api/employer/*`, `/api/hr-manager/*`, `/api/messages/*` |
+    | `EMPLOYEE` | `/api/messages/*` only |
+
+    ## Work-time rules (punch clock, UTC+3 Addis Ababa)
+    - Work day: Mon–Fri 08:00 → 17:30
+    - Check-in window: 08:00–14:00 (rejected after)
+    - Check-out: only at/after 17:30
+    - Late = minutes past 08:00; early departure = minutes before 17:30
+    - Regular/overtime hours rounded to 15-min increments (0.25h)
+
+    ## Realtime
+    Messaging uses Socket.IO on the same server: authenticate with
+    `io(<url>, { auth: { token } })`, join happens automatically per user.
+    Event: `message:new` — `{ contactId, message }`.
+servers:
+  - url: /api
+    description: Same-origin (Vite dev proxy or same host in production)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Login, session identity, logout
+  - name: Employer — Punch Clock
+    description: Daily check-in / check-out with work-time enforcement
+  - name: Employer — Leave
+    description: Personal leave requests and balances
+  - name: Employer — Shared Data
+    description: Read-only employee & attendance data for employer views
+  - name: HR — Dashboard
+    description: HR-Manager summary statistics
+  - name: HR — Employees
+    description: Employee registry CRUD + XLSX import + document upload
+  - name: HR — Attendance
+    description: Attendance records CRUD
+  - name: HR — Payroll
+    description: Monthly payroll records CRUD
+  - name: Messaging
+    description: Direct messages between authenticated users (REST + Socket.IO)
+
+paths:
+  # ── Auth ────────────────────────────────────────────────
+  /auth/login:
+    $ref: './paths/auth.yaml#/paths/~1login'
+  /auth/me:
+    $ref: './paths/auth.yaml#/paths/~1me'
+  /auth/logout:
+    $ref: './paths/auth.yaml#/paths/~1logout'
+
+  # ── Employer: punch clock ───────────────────────────────
+  /employer/punch:
+    $ref: './paths/employer-punch.yaml#/paths/~1punch'
+  /employer/punch/check-in:
+    $ref: './paths/employer-punch.yaml#/paths/~1punch~1check-in'
+  /employer/punch/check-out:
+    $ref: './paths/employer-punch.yaml#/paths/~1punch~1check-out'
+
+  # ── Employer: leave ─────────────────────────────────────
+  /employer/leave:
+    $ref: './paths/employer-leave.yaml#/paths/~1leave'
+
+  # ── Employer: shared data ───────────────────────────────
+  /employer/employees:
+    $ref: './paths/hr-employees.yaml#/paths/~1employees'
+  /employer/attendance:
+    $ref: './paths/hr-attendance.yaml#/paths/~1attendance'
+
+  # ── HR: dashboard ───────────────────────────────────────
+  /hr-manager/dashboard:
+    $ref: './paths/hr-dashboard.yaml#/paths/~1dashboard'
+
+  # ── HR: employees ───────────────────────────────────────
+  /hr-manager/employees:
+    $ref: './paths/hr-employees.yaml#/paths/~1employees'
+  /hr-manager/employees/{id}:
+    $ref: './paths/hr-employees.yaml#/paths/~1employees~1{id}'
+  /hr-manager/employees/import:
+    $ref: './paths/hr-employees.yaml#/paths/~1employees~1import'
+  /hr-manager/uploads:
+    $ref: './paths/hr-employees.yaml#/paths/~1uploads'
+
+  # ── HR: attendance ──────────────────────────────────────
+  /hr-manager/attendance:
+    $ref: './paths/hr-attendance.yaml#/paths/~1attendance'
+  /hr-manager/attendance/{id}:
+    $ref: './paths/hr-attendance.yaml#/paths/~1attendance~1{id}'
+
+  # ── HR: payroll ─────────────────────────────────────────
+  /hr-manager/payroll:
+    $ref: './paths/hr-payroll.yaml#/paths/~1payroll'
+  /hr-manager/payroll/{id}:
+    $ref: './paths/hr-payroll.yaml#/paths/~1payroll~1{id}'
+
+  # ── Messaging ───────────────────────────────────────────
+  /messages/users:
+    $ref: './paths/messages.yaml#/paths/~1users'
+  /messages/start:
+    $ref: './paths/messages.yaml#/paths/~1start'
+  /messages/contacts:
+    $ref: './paths/messages.yaml#/paths/~1contacts'
+  /messages/{contactId}:
+    $ref: './paths/messages.yaml#/paths/~1{contactId}'
+  /messages/{contactId}/upload:
+    $ref: './paths/messages.yaml#/paths/~1{contactId}~1upload'
+  /messages/{contactId}/read:
+    $ref: './paths/messages.yaml#/paths/~1{contactId}~1read'
+  /messages/{contactId}/messages:
+    $ref: './paths/messages.yaml#/paths/~1{contactId}~1messages'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Session JWT from POST /api/auth/login

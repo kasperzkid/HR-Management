@@ -1,0 +1,118 @@
+paths:
+  /attendance:
+    get:
+      tags: [HR — Attendance]
+      summary: List attendance records
+      description: |
+        Ordered by date, then employee name. Filters are combined.
+        Also used by employer views via `/api/employer/attendance`.
+      parameters:
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+          description: Single-day filter (YYYY-MM-DD)
+        - name: startDate
+          in: query
+          schema: { type: string, format: date }
+          description: Range start (inclusive)
+        - name: endDate
+          in: query
+          schema: { type: string, format: date }
+          description: Range end (inclusive)
+      responses:
+        '200':
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '../schemas.yaml#/components/schemas/Attendance'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+        '500':
+          $ref: '../responses.yaml#/ServerError'
+
+    post:
+      tags: [HR — Attendance]
+      summary: Create attendance record
+      description: One record per employee per date; duplicates are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas.yaml#/components/schemas/AttendanceInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/Attendance'
+        '400':
+          $ref: '../responses.yaml#/ValidationError'
+        '409':
+          description: Record already exists for that employee/date
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /attendance/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [HR — Attendance]
+      summary: Get attendance record
+      responses:
+        '200':
+          description: Attendance record
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/Attendance'
+        '404':
+          $ref: '../responses.yaml#/NotFound'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+    put:
+      tags: [HR — Attendance]
+      summary: Update attendance record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas.yaml#/components/schemas/AttendanceInput'
+      responses:
+        '200':
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/Attendance'
+        '404':
+          $ref: '../responses.yaml#/NotFound'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+    delete:
+      tags: [HR — Attendance]
+      summary: Delete attendance record
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '404':
+          $ref: '../responses.yaml#/NotFound'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'

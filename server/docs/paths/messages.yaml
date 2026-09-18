@@ -1,0 +1,232 @@
+paths:
+  /users:
+    get:
+      tags: [Messaging]
+      summary: List messageable people
+      description: |
+        All auth users (with online status) plus employees without user
+        accounts. Use `id` + `kind` when starting conversations.
+      responses:
+        '200':
+          description: People list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '../schemas.yaml#/components/schemas/Contact'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /start:
+    post:
+      tags: [Messaging]
+      summary: Start (or fetch) a conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: integer
+                  description: Auth user id of the contact
+      responses:
+        '200':
+          description: The contact (conversation is created if needed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '../schemas.yaml#/components/schemas/Contact'
+        '400':
+          $ref: '../responses.yaml#/ValidationError'
+        '404':
+          description: User not found
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /contacts:
+    get:
+      tags: [Messaging]
+      summary: My conversation list
+      description: Existing threads ordered by latest message, with unread counts.
+      responses:
+        '200':
+          description: Contacts with conversation state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contacts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        subtitle: { type: string }
+                        initials: { type: string }
+                        online: { type: boolean }
+                        lastMessage: { type: string, nullable: true }
+                        lastMessageTime: { type: string, nullable: true }
+                        unread: { type: integer }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /{contactId}:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: { type: integer }
+        description: Auth user id of the other participant
+    get:
+      tags: [Messaging]
+      summary: Get message thread
+      description: 'Messages ordered oldest → newest, each marked `from: me|them`.'
+      responses:
+        '200':
+          description: Thread messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      $ref: '../schemas.yaml#/components/schemas/ChatMessage'
+        '400':
+          description: Invalid contact id
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+    post:
+      tags: [Messaging]
+      summary: Send a message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+      responses:
+        '201':
+          description: Sent (authoritative copy — use this, not the socket echo)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    $ref: '../schemas.yaml#/components/schemas/ChatMessage'
+        '400':
+          description: Invalid contact or empty text
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+    delete:
+      tags: [Messaging]
+      summary: Delete entire conversation
+      responses:
+        '200':
+          description: Conversation deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  /{contactId}/upload:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: { type: integer }
+    post:
+      tags: [Messaging]
+      summary: Send a file attachment
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                caption:
+                  type: string
+                  description: Optional message text alongside the attachment
+      responses:
+        '201':
+          description: Attachment message sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    $ref: '../schemas.yaml#/components/schemas/ChatMessage'
+        '400':
+          description: No file uploaded
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /{contactId}/read:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: { type: integer }
+    post:
+      tags: [Messaging]
+      summary: Mark thread as read
+      responses:
+        '200':
+          description: All messages from that contact marked read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /{contactId}/messages:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: { type: integer }
+    delete:
+      tags: [Messaging]
+      summary: Clear chat history
+      description: Deletes all messages but keeps the conversation.
+      responses:
+        '200':
+          description: History cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }

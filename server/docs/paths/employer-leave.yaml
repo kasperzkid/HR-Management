@@ -1,0 +1,54 @@
+paths:
+  /leave:
+    get:
+      tags: [Employer — Leave]
+      summary: My leave requests
+      description: Returns all leave requests for the employee linked to the authenticated user, newest first.
+      responses:
+        '200':
+          description: Leave requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: '../schemas.yaml#/components/schemas/LeaveRequest'
+        '404':
+          description: No employee profile linked to this account
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+    post:
+      tags: [Employer — Leave]
+      summary: Apply for leave
+      description: |
+        Creates a leave request with `approvalStatus: Pending`.
+        `days` is computed server-side as business days (Sat/Sun excluded).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas.yaml#/components/schemas/LeaveInput'
+      responses:
+        '201':
+          description: Request created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request:
+                    $ref: '../schemas.yaml#/components/schemas/LeaveRequest'
+        '400':
+          description: Missing fields, invalid dates, or end before start
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '404':
+          description: No employee profile linked to this account
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'

@@ -1,0 +1,49 @@
+# Shared error responses.
+responses:
+  Unauthorized:
+    description: Missing/invalid token, expired or revoked session
+    content:
+      application/json:
+        schema:
+          $ref: './schemas.yaml#/components/schemas/Error'
+        examples:
+          noToken:
+            value: { message: 'Missing or invalid Authorization header' }
+          tokenExpired:
+            value: { message: 'Token expired', code: TOKEN_EXPIRED }
+          sessionRevoked:
+            value: { message: 'Session revoked', code: SESSION_REVOKED }
+
+  Forbidden:
+    description: Role not permitted for this endpoint
+    content:
+      application/json:
+        schema:
+          $ref: './schemas.yaml#/components/schemas/Error'
+        example:
+          message: 'Forbidden: insufficient role'
+
+  NotFound:
+    description: Resource not found
+    content:
+      application/json:
+        schema:
+          $ref: './schemas.yaml#/components/schemas/Error'
+        example:
+          message: 'Employee not found'
+
+  ValidationError:
+    description: Invalid request payload
+    content:
+      application/json:
+        schema:
+          $ref: './schemas.yaml#/components/schemas/Error'
+
+  ServerError:
+    description: Unexpected server error
+    content:
+      application/json:
+        schema:
+          $ref: './schemas.yaml#/components/schemas/Error'
+        example:
+          message: 'Failed to load employees'

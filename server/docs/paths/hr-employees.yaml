@@ -1,0 +1,198 @@
+paths:
+  /employees:
+    get:
+      tags: [HR — Employees]
+      summary: List employees
+      description: |
+        All employees, newest first, each with `certifications`.
+        Also used by employer views (read-only) via `/api/employer/employees`.
+      responses:
+        '200':
+          description: Employee list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '../schemas.yaml#/components/schemas/Employee'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+        '500':
+          $ref: '../responses.yaml#/ServerError'
+
+    post:
+      tags: [HR — Employees]
+      summary: Create employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas.yaml#/components/schemas/EmployeeInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/Employee'
+        '400':
+          description: Employee ID and name are required
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '409':
+          description: Employee ID already exists
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /employees/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+        description: Employee row id (not the EMP-XXXX business id)
+    get:
+      tags: [HR — Employees]
+      summary: Get employee
+      responses:
+        '200':
+          description: Employee
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/Employee'
+        '404':
+          $ref: '../responses.yaml#/NotFound'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+    put:
+      tags: [HR — Employees]
+      summary: Update employee
+      description: |
+        Replaces the provided fields. Certifications, when present, are synced:
+        rows missing from the payload are deleted, others upserted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas.yaml#/components/schemas/EmployeeInput'
+      responses:
+        '200':
+          description: Updated employee (with refreshed certifications)
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/Employee'
+        '404':
+          $ref: '../responses.yaml#/NotFound'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+    delete:
+      tags: [HR — Employees]
+      summary: Delete employee
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: 'Employee deleted successfully' }
+        '404':
+          $ref: '../responses.yaml#/NotFound'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /employees/import:
+    post:
+      tags: [HR — Employees]
+      summary: Import employees from XLSX
+      description: |
+        Uploads an `.xlsx` file whose first sheet holds the employee registry.
+        The first sheet row is the header; it must contain all 25 required
+        columns (Employee ID, Full Name, Gender, … Data Check). Missing
+        columns are rejected with a 400 listing them. Valid rows are
+        upserted by Employee ID; per-row errors are reported without
+        aborting the whole import.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: .xlsx spreadsheet
+      responses:
+        '200':
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: integer }
+                  updated: { type: integer }
+                  failed: { type: integer }
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        message: { type: string }
+        '400':
+          description: No file, non-.xlsx file, empty sheet, or missing required columns
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/Error'
+              example:
+                message: 'Missing required columns: TIN, Pension ID'
+                missingColumns: ['TIN', 'Pension ID']
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /uploads:
+    post:
+      tags: [HR — Employees]
+      summary: Upload a document
+      description: |
+        Generic file upload (ID documents, CVs, certificates). Returns a URL
+        under `/uploads/…` that can be stored on employee identity/CV fields.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string, example: '/uploads/1726-1234567890.pdf' }
+                  name: { type: string }
+                  type: { type: string }
+                  size: { type: integer }
+        '400':
+          description: No file uploaded
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'

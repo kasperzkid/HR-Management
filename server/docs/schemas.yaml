@@ -1,0 +1,344 @@
+# Shared schemas for the Yanol HR API.
+# Components are merged into the root document by server/docs/index.js.
+
+components:
+  schemas:
+    # ── Auth ──────────────────────────────────────────────
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: hr@yanol.com
+        password:
+          type: string
+          format: password
+          example: hr123
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [EMPLOYER, HR_MANAGER, EMPLOYEE]
+        createdAt:
+          type: string
+          format: date-time
+
+    LoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+          description: 'Session JWT. Send as `Authorization: Bearer <token>`.'
+
+    # ── Employee ──────────────────────────────────────────
+    Employee:
+      type: object
+      properties:
+        id:
+          type: string
+          example: emp-1
+        employeeId:
+          type: string
+          example: EMP-0001
+        name:
+          type: string
+        gender:
+          type: string
+          enum: [Male, Female]
+        dateOfBirth:
+          type: string
+          format: date
+        joinDate:
+          type: string
+          format: date
+        jobTitle:
+          type: string
+        department:
+          type: string
+        employmentType:
+          type: string
+          enum: [Permanent, Contractual]
+        employmentStatus:
+          type: string
+          enum: [Active, On Leave, Inactive]
+        basicSalary:
+          type: number
+        transportAllowance: { type: number }
+        housingAllowance: { type: number }
+        mealAllowance: { type: number }
+        otherAllowance: { type: number }
+        otherDeductions: { type: number }
+        loanDeductions: { type: number }
+        bankName: { type: string }
+        bankAccount: { type: string }
+        tin: { type: string }
+        pensionId: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        address: { type: string }
+        emergencyContact: { type: string }
+        exitDate:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        status: { type: string }
+        certifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/Certification'
+
+    EmployeeInput:
+      type: object
+      required: [employeeId, name]
+      properties:
+        employeeId:
+          type: string
+          example: EMP-0014
+        name:
+          type: string
+        gender: { type: string }
+        dateOfBirth: { type: string, format: date }
+        joinDate: { type: string, format: date }
+        jobTitle: { type: string }
+        department: { type: string }
+        employmentType: { type: string }
+        basicSalary: { type: number }
+        transportAllowance: { type: number }
+        housingAllowance: { type: number }
+        mealAllowance: { type: number }
+        otherAllowance: { type: number }
+        otherDeductions: { type: number }
+        loanDeductions: { type: number }
+        bankName: { type: string }
+        bankAccount: { type: string }
+        tin: { type: string }
+        pensionId: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        address: { type: string }
+        emergencyContact: { type: string }
+        employmentStatus: { type: string }
+        exitDate: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        certifications:
+          type: array
+          description: Existing rows are kept; missing rows are replaced.
+          items:
+            $ref: '#/components/schemas/CertificationInput'
+
+    Certification:
+      type: object
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        name: { type: string }
+        issuer: { type: string }
+        issueDate: { type: string }
+        expiryDate: { type: string }
+        fileName: { type: string }
+        fileUrl: { type: string }
+
+    CertificationInput:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        issuer: { type: string }
+        issueDate: { type: string }
+        expiryDate: { type: string }
+        fileName: { type: string }
+        fileUrl: { type: string }
+
+    # ── Attendance ────────────────────────────────────────
+    Attendance:
+      type: object
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        employeeName: { type: string }
+        department: { type: string }
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [Present, Absent, Sick Leave, On Leave]
+        checkIn:
+          type: string
+          nullable: true
+          example: '08:05'
+        checkOut:
+          type: string
+          nullable: true
+          example: '17:32'
+        late:
+          type: integer
+          description: Minutes past 08:00
+        earlyDeparture:
+          type: integer
+          description: Minutes before 17:30
+        regular:
+          type: number
+          description: Hours, rounded to 0.25
+        overtime:
+          type: number
+          description: Hours, rounded to 0.25
+
+    AttendanceInput:
+      type: object
+      required: [employeeId, date]
+      properties:
+        employeeId: { type: string }
+        date: { type: string, format: date }
+        status: { type: string }
+        checkIn: { type: string, nullable: true }
+        checkOut: { type: string, nullable: true }
+        late: { type: integer }
+        earlyDeparture: { type: integer }
+        regular: { type: number }
+        overtime: { type: number }
+
+    # ── Payroll ───────────────────────────────────────────
+    PayrollRecord:
+      type: object
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        employeeName: { type: string }
+        department: { type: string }
+        payrollMonth:
+          type: string
+          description: 'YYYY-MM'
+          example: '2026-09'
+        basicSalary: { type: number }
+        transportAllowance: { type: number }
+        housingAllowance: { type: number }
+        otherAllowance: { type: number }
+        overtimePay: { type: number }
+        grossSalary: { type: number }
+        pensionDeduction: { type: number }
+        incomeTax: { type: number }
+        loanDeduction: { type: number }
+        otherDeduction: { type: number }
+        totalDeductions: { type: number }
+        netSalary: { type: number }
+        employerPension: { type: number }
+        employerCost: { type: number }
+
+    PayrollInput:
+      type: object
+      required: [employeeId, payrollMonth]
+      properties:
+        employeeId: { type: string }
+        payrollMonth: { type: string, example: '2026-09' }
+        overtimePay: { type: number }
+        otherDeduction: { type: number }
+
+    # ── Punch ─────────────────────────────────────────────
+    PunchStatus:
+      type: object
+      properties:
+        record:
+          $ref: '#/components/schemas/Attendance'
+        checkedIn: { type: boolean }
+        checkedOut: { type: boolean }
+
+    # ── Leave ─────────────────────────────────────────────
+    LeaveRequest:
+      type: object
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        employeeName: { type: string }
+        department: { type: string }
+        leaveType:
+          type: string
+          enum: [Annual, Sick, Unpaid, Maternity, Compassionate]
+        requestDate: { type: string, format: date }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        days:
+          type: number
+          description: Business days (Sat/Sun excluded)
+        approvalStatus:
+          type: string
+          enum: [Pending, Approved, Rejected]
+        approvedBy: { type: string, nullable: true }
+        approvedDate: { type: string, nullable: true }
+        remarks: { type: string, nullable: true }
+
+    LeaveInput:
+      type: object
+      required: [leaveType, startDate, endDate]
+      properties:
+        leaveType:
+          type: string
+          enum: [Annual, Sick, Unpaid, Maternity, Compassionate]
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        remarks: { type: string }
+
+    # ── Messaging ─────────────────────────────────────────
+    Contact:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Auth user id
+        kind:
+          type: string
+          enum: [user, employee]
+        name: { type: string }
+        email: { type: string }
+        subtitle: { type: string }
+        initials: { type: string }
+        avatar: { type: string, nullable: true }
+        online: { type: boolean }
+
+    ChatMessage:
+      type: object
+      properties:
+        id: { type: string }
+        text: { type: string }
+        from:
+          type: string
+          enum: [me, them]
+        senderId: { type: integer }
+        time: { type: string, example: '02:45 PM' }
+        createdAt: { type: string, format: date-time }
+        read: { type: boolean }
+        attachment:
+          type: object
+          nullable: true
+          properties:
+            url: { type: string }
+            name: { type: string }
+            type: { type: string }
+
+    # ── Shared ────────────────────────────────────────────
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+        code:
+          type: string
+          description: Machine-readable code (TOKEN_EXPIRED, SESSION_REVOKED, …)
+        missingColumns:
+          type: array
+          items: { type: string }
+          description: Only on employee import validation errors

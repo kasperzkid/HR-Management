@@ -1,0 +1,62 @@
+paths:
+  /login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      description: |
+        Verifies credentials, creates a server-side session row and returns a
+        session JWT. This is the only endpoint that requires no auth.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas.yaml#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/LoginResponse'
+        '400':
+          description: Email and password are required
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          description: Invalid email or password
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Current user identity
+      responses:
+        '200':
+          description: The authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '../schemas.yaml#/components/schemas/User'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /logout:
+    post:
+      tags: [Auth]
+      summary: Log out
+      description: Revokes the current session; the token stops working immediately.
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'

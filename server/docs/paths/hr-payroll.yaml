@@ -1,0 +1,96 @@
+paths:
+  /payroll:
+    get:
+      tags: [HR — Payroll]
+      summary: List payroll records
+      description: Ordered by employee name, then creation time.
+      parameters:
+        - name: payrollMonth
+          in: query
+          schema: { type: string, example: '2026-09' }
+          description: Filter by month (YYYY-MM)
+      responses:
+        '200':
+          description: Payroll records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '../schemas.yaml#/components/schemas/PayrollRecord'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+        '500':
+          $ref: '../responses.yaml#/ServerError'
+
+    post:
+      tags: [HR — Payroll]
+      summary: Create payroll record
+      description: |
+        Generates salary lines (pension, tax, gross/net, employer cost) from
+        the employee's salary fields and overtime. One record per employee
+        per `payrollMonth`; duplicates are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas.yaml#/components/schemas/PayrollInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/PayrollRecord'
+        '400':
+          $ref: '../responses.yaml#/ValidationError'
+        '409':
+          description: Record already exists for that employee/month
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /payroll/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [HR — Payroll]
+      summary: Update payroll record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas.yaml#/components/schemas/PayrollInput'
+      responses:
+        '200':
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/PayrollRecord'
+        '404':
+          $ref: '../responses.yaml#/NotFound'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+    delete:
+      tags: [HR — Payroll]
+      summary: Delete payroll record
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '404':
+          $ref: '../responses.yaml#/NotFound'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'

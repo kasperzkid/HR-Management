@@ -30,3 +30,26 @@ export function getCurrentEmployee() {
   }
   return INITIAL_EMPLOYEES[0]
 }
+
+export function resolveEmployee(employees = []) {
+  const user = getCurrentUser()
+  if (!user) return employees[0] || null
+
+  if (user.employeeId) {
+    const found = employees.find((e) => e.employeeId === user.employeeId)
+    if (found) return found
+  }
+  if (user.email) {
+    const found = employees.find(
+      (e) => e.email && e.email.toLowerCase() === user.email.toLowerCase()
+    )
+    if (found) return found
+  }
+  if (user.name) {
+    const found = employees.find(
+      (e) => e.name && e.name.toLowerCase() === user.name.toLowerCase()
+    )
+    if (found) return found
+  }
+  return employees[0] || null
+}

@@ -1,0 +1,21 @@
+paths:
+  /dashboard:
+    get:
+      tags: [HR — Dashboard]
+      summary: HR summary statistics
+      responses:
+        '200':
+          description: Headline counts for the HR dashboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalEmployees: { type: integer }
+                  activeEmployees: { type: integer }
+                  employeesOnLeave: { type: integer }
+                  departments: { type: integer }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+        '500':
+          $ref: '../responses.yaml#/ServerError'

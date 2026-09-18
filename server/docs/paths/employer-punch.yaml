@@ -1,0 +1,81 @@
+paths:
+  /punch:
+    get:
+      tags: [Employer — Punch Clock]
+      summary: Today's punch status
+      description: |
+        Returns today's attendance record for the employee linked to the
+        authenticated user (matched by email), plus derived punch flags.
+      responses:
+        '200':
+          description: Punch status
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas.yaml#/components/schemas/PunchStatus'
+        '404':
+          description: No employee profile linked to this account
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /punch/check-in:
+    post:
+      tags: [Employer — Punch Clock]
+      summary: Check in
+      description: |
+        Creates today's attendance record with `checkIn` = current Addis time.
+        Server-enforced rules:
+        - Mon–Fri only
+        - Between 08:00 and 14:00 UTC+3
+        - Not already checked in
+        `late` (minutes past 08:00) is derived automatically.
+      responses:
+        '201':
+          description: Checked in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  record:
+                    $ref: '../schemas.yaml#/components/schemas/Attendance'
+        '400':
+          description: Outside check-in window, weekend, or already checked in
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '404':
+          description: No employee profile linked to this account
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
+
+  /punch/check-out:
+    post:
+      tags: [Employer — Punch Clock]
+      summary: Check out
+      description: |
+        Closes today's attendance record with `checkOut` = current Addis time.
+        Server-enforced rules:
+        - Only at/after 17:30 UTC+3
+        - Must be checked in and not already checked out
+        `earlyDeparture`, `regular` and `overtime` hours are derived automatically.
+      responses:
+        '200':
+          description: Checked out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  record:
+                    $ref: '../schemas.yaml#/components/schemas/Attendance'
+        '400':
+          description: Before 17:30, not checked in, or already checked out
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '404':
+          description: No employee profile linked to this account
+          content: { application/json: { schema: { $ref: '../schemas.yaml#/components/schemas/Error' } } }
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'
