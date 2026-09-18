@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
 import { INITIAL_EMPLOYEES } from '../data/employeeData'
 import DailyLogTable from '../../HR-Manager/components/DailyLogTable'
+import PunchCard from '../components/PunchCard'
 import { getCurrentEmployee } from '../lib/currentUser'
 
 function Attendance() {
@@ -141,6 +142,9 @@ function Attendance() {
           </div>
         </div>
       </div>
+
+      {/* Punch card with work-time rules (02:00–11:30 UTC+3, Mon–Fri) */}
+      <PunchCard />
 
       {/* Daily log (Qirb-Alga Luxury Pension Table) */}
       <section id="daily-log-section">

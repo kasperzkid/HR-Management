@@ -3,18 +3,16 @@ import {
   AlertTriangle,
   CalendarDays,
   Check,
-  ChevronDown,
   Clock3,
   Edit3,
   FileText,
-  Filter,
   Plus,
-  Search,
   UserCheck,
   Users,
   X,
   XCircle,
 } from 'lucide-react'
+import LuxuryDataTable from '../components/LuxuryDataTable'
 
 const LEAVE_TYPES = [
   'Annual Leave',
@@ -345,6 +343,9 @@ function Field({
 const inputClassName =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
 
+const selectClass =
+  'h-9 pl-2.5 pr-7 text-xs border border-slate-200 dark:border-[#262b31] rounded-xl bg-white dark:bg-[#1c2026] text-slate-800 dark:text-gray-200 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium'
+
 function SectionTitle({ icon: Icon, title, description }) {
   return (
     <div className="mb-4 flex items-start gap-3">
@@ -457,7 +458,7 @@ function LeaveRequestModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 dark:border-[#262b31] bg-white dark:bg-[#1c2026] text-slate-500 dark:text-gray-400 transition-colors hover:bg-slate-50 dark:hover:bg-[#252a32] dark:hover:text-gray-200 cursor-pointer"
           >
             <X size={20} />
           </button>
@@ -770,7 +771,7 @@ function LeaveRequestModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-[#262b31] bg-white dark:bg-[#1c2026] text-xs font-semibold text-slate-700 dark:text-gray-300 shadow-2xs transition-colors hover:bg-slate-50 dark:hover:bg-[#252a32] cursor-pointer"
             >
               Cancel
             </button>
@@ -778,7 +779,7 @@ function LeaveRequestModal({
             <button
               type="submit"
               disabled={Boolean(invalidDates) || numberOfDays <= 0}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               <Check size={17} />
               {editingRequest
@@ -846,127 +847,103 @@ function LeaveBalancePanel({
     })
   }, [employees, requests])
 
+  const balanceColumns = [
+    {
+      key: 'employeeId',
+      header: 'Employee ID',
+      render: (balance) => (
+        <span className="text-sm font-medium text-blue-600">
+          {balance.employeeId}
+        </span>
+      ),
+    },
+    {
+      key: 'employeeName',
+      header: 'Employee Name',
+      render: (balance) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+            {getInitials(balance.employeeName)}
+          </div>
+
+          <span className="text-sm font-medium text-slate-800">
+            {balance.employeeName}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'entitled',
+      header: 'Entitled',
+      align: 'right',
+      render: (balance) => (
+        <span className="text-sm text-slate-700">
+          {balance.entitled}
+        </span>
+      ),
+    },
+    {
+      key: 'taken',
+      header: 'Taken',
+      align: 'right',
+      render: (balance) => (
+        <span className="text-sm text-slate-700">
+          {balance.taken}
+        </span>
+      ),
+    },
+    {
+      key: 'remaining',
+      header: 'Remaining',
+      align: 'right',
+      render: (balance) => (
+        <span
+          className={`text-sm font-semibold ${
+            balance.remaining < 0
+              ? 'text-red-600'
+              : 'text-emerald-600'
+          }`}
+        >
+          {balance.remaining}
+        </span>
+      ),
+    },
+    {
+      key: 'sickUsed',
+      header: 'Sick Used',
+      align: 'right',
+      render: (balance) => (
+        <span className="text-sm text-slate-700">
+          {balance.sickUsed}
+        </span>
+      ),
+    },
+  ]
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-semibold text-slate-900">
-              Employee Leave Balance
-            </h2>
-
-            <p className="mt-1 text-xs text-slate-500">
-              Annual leave balance based on approved requests.
-            </p>
-          </div>
-
-          <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
-            <CalendarDays size={18} />
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Employee ID
-              </th>
-
-              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Employee Name
-              </th>
-
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Entitled
-              </th>
-
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Taken
-              </th>
-
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Remaining
-              </th>
-
-              <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Sick Used
-              </th>
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-slate-100">
-            {balances.map((balance) => {
-              const selected =
-                selectedEmployeeId === balance.employeeId
-
-              return (
-                <tr
-                  key={balance.employeeId}
-                  onClick={() =>
-                    onSelectEmployee(
-                      selected
-                        ? ''
-                        : balance.employeeId,
-                    )
-                  }
-                  className={`cursor-pointer transition hover:bg-slate-50 ${
-                    selected ? 'bg-blue-50/50' : ''
-                  }`}
-                >
-                  <td className="px-5 py-3 text-sm font-medium text-blue-600">
-                    {balance.employeeId}
-                  </td>
-
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
-                        {getInitials(
-                          balance.employeeName,
-                        )}
-                      </div>
-
-                      <span className="text-sm font-medium text-slate-800">
-                        {balance.employeeName}
-                      </span>
-                    </div>
-                  </td>
-
-                  <td className="px-5 py-3 text-right text-sm text-slate-700">
-                    {balance.entitled}
-                  </td>
-
-                  <td className="px-5 py-3 text-right text-sm text-slate-700">
-                    {balance.taken}
-                  </td>
-
-                  <td
-                    className={`px-5 py-3 text-right text-sm font-semibold ${
-                      balance.remaining < 0
-                        ? 'text-red-600'
-                        : 'text-emerald-600'
-                    }`}
-                  >
-                    {balance.remaining}
-                  </td>
-
-                  <td className="px-5 py-3 text-right text-sm text-slate-700">
-                    {balance.sickUsed}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {balances.length === 0 && (
-        <div className="p-8 text-center text-sm text-slate-500">
-          No employees available.
-        </div>
-      )}
-    </div>
+    <LuxuryDataTable
+      title="Employee Leave Balance"
+      subtitle="Annual leave balance based on approved requests."
+      countBadge={balances.length}
+      columns={balanceColumns}
+      data={balances}
+      searchable={false}
+      exportable={false}
+      paginated={false}
+      emptyMessage="No employees available."
+      onRowClick={(balance) =>
+        onSelectEmployee(
+          balance.employeeId === selectedEmployeeId
+            ? ''
+            : balance.employeeId,
+        )
+      }
+      rowClassName={(row) =>
+        row.employeeId === selectedEmployeeId
+          ? 'bg-blue-50/50 dark:bg-blue-950/20'
+          : ''
+      }
+    />
   )
 }
 
@@ -976,7 +953,6 @@ export default function Leave() {
     INITIAL_LEAVE_REQUESTS,
   )
 
-  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] =
     useState('All Statuses')
   const [leaveTypeFilter, setLeaveTypeFilter] =
@@ -993,22 +969,7 @@ export default function Leave() {
     useState('')
 
   const filteredRequests = useMemo(() => {
-    const searchValue = search.trim().toLowerCase()
-
     return requests.filter((request) => {
-      const matchesSearch =
-        !searchValue ||
-        request.id.toLowerCase().includes(searchValue) ||
-        request.employeeId
-          .toLowerCase()
-          .includes(searchValue) ||
-        request.employeeName
-          .toLowerCase()
-          .includes(searchValue) ||
-        request.department
-          .toLowerCase()
-          .includes(searchValue)
-
       const matchesStatus =
         statusFilter === 'All Statuses' ||
         request.approvalStatus === statusFilter
@@ -1022,7 +983,6 @@ export default function Leave() {
         request.department === departmentFilter
 
       return (
-        matchesSearch &&
         matchesStatus &&
         matchesLeaveType &&
         matchesDepartment
@@ -1030,7 +990,6 @@ export default function Leave() {
     })
   }, [
     requests,
-    search,
     statusFilter,
     leaveTypeFilter,
     departmentFilter,
@@ -1324,11 +1283,150 @@ export default function Leave() {
   }
 
   function resetFilters() {
-    setSearch('')
     setStatusFilter('All Statuses')
     setLeaveTypeFilter('All Leave Types')
     setDepartmentFilter('All Departments')
   }
+
+  const columns = useMemo(() => [
+    {
+      key: 'id',
+      header: 'Request ID',
+      render: (row) => (
+        <span className="font-mono text-sm font-semibold text-blue-600">
+          {row.id}
+        </span>
+      ),
+    },
+    {
+      key: 'employeeName',
+      header: 'Employee',
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">
+            {getInitials(row.employeeName)}
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-slate-800">
+              {row.employeeName}
+            </p>
+
+            <p className="text-xs text-slate-500">
+              {row.employeeId}
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'department',
+      header: 'Department',
+      render: (row) => (
+        <span className="text-sm text-slate-600">
+          {row.department}
+        </span>
+      ),
+    },
+    {
+      key: 'leaveType',
+      header: 'Leave Type',
+      render: (row) => (
+        <span
+          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getLeaveTypeClass(
+            row.leaveType,
+          )}`}
+        >
+          {row.leaveType}
+        </span>
+      ),
+    },
+    {
+      key: 'requestDate',
+      header: 'Request Date',
+      render: (row) => (
+        <span className="text-sm text-slate-600">
+          {formatDate(row.requestDate)}
+        </span>
+      ),
+    },
+    {
+      key: 'leavePeriod',
+      header: 'Leave Period',
+      render: (row) => (
+        <>
+          <div className="text-sm text-slate-700">
+            {formatDate(row.startDate)}
+          </div>
+
+          <div className="text-xs text-slate-400">
+            to {formatDate(row.endDate)}
+          </div>
+        </>
+      ),
+    },
+    {
+      key: 'days',
+      header: 'Days',
+      align: 'center',
+      render: (row) => (
+        <span className="font-semibold text-slate-800">
+          {row.days}
+        </span>
+      ),
+    },
+    {
+      key: 'approvalStatus',
+      header: 'Status',
+      render: (row) => (
+        <span
+          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClass(
+            row.approvalStatus,
+          )}`}
+        >
+          {row.approvalStatus}
+        </span>
+      ),
+    },
+    {
+      key: 'approvedBy',
+      header: 'Approved By',
+      render: (row) => (
+        <span className="text-sm text-slate-600">
+          {row.approvedBy || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'approvalDate',
+      header: 'Approval Date',
+      render: (row) => (
+        <span className="text-sm text-slate-600">
+          {formatDate(row.approvedDate)}
+        </span>
+      ),
+    },
+    {
+      key: 'overlap',
+      header: 'Overlap?',
+      align: 'center',
+      render: (row) => {
+        const overlap = hasOverlap(row, requests, row.id)
+
+        return overlap ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+            <AlertTriangle size={13} />
+            CHECK
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+            <Check size={13} />
+            OK
+          </span>
+        )
+      },
+    },
+  ], [requests])
 
   return (
     <div className="min-h-full bg-slate-50 p-4 md:p-6 lg:p-8">
@@ -1358,7 +1456,7 @@ export default function Leave() {
           <button
             type="button"
             onClick={openCreateModal}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-slate-800 cursor-pointer"
           >
             <Plus size={18} />
             New Leave Request
@@ -1396,357 +1494,115 @@ export default function Leave() {
           />
         </div>
 
-        {/* Filters */}
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <Filter size={17} className="text-slate-500" />
-
-            <h2 className="text-sm font-semibold text-slate-800">
-              Filter Leave Requests
-            </h2>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <div className="relative xl:col-span-2">
-              <Search
-                size={17}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-
-              <input
-                value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
-                placeholder="Search request ID, employee, department..."
-                className={`${inputClassName} pl-9`}
-              />
-            </div>
-
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value)
-                }
-                className={inputClassName}
-              >
-                <option>All Statuses</option>
-
-                {STATUSES.map((status) => (
-                  <option key={status}>{status}</option>
-                ))}
-              </select>
-
-              <ChevronDown
-                size={15}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-            </div>
-
-            <div>
-              <select
-                value={leaveTypeFilter}
-                onChange={(event) =>
-                  setLeaveTypeFilter(event.target.value)
-                }
-                className={inputClassName}
-              >
-                <option>All Leave Types</option>
-
-                {LEAVE_TYPES.map((type) => (
-                  <option key={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <select
-                value={departmentFilter}
-                onChange={(event) =>
-                  setDepartmentFilter(event.target.value)
-                }
-                className={inputClassName}
-              >
-                {DEPARTMENTS.map((department) => (
-                  <option key={department}>
-                    {department}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {(search ||
-            statusFilter !== 'All Statuses' ||
-            leaveTypeFilter !== 'All Leave Types' ||
-            departmentFilter !== 'All Departments') && (
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="text-xs font-medium text-blue-600 hover:text-blue-700"
-              >
-                Clear filters
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Leave Requests */}
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-200 p-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="font-semibold text-slate-900">
-                Leave Requests
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                {filteredRequests.length} request
-                {filteredRequests.length === 1
-                  ? ''
-                  : 's'} shown
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+        <LuxuryDataTable
+          title="Leave Requests"
+          subtitle={`${filteredRequests.length} request${filteredRequests.length === 1 ? '' : 's'} shown`}
+          countBadge={filteredRequests.length}
+          columns={columns}
+          data={filteredRequests}
+          searchable
+          searchKeys={['id', 'employeeId', 'employeeName', 'department']}
+          searchPlaceholder="Search request ID, employee, department..."
+          exportable
+          exportFilename="HR_Leave_Requests"
+          paginated
+          defaultPageSize={10}
+          emptyMessage="No leave requests match your filters."
+          onResetFilters={resetFilters}
+          headerActions={
+            <span className="inline-flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-gray-400">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
               Approved leave affects balance
-            </div>
-          </div>
+            </span>
+          }
+          filterControls={
+            <>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium whitespace-nowrap text-slate-500 dark:text-gray-400">
+                  Status:
+                </span>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1300px] text-left">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Request ID
-                  </th>
+                <select
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value)
+                  }
+                  className={selectClass}
+                >
+                  <option>All Statuses</option>
 
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Employee
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Department
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Leave Type
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Request Date
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Leave Period
-                  </th>
-
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Days
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Status
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Approved By
-                  </th>
-
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Approval Date
-                  </th>
-
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Overlap?
-                  </th>
-
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {filteredRequests.map((request) => {
-                  const overlap = hasOverlap(
-                    request,
-                    requests,
-                    request.id,
-                  )
-
-                  return (
-                    <tr
-                      key={request.id}
-                      className="transition hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-4">
-                        <span className="font-mono text-sm font-semibold text-blue-600">
-                          {request.id}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">
-                            {getInitials(
-                              request.employeeName,
-                            )}
-                          </div>
-
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">
-                              {request.employeeName}
-                            </p>
-
-                            <p className="text-xs text-slate-500">
-                              {request.employeeId}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-slate-600">
-                        {request.department}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getLeaveTypeClass(
-                            request.leaveType,
-                          )}`}
-                        >
-                          {request.leaveType}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-slate-600">
-                        {formatDate(
-                          request.requestDate,
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="text-sm text-slate-700">
-                          {formatDate(request.startDate)}
-                        </div>
-
-                        <div className="text-xs text-slate-400">
-                          to {formatDate(request.endDate)}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        <span className="font-semibold text-slate-800">
-                          {request.days}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClass(
-                            request.approvalStatus,
-                          )}`}
-                        >
-                          {request.approvalStatus}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-slate-600">
-                        {request.approvedBy || '—'}
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-slate-600">
-                        {formatDate(
-                          request.approvedDate,
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4 text-center">
-                        {overlap ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
-                            <AlertTriangle size={13} />
-                            CHECK
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                            <Check size={13} />
-                            OK
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex items-center justify-end gap-1">
-                          {request.approvalStatus ===
-                            'Pending' && (
-                            <>
-                              <button
-                                type="button"
-                                title="Approve"
-                                onClick={() =>
-                                  approveRequest(
-                                    request,
-                                  )
-                                }
-                                className="rounded-lg p-2 text-emerald-600 transition hover:bg-emerald-50"
-                              >
-                                <Check size={17} />
-                              </button>
-
-                              <button
-                                type="button"
-                                title="Reject"
-                                onClick={() =>
-                                  rejectRequest(
-                                    request,
-                                  )
-                                }
-                                className="rounded-lg p-2 text-red-600 transition hover:bg-red-50"
-                              >
-                                <XCircle size={17} />
-                              </button>
-                            </>
-                          )}
-
-                          <button
-                            type="button"
-                            title="Edit"
-                            onClick={() =>
-                              openEditModal(request)
-                            }
-                            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                          >
-                            <Edit3 size={17} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredRequests.length === 0 && (
-            <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-              <div className="mb-3 rounded-full bg-slate-100 p-4 text-slate-400">
-                <FileText size={25} />
+                  {STATUSES.map((status) => (
+                    <option key={status}>{status}</option>
+                  ))}
+                </select>
               </div>
 
-              <h3 className="font-semibold text-slate-800">
-                No leave requests found
-              </h3>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium whitespace-nowrap text-slate-500 dark:text-gray-400">
+                  Leave Type:
+                </span>
 
-              <p className="mt-1 max-w-md text-sm text-slate-500">
-                Try changing your filters or create a
-                new leave request.
-              </p>
-            </div>
-          )}
-        </div>
+                <select
+                  value={leaveTypeFilter}
+                  onChange={(event) =>
+                    setLeaveTypeFilter(event.target.value)
+                  }
+                  className={selectClass}
+                >
+                  <option>All Leave Types</option>
+
+                  {LEAVE_TYPES.map((type) => (
+                    <option key={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium whitespace-nowrap text-slate-500 dark:text-gray-400">
+                  Department:
+                </span>
+
+                <select
+                  value={departmentFilter}
+                  onChange={(event) =>
+                    setDepartmentFilter(event.target.value)
+                  }
+                  className={selectClass}
+                >
+                  {DEPARTMENTS.map((department) => (
+                    <option key={department}>
+                      {department}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          }
+          dropdownActions={[
+            {
+              label: 'Approve',
+              icon: Check,
+              tone: 'success',
+              hidden: (row) =>
+                row.approvalStatus !== 'Pending',
+              onClick: (row) => approveRequest(row),
+            },
+            {
+              label: 'Reject',
+              icon: XCircle,
+              destructive: true,
+              hidden: (row) =>
+                row.approvalStatus !== 'Pending',
+              onClick: (row) => rejectRequest(row),
+            },
+            {
+              label: 'Edit',
+              icon: Edit3,
+              onClick: (row) => openEditModal(row),
+            },
+          ]}
+        />
 
         {/* Balance + selected employee details */}
         <div className="grid gap-6 xl:grid-cols-[1fr_340px]">

@@ -3,11 +3,16 @@ import {
   CalendarCheck,
   Clock3,
   Users,
+  Eye,
 } from 'lucide-react'
 
+import { useNavigate } from 'react-router-dom'
+
 import { INITIAL_EMPLOYEES } from '../../Employer/data/employeeData'
+import LuxuryDataTable from '../components/LuxuryDataTable'
 
 function HRDashboard() {
+  const navigate = useNavigate()
   const employees = Array.isArray(INITIAL_EMPLOYEES)
     ? INITIAL_EMPLOYEES
     : []
@@ -59,6 +64,75 @@ function HRDashboard() {
     },
   ]
 
+  const columns = [
+    {
+      key: 'name',
+      header: 'Employee',
+      sortable: true,
+      render: (employee) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 dark:bg-[#1c2026] text-xs font-bold text-slate-700 dark:text-gray-300">
+            {employee.initials ||
+              employee.name
+                ?.split(' ')
+                .map((part) => part[0])
+                .join('')
+                .slice(0, 2)
+                .toUpperCase() ||
+              'EM'}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">
+              {employee.name || 'Unnamed Employee'}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-gray-400">
+              {employee.employeeId || employee.id || '-'}
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'department',
+      header: 'Department',
+      render: (employee) => (
+        <span className="text-sm text-slate-600 dark:text-gray-300">
+          {employee.department || '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'jobTitle',
+      header: 'Position',
+      render: (employee) => (
+        <span className="text-sm text-slate-600 dark:text-gray-300">
+          {employee.jobTitle || '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'employmentStatus',
+      header: 'Status',
+      render: (employee) => {
+        const status =
+          employee.employmentStatus || employee.status || 'Unknown'
+        const color =
+          status === 'Active'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60'
+            : status === 'On Leave'
+            ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/60'
+            : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-[#1c2026] dark:text-gray-300 dark:border-[#262b31]'
+        return (
+          <span
+            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${color}`}
+          >
+            {status}
+          </span>
+        )
+      },
+    },
+  ]
+
   return (
     <div className="min-h-full bg-[#F3F4F6] p-4 sm:p-6 lg:p-8">
       {/* Header */}
@@ -79,10 +153,11 @@ function HRDashboard() {
 
         <button
           type="button"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          onClick={() => navigate('/hr-manager/reports')}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800 cursor-pointer"
         >
           View Reports
-          <ArrowUpRight size={17} />
+          <ArrowUpRight size={15} />
         </button>
       </div>
 
@@ -274,106 +349,29 @@ function HRDashboard() {
         </section>
       </div>
 
-      {/* Recent Employees */}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-          <div>
-            <h2 className="text-lg font-bold text-slate-950">
-              Recent Employees
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Employees currently available in the shared data.
-            </p>
-          </div>
-
-          <a
-            href="/hr-manager/employees"
-            className="text-sm font-semibold text-slate-700 hover:text-slate-950"
-          >
-            View all
-          </a>
-        </div>
-
-        {employees.length === 0 ? (
-          <div className="px-6 py-10 text-center text-sm text-slate-500">
-            No employee records available.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px]">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left">
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Employee
-                  </th>
-
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Department
-                  </th>
-
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Position
-                  </th>
-
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {employees.slice(0, 5).map((employee) => (
-                  <tr
-                    key={employee.id || employee.employeeId}
-                    className="border-b border-slate-100 last:border-0"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
-                          {employee.initials ||
-                            employee.name
-                              ?.split(' ')
-                              .map((part) => part[0])
-                              .join('')
-                              .slice(0, 2)
-                              .toUpperCase() ||
-                            'EM'}
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {employee.name || 'Unnamed Employee'}
-                          </p>
-
-                          <p className="text-xs text-slate-500">
-                            {employee.employeeId || employee.id || '-'}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {employee.department || '-'}
-                    </td>
-
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {employee.jobTitle || '-'}
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                        {employee.employmentStatus ||
-                          employee.status ||
-                          'Unknown'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Recent Employees (Luxury) */}
+      <section className="mt-6">
+        <LuxuryDataTable
+          title="Recent Employees"
+          subtitle="Employees currently available in the shared data."
+          countBadge={employees.length}
+          columns={columns}
+          data={employees}
+          searchable
+          searchKeys={['name', 'employeeId', 'department', 'jobTitle', 'employmentStatus']}
+          searchPlaceholder="Search recent employees..."
+          exportable
+          exportFilename="HR_Recent_Employees"
+          paginated
+          defaultPageSize={5}
+          pageSizeOptions={[5, 10, 20]}
+          emptyMessage="No employee records available."
+          primaryAction={{
+            label: 'View Profile',
+            icon: Eye,
+            onClick: () => navigate('/hr-manager/employees'),
+          }}
+        />
       </section>
     </div>
   )

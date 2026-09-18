@@ -1,6 +1,57 @@
 import crypto from 'node:crypto'
 import prisma from '../db.js'
 
+const EMPLOYEE_INCLUDE = {
+  certifications: {
+    orderBy: {
+      createdAt: 'asc',
+    },
+  },
+}
+
+function initialsFromName(name = '') {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase()
+}
+
+function normalizeCertifications(list = []) {
+  if (!Array.isArray(list)) return []
+
+  return list
+    .map((cert) => ({
+      id: cert.id || crypto.randomUUID(),
+      name: String(cert.name || '').trim(),
+      issuer: String(cert.issuer || '').trim(),
+      issueDate: String(cert.issueDate || '').trim(),
+      expiryDate: String(cert.expiryDate || '').trim(),
+      fileName: String(cert.fileName || '').trim(),
+      fileUrl: String(cert.fileUrl || '').trim(),
+      mimeType: String(cert.mimeType || cert.type || '').trim(),
+      fileSize: Number(cert.fileSize || cert.size) || 0,
+    }))
+    .filter((cert) => cert.name)
+}
+
+function identityFields(data = {}, existing = {}) {
+  return {
+    identityType: data.identityType ?? existing.identityType ?? '',
+    identityNumber: data.identityNumber ?? existing.identityNumber ?? '',
+    identityIssueDate: data.identityIssueDate ?? existing.identityIssueDate ?? '',
+    identityExpiryDate: data.identityExpiryDate ?? existing.identityExpiryDate ?? '',
+    identityFrontUrl: data.identityFrontUrl ?? existing.identityFrontUrl ?? '',
+    identityFrontName: data.identityFrontName ?? existing.identityFrontName ?? '',
+    identityBackUrl: data.identityBackUrl ?? existing.identityBackUrl ?? '',
+    identityBackName: data.identityBackName ?? existing.identityBackName ?? '',
+    cvUrl: data.cvUrl ?? existing.cvUrl ?? '',
+    cvName: data.cvName ?? existing.cvName ?? '',
+  }
+}
+
 // ============================================================
 // DASHBOARD
 // ============================================================
@@ -57,6 +108,7 @@ export async function getDashboard(req, res) {
 export async function getEmployees(req, res) {
   try {
     const employees = await prisma.employee.findMany({
+      include: EMPLOYEE_INCLUDE,
       orderBy: {
         createdAt: 'desc',
       },
@@ -120,6 +172,8 @@ export async function createEmployee(req, res) {
       })
     }
 
+    const certifications = normalizeCertifications(data.certifications)
+
     const employee = await prisma.employee.create({
       data: {
         id: data.id || crypto.randomUUID(),
@@ -149,14 +203,19 @@ export async function createEmployee(req, res) {
         employmentStatus: data.employmentStatus || '',
         exitDate: data.exitDate || null,
         notes: data.notes || '',
-        status: data.status || '',
+        status: data.status || data.employmentStatus || '',
         avatar: data.avatar || '',
-        location: data.location || '',
-        salary: Number(data.salary) || 0,
+        location: data.location || data.address || '',
+        salary: Number(data.salary) || Number(data.basicSalary) || 0,
         manager: data.manager || '',
-        roleType: data.roleType || '',
-        initials: data.initials || '',
+        roleType: data.roleType || data.employmentType || '',
+        initials: data.initials || initialsFromName(data.name),
+        ...identityFields(data),
+        certifications: {
+          create: certifications,
+        },
       },
+      include: EMPLOYEE_INCLUDE,
     })
 
     res.status(201).json(employee)
@@ -283,8 +342,37 @@ export async function updateEmployee(req, res) {
           data.salary !== undefined
             ? Number(data.salary) || 0
             : existing.salary,
+
+        ...identityFields(data, existing),
       },
+      include: EMPLOYEE_INCLUDE,
     })
+
+    if (Array.isArray(data.certifications)) {
+      const certifications = normalizeCertifications(data.certifications)
+
+      await prisma.employeeCertification.deleteMany({
+        where: {
+          employeeId: id,
+        },
+      })
+
+      if (certifications.length > 0) {
+        await prisma.employeeCertification.createMany({
+          data: certifications.map((cert) => ({
+            ...cert,
+            employeeId: id,
+          })),
+        })
+      }
+
+      const refreshed = await prisma.employee.findUnique({
+        where: { id },
+        include: EMPLOYEE_INCLUDE,
+      })
+
+      return res.json(refreshed)
+    }
 
     res.json(employee)
   } catch (error) {
@@ -294,6 +382,21 @@ export async function updateEmployee(req, res) {
       message: 'Failed to update employee',
     })
   }
+}
+
+export function uploadEmployeeDocument(req, res) {
+  if (!req.file) {
+    return res.status(400).json({
+      message: 'No file uploaded',
+    })
+  }
+
+  res.status(201).json({
+    url: `/uploads/${req.file.filename}`,
+    name: req.file.originalname,
+    type: req.file.mimetype,
+    size: req.file.size,
+  })
 }
 
 export async function deleteEmployee(req, res) {

@@ -2,21 +2,39 @@ import { useState } from 'react'
 import { X, User, Mail, Briefcase, Building, Calendar, Hash, Check } from 'lucide-react'
 import { DEPARTMENTS } from '../data/employeeData'
 
-function AddEmployeeModal({ isOpen, onClose, onAdd }) {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    jobTitle: '',
-    department: 'Design Team',
-    employeeId: `A0${Math.floor(Math.random() * 9 + 1)}DEVP${Math.floor(Math.random() * 900 + 100)}`,
-    joinDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
-    status: 'Active',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-    location: 'Remote',
-    salary: '$95,000'
+function AddEmployeeModal({ isOpen, onClose, onAdd, editingEmployee = null, onEdit = null }) {
+  const [formData, setFormData] = useState(() => {
+    if (editingEmployee) {
+      return {
+        name: editingEmployee.name || '',
+        email: editingEmployee.email || '',
+        jobTitle: editingEmployee.jobTitle || '',
+        department: editingEmployee.department || 'Design Team',
+        employeeId: editingEmployee.employeeId || '',
+        joinDate: editingEmployee.joinDate || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
+        status: editingEmployee.status || editingEmployee.employmentStatus || 'Active',
+        avatar: editingEmployee.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        location: editingEmployee.location || 'Remote',
+        salary: editingEmployee.salary || (editingEmployee.basicSalary != null ? `$${Number(editingEmployee.basicSalary).toLocaleString('en-US')}` : '$95,000')
+      }
+    }
+    return {
+      name: '',
+      email: '',
+      jobTitle: '',
+      department: 'Design Team',
+      employeeId: `A0${Math.floor(Math.random() * 9 + 1)}DEVP${Math.floor(Math.random() * 900 + 100)}`,
+      joinDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
+      status: 'Active',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      location: 'Remote',
+      salary: '$95,000'
+    }
   })
 
   if (!isOpen) return null
+
+  const isEditing = Boolean(editingEmployee)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -29,11 +47,23 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
       .substring(0, 2)
       .toUpperCase()
 
-    onAdd({
-      id: `emp-${Date.now()}`,
+    const payload = {
       ...formData,
       initials: initials || 'EM'
-    })
+    }
+
+    if (isEditing && onEdit) {
+      onEdit({
+        ...editingEmployee,
+        ...payload,
+        id: editingEmployee.id
+      })
+    } else {
+      onAdd({
+        id: `emp-${Date.now()}`,
+        ...payload
+      })
+    }
     onClose()
   }
 
@@ -43,8 +73,12 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-[#262b31]">
           <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Add New Employee</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Enter details to onboard a new team member</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {isEditing ? 'Edit Employee' : 'Add New Employee'}
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {isEditing ? `Update details for ${editingEmployee.name}` : 'Enter details to onboard a new team member'}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -116,6 +150,9 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
                   {DEPARTMENTS.filter(d => d !== 'All Departments').map((dep) => (
                     <option key={dep} value={dep}>{dep}</option>
                   ))}
+                  {formData.department && !DEPARTMENTS.includes(formData.department) && (
+                    <option value={formData.department}>{formData.department}</option>
+                  )}
                 </select>
               </div>
             </div>
@@ -188,7 +225,7 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
               type="submit"
               className="px-5 py-2 text-xs font-semibold text-white bg-gray-950 hover:bg-gray-800 dark:bg-[#1c2026] dark:hover:bg-[#2a3139] rounded-lg shadow-xs transition-colors"
             >
-              Add Employee
+              {isEditing ? 'Save Changes' : 'Add Employee'}
             </button>
           </div>
         </form>

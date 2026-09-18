@@ -8,10 +8,12 @@ export const UPLOAD_DIR = path.join(__dirname, 'uploads')
 const ALLOWED = [
   'image/png',
   'image/jpeg',
+  'image/jpg',
   'image/webp',
   'image/gif',
   'application/pdf',
   'text/plain',
+  'application/msword',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/zip',

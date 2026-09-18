@@ -2,7 +2,6 @@ import { Route, Routes, Navigate } from 'react-router-dom'
 import EmployerLayout from './components/EmployerLayout'
 import { MessagingProvider } from './context/MessagingContext'
 import Dashboard from './pages/Dashboard'
-import Employees from './pages/Employees'
 import Attendance from './pages/Attendance'
 import Leave from './pages/Leave'
 import Payroll from './pages/Payroll'
@@ -20,7 +19,6 @@ function EmployerApp() {
         <Route element={<EmployerLayout />}>
           <Route path="/" element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="employee" element={<Employees />} />
           <Route path="attendance" element={<Attendance />} />
           <Route path="leave" element={<Leave />} />
           <Route path="time-off" element={<Leave />} />

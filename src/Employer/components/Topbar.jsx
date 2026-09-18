@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Bell, MessageSquare, Check, Info, CalendarCheck, Wallet } from 'lucide-react'
 import { useMessaging } from '../context/messagingStore'
 import ProfileMenu from './ProfileMenu'
+import PunchWidget from './PunchWidget'
 
 const NOTIF_ICONS = {
   leave: { icon: CalendarCheck, color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200' },
@@ -47,6 +48,9 @@ function Topbar() {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Check-in / Check-out (shared state with Attendance punch card) */}
+        <PunchWidget />
+
         {/* Messages / Inbox */}
         <button
           onClick={() => navigate('/employer/inbox')}

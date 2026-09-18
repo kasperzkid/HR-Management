@@ -64,11 +64,42 @@ model Employee {
   manager             String
   roleType            String
   initials            String
+
+  identityType          String @default("")
+  identityNumber        String @default("")
+  identityIssueDate     String @default("")
+  identityExpiryDate    String @default("")
+  identityFrontUrl      String @default("")
+  identityFrontName     String @default("")
+  identityBackUrl       String @default("")
+  identityBackName      String @default("")
+  cvUrl                 String @default("")
+  cvName                String @default("")
+
   createdAt           DateTime @default(now())
 
   attendance          Attendance[]
   leaveRequests       LeaveRequest[]
   payrollRecords      PayrollRecord[]
+  certifications      EmployeeCertification[]
+}
+
+model EmployeeCertification {
+  id         String   @id
+  employeeId String
+  name       String
+  issuer     String   @default("")
+  issueDate  String   @default("")
+  expiryDate String   @default("")
+  fileName   String   @default("")
+  fileUrl    String   @default("")
+  mimeType   String   @default("")
+  fileSize   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
 }
 
 model Attendance {

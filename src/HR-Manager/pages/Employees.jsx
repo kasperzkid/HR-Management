@@ -1,275 +1,608 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
-  Users,
   Search,
-  Filter,
-  Plus,
+  SlidersHorizontal,
   ArrowUpDown,
-  Building,
-  Mail,
-  Phone,
-  CheckCircle2,
-  AlertCircle,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  MoreVertical,
+  Download,
+  Trash2,
   X,
-  CreditCard,
-  FileText,
+  AlertCircle,
+  Pencil,
 } from 'lucide-react'
-import { HR_SETTINGS } from '../data/settingsData'
-import { MOCK_EMPLOYEES } from '../data/mockData'
-import { formatETB } from '../lib/payroll'
-import AddEmployeeModal from '../components/AddEmployeeModal'
+import { INITIAL_EMPLOYEES, DEPARTMENTS, STATUSES } from '../../Employer/data/employeeData'
+import { SETTINGS } from '../../Employer/data/settingsData'
+import { formatETB } from '../../Employer/lib/payroll'
+import AddEmployeeModal from '../../Employer/components/AddEmployeeModal'
+import EmployeeDetailsModal from '../../Employer/components/EmployeeDetailsModal'
+import DirectoryView from '../../Employer/components/DirectoryView'
+import OrgChartView from '../../Employer/components/OrgChartView'
+import { getCurrentEmployee } from '../../Employer/lib/currentUser'
+import { fetchEmployeesApi, createEmployeeApi, authHeaders } from '../../lib/hrApi'
 
-export default function HREmployees() {
-  const [employees, setEmployees] = useState(MOCK_EMPLOYEES)
-  const [search, setSearch] = useState('')
-  const [selectedDept, setSelectedDept] = useState('All')
-  const [selectedStatus, setSelectedStatus] = useState('All')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [activeEmployeeDetail, setActiveEmployeeDetail] = useState(null)
+function Employees() {
+  const currentEmployee = getCurrentEmployee()
+  const [employees, setEmployees] = useState(() => [currentEmployee])
+  const [dbError, setDbError] = useState('')
+  const [activeTab, setActiveTab] = useState('list')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedDept, setSelectedDept] = useState('All Departments')
+  const [selectedStatus, setSelectedStatus] = useState('All Statuses')
+  const [sortField, setSortField] = useState('name')
+  const [sortDirection, setSortDirection] = useState('asc')
 
-  const handleSaveEmployee = (newEmp) => {
-    setEmployees((prev) => [newEmp, ...prev])
+  const [selectedIds, setSelectedIds] = useState([])
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [editingEmployee, setEditingEmployee] = useState(null)
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
+  const [activeMenuId, setActiveMenuId] = useState(null)
+  const [showFilterPopover, setShowFilterPopover] = useState(false)
+  const [showSortPopover, setShowSortPopover] = useState(false)
+  const [recordsPerPage, setRecordsPerPage] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [toastMessage, setToastMessage] = useState(null)
+
+  const showToast = (msg) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(null), 3500)
   }
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadEmployees() {
+      try {
+        const data = await fetchEmployeesApi()
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          setEmployees(data)
+          setDbError('')
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Load employees error:', err)
+          setDbError(err.message || 'Unable to load employees from the database')
+        }
+      }
+    }
+
+    loadEmployees()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const toApiPayload = (emp) => ({
+    ...emp,
+    identityType: emp.identityType ?? emp.identityIdType ?? '',
+    identityNumber: emp.identityNumber ?? emp.identityIdNumber ?? '',
+    identityIssueDate: emp.identityIssueDate ?? emp.identityIssuedDate ?? '',
+    certifications: Array.isArray(emp.certificates)
+      ? emp.certificates.map((c) => ({
+          name: c.title || c.name || 'Untitled',
+          issuer: c.issuer || '',
+          issueDate: c.issueDate || '',
+          expiryDate: c.expiryDate || '',
+          fileName: c.name || '',
+          mimeType: c.type || '',
+          fileSize: c.size || 0,
+        }))
+      : emp.certifications,
+  })
+
   const filteredEmployees = useMemo(() => {
-    return employees.filter((emp) => {
-      const matchSearch =
-        emp.name.toLowerCase().includes(search.toLowerCase()) ||
-        emp.employeeId.toLowerCase().includes(search.toLowerCase()) ||
-        emp.jobTitle.toLowerCase().includes(search.toLowerCase())
-      const matchDept = selectedDept === 'All' || emp.department === selectedDept
-      const matchStatus = selectedStatus === 'All' || emp.employmentStatus === selectedStatus
-      return matchSearch && matchDept && matchStatus
-    })
-  }, [employees, search, selectedDept, selectedStatus])
+    return employees
+      .filter((emp) => {
+        const matchesSearch =
+          emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.jobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          emp.department.toLowerCase().includes(searchTerm.toLowerCase())
+
+        const matchesDept = selectedDept === 'All Departments' || emp.department === selectedDept
+        const matchesStatus =
+          selectedStatus === 'All Statuses' ||
+          emp.employmentStatus === selectedStatus ||
+          emp.status === selectedStatus
+
+        return matchesSearch && matchesDept && matchesStatus
+      })
+      .sort((a, b) => {
+        let fieldA = a[sortField] || ''
+        let fieldB = b[sortField] || ''
+        if (typeof fieldA === 'string') fieldA = fieldA.toLowerCase()
+        if (typeof fieldB === 'string') fieldB = fieldB.toLowerCase()
+        if (fieldA < fieldB) return sortDirection === 'asc' ? -1 : 1
+        if (fieldA > fieldB) return sortDirection === 'asc' ? 1 : -1
+        return 0
+      })
+  }, [employees, searchTerm, selectedDept, selectedStatus, sortField, sortDirection])
+
+  const handleSort = (field) => {
+    if (sortField === field) setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const handleSelectAll = (e) => {
+    setSelectedIds(e.target.checked ? filteredEmployees.map((emp) => emp.id) : [])
+  }
+
+  const handleSelectRow = (id) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
+
+  const handleAddEmployee = async (newEmp) => {
+    try {
+      const created = await createEmployeeApi(toApiPayload(newEmp))
+      setEmployees((prev) => [created, ...prev])
+      showToast(`Added ${created.name || newEmp.name} to the team`)
+    } catch (err) {
+      console.error('Create employee error:', err)
+      // Keep the UI responsive: add locally and surface the reason
+      setEmployees((prev) => [newEmp, ...prev])
+      showToast(err.message || 'Employee added locally — database write failed')
+    }
+  }
+
+  const handleUpdateStatus = (id, newStatus) => {
+    setEmployees(employees.map((e) => (e.id === id ? { ...e, status: newStatus, employmentStatus: newStatus } : e)))
+    if (selectedEmployee?.id === id) setSelectedEmployee((prev) => ({ ...prev, status: newStatus }))
+    showToast(`Updated status to ${newStatus}`)
+  }
+
+  const handleUpdateEmployee = (updated) => {
+    setEmployees((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)))
+    if (selectedEmployee?.id === updated.id) setSelectedEmployee(updated)
+    showToast(`Updated ${updated.name}`)
+  }
+
+  const handleDeleteEmployee = (id) => {
+    setEmployees(employees.filter((e) => e.id !== id))
+    setSelectedIds(selectedIds.filter((i) => i !== id))
+    showToast('Employee deleted successfully')
+    // Best-effort delete from the database (id may be a local-only record)
+    fetch(`/api/hr-manager/employees/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }).catch(() => {})
+  }
+
+  const handleBulkDelete = () => {
+    if (confirm(`Are you sure you want to delete ${selectedIds.length} employee(s)?`)) {
+      setEmployees(employees.filter((e) => !selectedIds.includes(e.id)))
+      setSelectedIds([])
+      showToast('Selected employees removed')
+    }
+  }
+
+  const handleExportCSV = () => {
+    const list = selectedIds.length > 0 ? employees.filter((e) => selectedIds.includes(e.id)) : filteredEmployees
+    const headers = ['Employee ID', 'Name', 'Gender', 'Job Title', 'Department', 'Employment Type', 'Basic Salary', 'TIN', 'Status']
+    const rows = list.map((e) => [
+      `"${e.employeeId}"`,
+      `"${e.name}"`,
+      `"${e.gender}"`,
+      `"${e.jobTitle}"`,
+      `"${e.department}"`,
+      `"${e.employmentType}"`,
+      `"${e.basicSalary}"`,
+      `"${e.tin}"`,
+      `"${e.employmentStatus}"`,
+    ])
+    const csv = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const link = document.createElement('a')
+    link.href = encodeURI(csv)
+    link.download = `employees_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showToast(`Exported ${list.length} employees to CSV`)
+  }
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto">
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-50 bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2.5 text-xs font-medium animate-in fade-in duration-200">
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-gray-950 dark:text-gray-100">Employee Directory</h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Master employee record repository • Scoped to {HR_SETTINGS.company.name}
-          </p>
-        </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-950 hover:bg-black text-white dark:hover:bg-gray-600 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-        >
-          <Plus size={16} />
-          <span>Add Employee</span>
-        </button>
-      </div>
-
-      {/* Filters Bar */}
-      <div className="bg-white dark:bg-[#15181d] p-4 rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative w-full md:w-80">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search by name, ID or job title..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-[#15181d] border border-gray-200 dark:border-[#33383f] rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-900 dark:text-gray-200 dark:placeholder:text-gray-500"
-          />
+          <h1 className="text-2xl font-bold tracking-tight text-gray-950 dark:text-gray-100">Employees</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Master employee registry — {employees.length} records, {SETTINGS.standardMonthlyHours} standard hours/mo</p>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-gray-500 dark:text-gray-400 font-medium">Department:</span>
-            <select
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="px-2.5 py-1.5 text-xs font-semibold bg-gray-50 dark:bg-[#15181d] border border-gray-200 dark:border-[#33383f] rounded-lg text-gray-800 dark:text-gray-200 focus:outline-none"
-            >
-              <option value="All">All Departments</option>
-              {HR_SETTINGS.departments.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-gray-500 dark:text-gray-400 font-medium">Status:</span>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="px-2.5 py-1.5 text-xs font-semibold bg-gray-50 dark:bg-[#15181d] border border-gray-200 dark:border-[#33383f] rounded-lg text-gray-800 dark:text-gray-200 focus:outline-none"
-            >
-              <option value="All">All Statuses</option>
-              {HR_SETTINGS.employmentStatuses.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleExportCSV}
+            className="px-4 py-2 rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d] hover:bg-gray-50 dark:hover:bg-[#1c2026] text-gray-800 dark:text-gray-200 text-xs font-semibold transition-colors flex items-center gap-2"
+          >
+            <Download size={14} />
+            Export CSV
+          </button>
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="px-4 py-2 rounded-lg bg-gray-950 hover:bg-gray-800 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
+          >
+            <Plus size={15} />
+            Add new
+          </button>
         </div>
       </div>
 
-      {/* Employees Table */}
-      <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-gray-50/80 dark:bg-[#1c2026] border-b border-gray-200 dark:border-[#262b31] text-gray-600 dark:text-gray-400 font-bold uppercase text-[10px] tracking-wider">
-              <tr>
-                <th className="py-3 px-4">Employee ID</th>
-                <th className="py-3 px-4">Full Name</th>
-                <th className="py-3 px-4">Department</th>
-                <th className="py-3 px-4">Job Title</th>
-                <th className="py-3 px-4">Type</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Basic Salary</th>
-                <th className="py-3 px-4">TIN Status</th>
-                <th className="py-3 px-4 text-right">Details</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-[#262b31] bg-white dark:bg-[#15181d]">
-              {filteredEmployees.map((emp) => {
-                const isTerminated = emp.employmentStatus === 'Terminated' || emp.employmentStatus === 'Resigned'
-                const hasTin = Boolean(emp.tin && emp.tin.trim() !== '')
+      {/* Database status banner */}
+      {dbError && (
+        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400">
+          <AlertCircle size={14} />
+          <span>{dbError}</span>
+        </div>
+      )}
 
-                return (
-                  <tr key={emp.employeeId} className="hover:bg-gray-50/70 dark:hover:bg-[#1c2026] transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-gray-900 dark:text-gray-100">{emp.employeeId}</td>
-                    <td className="py-3 px-4 font-bold text-gray-950 dark:text-gray-100">
-                      <div>{emp.name}</div>
-                      <div className="text-[10px] font-normal text-gray-400 dark:text-gray-500">{emp.email}</div>
-                    </td>
-                    <td className="py-3 px-4 font-medium text-gray-700 dark:text-gray-300">{emp.department}</td>
-                    <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{emp.jobTitle}</td>
-                    <td className="py-3 px-4">
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-gray-100 dark:bg-[#1c2026] text-gray-700 dark:text-gray-300">
-                        {emp.employmentType}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          emp.employmentStatus === 'Active'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : emp.employmentStatus === 'On Leave'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}
-                      >
-                        {emp.employmentStatus}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
-                      {formatETB(emp.basicSalary)}
-                    </td>
-                    <td className="py-3 px-4">
-                      {hasTin ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700">
-                          <CheckCircle2 size={12} /> {emp.tin}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                          <AlertCircle size={12} /> Missing TIN
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => setActiveEmployeeDetail(emp)}
-                        className="text-[11px] font-bold text-gray-900 dark:text-gray-100 hover:text-black underline cursor-pointer"
-                      >
-                        View Profile
-                      </button>
-                    </td>
+      {/* View switcher + controls */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="inline-flex p-1 bg-[#eceef1] dark:bg-[#1a1d21] rounded-xl border border-gray-200/70 dark:border-[#262b31] w-fit">
+          {[
+            { id: 'list', label: 'Table' },
+            { id: 'directory', label: 'Grid' },
+            { id: 'org', label: 'ORG Chart' },
+          ].map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === t.id ? 'bg-white dark:bg-[#15181d] text-gray-950 dark:text-gray-100 shadow-2xs' : 'text-gray-600 dark:text-gray-400 hover:text-gray-950 dark:hover:text-gray-100'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 pr-3 py-1.5 w-48 sm:w-56 text-xs bg-white dark:bg-[#15181d] border border-gray-200 dark:border-[#33383f] rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 dark:text-gray-200 shadow-2xs"
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          <div className="relative">
+            <button
+              onClick={() => { setShowFilterPopover(!showFilterPopover); setShowSortPopover(false) }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border flex items-center gap-1.5 transition-colors shadow-2xs ${
+                selectedDept !== 'All Departments' || selectedStatus !== 'All Statuses'
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold'
+                  : 'bg-white dark:bg-[#15181d] border-gray-200 dark:border-[#262b31] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+              }`}
+            >
+              <SlidersHorizontal size={13} />
+              <span>Filter</span>
+            </button>
+            {showFilterPopover && (
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] p-4 z-50">
+                <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-100 dark:border-[#262b31]">
+                  <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Filters</span>
+                  <button onClick={() => { setSelectedDept('All Departments'); setSelectedStatus('All Statuses') }} className="text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline">
+                    Reset
+                  </button>
+                </div>
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Department</label>
+                    <select value={selectedDept} onChange={(e) => setSelectedDept(e.target.value)} className="w-full p-1.5 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-gray-50 dark:bg-[#1c2026] focus:bg-white dark:focus:bg-gray-900 dark:text-gray-200">
+                      {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Status</label>
+                    <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="w-full p-1.5 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-gray-50 dark:bg-[#1c2026] focus:bg-white dark:focus:bg-gray-900 dark:text-gray-200">
+                      {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="relative">
+            <button
+              onClick={() => { setShowSortPopover(!showSortPopover); setShowFilterPopover(false) }}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d] hover:bg-gray-50 dark:hover:bg-[#1c2026] text-gray-700 dark:text-gray-300 flex items-center gap-1.5 shadow-2xs"
+            >
+              <ArrowUpDown size={13} />
+              <span>Sort</span>
+            </button>
+            {showSortPopover && (
+              <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] p-2 z-50">
+                <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-2 py-1">Sort By</p>
+                {[
+                  { label: 'Name', field: 'name' },
+                  { label: 'Employee ID', field: 'employeeId' },
+                  { label: 'Job Title', field: 'jobTitle' },
+                  { label: 'Department', field: 'department' },
+                  { label: 'Join Date', field: 'joinDate' },
+                ].map((opt) => (
+                  <button
+                    key={opt.field}
+                    onClick={() => { handleSort(opt.field); setShowSortPopover(false) }}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition-colors ${
+                      sortField === opt.field ? 'bg-gray-100 text-gray-950 font-semibold dark:bg-[#1c2026] dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {sortField === opt.field && (
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">{sortDirection === 'asc' ? '↑ ASC' : '↓ DESC'}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main view */}
+      {activeTab === 'directory' ? (
+        <DirectoryView
+          employees={filteredEmployees}
+          onSelectEmployee={(emp) => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+          onUpdateStatus={handleUpdateStatus}
+        />
+      ) : activeTab === 'org' ? (
+        <OrgChartView
+          employees={filteredEmployees}
+          onSelectEmployee={(emp) => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+        />
+      ) : (
+        <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-[#262b31] text-[11px] font-medium text-gray-500 dark:text-gray-400 select-none">
+                  <th className="py-3.5 pl-5 pr-2 w-10">
+                    <input
+                      type="checkbox"
+                      checked={filteredEmployees.length > 0 && selectedIds.length === filteredEmployees.length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 rounded border-gray-300 dark:border-[#33383f] text-gray-900 dark:text-gray-100 focus:ring-gray-900 cursor-pointer"
+                    />
+                  </th>
+                  <th className="py-3.5 px-3">
+                    <button onClick={() => handleSort('name')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
+                      <span>Name of employee</span>
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-3">
+                    <button onClick={() => handleSort('employeeId')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
+                      <span>Employee ID</span>
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-3">
+                    <button onClick={() => handleSort('jobTitle')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
+                      <span>Job title</span>
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-3">
+                    <button onClick={() => handleSort('department')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
+                      <span>Department</span>
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-3">
+                    <button onClick={() => handleSort('basicSalary')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
+                      <span>Basic</span>
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-3">
+                    <button onClick={() => handleSort('joinDate')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
+                      <span>Join date</span>
+                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-3 text-center">Status</th>
+                  <th className="py-3.5 pr-5 pl-2 text-right w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-[#262b31] text-xs">
+                {filteredEmployees.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-12 text-gray-400 dark:text-gray-500">No employees match your search or filter criteria.</td>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-5 py-3 border-t border-gray-100 dark:border-[#262b31] bg-gray-50/80 dark:bg-[#1c2026] text-[11px] text-gray-500 dark:text-gray-400 flex items-center justify-between">
-          <span>Showing {filteredEmployees.length} of {employees.length} employees</span>
-          <span className="font-mono text-[10px]">Master Directory Sync • EAT</span>
-        </div>
-      </div>
+                ) : (
+                  filteredEmployees.map((emp) => {
+                    const isSelected = selectedIds.includes(emp.id)
+                    const badgeColor =
+                      emp.employmentStatus === 'Active' || emp.status === 'Active'
+                        ? 'border-emerald-400 text-emerald-600'
+                        : emp.employmentStatus === 'On Leave' || emp.status === 'Onboarding'
+                          ? 'border-amber-300 text-amber-600'
+                          : 'border-rose-300 text-rose-500'
+                    return (
+                      <tr key={emp.id} className={`hover:bg-gray-50/70 dark:hover:bg-[#1c2026] transition-colors ${isSelected ? 'bg-gray-50/90 dark:bg-[#1c2026]' : ''}`}>
+                        <td className="py-3.5 pl-5 pr-2">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleSelectRow(emp.id)}
+                            className="w-4 h-4 rounded border-gray-300 dark:border-[#33383f] text-gray-900 dark:text-gray-100 focus:ring-gray-900 cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={emp.avatar}
+                              alt={emp.name}
+                              className="w-8 h-8 rounded-full object-cover bg-gray-100 dark:bg-[#1c2026] shrink-0"
+                              onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' }}
+                            />
+                            <div className="min-w-0">
+                              <p
+                                onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                                className="font-semibold text-gray-950 dark:text-gray-100 hover:text-indigo-600 cursor-pointer truncate"
+                              >
+                                {emp.name}
+                              </p>
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{emp.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span
+                            onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                            className="font-medium text-gray-900 dark:text-gray-100 underline underline-offset-2 decoration-gray-400 dark:decoration-gray-600 cursor-pointer hover:text-indigo-600 transition-colors"
+                          >
+                            {emp.employeeId}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300">{emp.jobTitle}</td>
+                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300">{emp.department}</td>
+                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatETB(emp.basicSalary)}</td>
+                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{emp.joinDate}</td>
+                        <td className="py-3.5 px-3 text-center">
+                          <span className={`border rounded-full px-3 py-0.5 text-[11px] font-medium inline-block text-center w-24 bg-white dark:bg-[#15181d] ${badgeColor}`}>
+                            {emp.employmentStatus === 'On Leave' && emp.status === 'Inactive' ? 'Inactive' : emp.employmentStatus}
+                          </span>
+                        </td>
+                        <td className="py-3.5 pr-5 pl-2 text-right relative">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              onClick={() => { setEditingEmployee(emp); setActiveMenuId(null) }}
+                              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors"
+                              title="Edit employee"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={() => setActiveMenuId(activeMenuId === emp.id ? null : emp.id)} className="p-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors">
+                              <MoreVertical size={16} />
+                            </button>
+                          </div>
+                          {activeMenuId === emp.id && (
+                            <div className="absolute right-6 top-8 w-40 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] py-1.5 z-40 text-left">
+                              <button onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true); setActiveMenuId(null) }} className="w-full px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] text-left">
+                                View details
+                              </button>
+                              <button
+                                onClick={() => { setEditingEmployee(emp); setActiveMenuId(null) }}
+                                className="w-full px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] text-left"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => { handleUpdateStatus(emp.id, emp.status === 'Active' ? 'Inactive' : 'Active'); setActiveMenuId(null) }}
+                                className="w-full px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] text-left"
+                              >
+                                Toggle Active/Inactive
+                              </button>
+                              <div className="my-1 border-t border-gray-100 dark:border-[#262b31]" />
+                              <button onClick={() => { handleDeleteEmployee(emp.id); setActiveMenuId(null) }} className="w-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 text-left">
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
-      {/* Employee Detail Modal */}
-      {activeEmployeeDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-[#15181d] rounded-2xl shadow-2xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-[#262b31] flex items-center justify-between bg-gray-50/80 dark:bg-[#1c2026]">
-              <div>
-                <h3 className="text-sm font-bold text-gray-950 dark:text-gray-100">{activeEmployeeDetail.name}</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{activeEmployeeDetail.employeeId} • {activeEmployeeDetail.jobTitle}</p>
-              </div>
-              <button
-                onClick={() => setActiveEmployeeDetail(null)}
-                className="text-gray-400 dark:text-gray-500 hover:text-gray-700 p-1.5"
+          <div className="px-5 py-4 border-t border-gray-100 dark:border-[#262b31] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+              <select
+                value={recordsPerPage}
+                onChange={(e) => setRecordsPerPage(Number(e.target.value))}
+                className="bg-transparent text-gray-700 dark:text-gray-300 font-medium py-1 px-2 rounded-lg border border-gray-200 dark:border-[#262b31] hover:border-gray-300 dark:hover:border-gray-700 focus:outline-none"
               >
-                <X size={18} />
+                <option value={10}>10 records</option>
+                <option value={20}>20 records</option>
+                <option value={50}>50 records</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} className="w-7 h-7 rounded-lg border border-gray-200 dark:border-[#262b31] flex items-center justify-center text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026] disabled:opacity-40">
+                <ChevronLeft size={14} />
+              </button>
+              <button onClick={() => setCurrentPage(1)} className={`w-7 h-7 rounded-lg text-xs font-semibold ${currentPage === 1 ? 'bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c2026]'}`}>
+                1
+              </button>
+              <button onClick={() => setCurrentPage(2)} className={`w-7 h-7 rounded-lg text-xs font-semibold ${currentPage === 2 ? 'bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c2026]'}`}>
+                2
+              </button>
+              <button disabled={currentPage === 2} onClick={() => setCurrentPage((p) => Math.min(2, p + 1))} className="w-7 h-7 rounded-lg border border-gray-200 dark:border-[#262b31] flex items-center justify-center text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026] disabled:opacity-40">
+                <ChevronRight size={14} />
               </button>
             </div>
-            <div className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-gray-50 dark:bg-[#15181d] rounded-xl border border-gray-100 dark:border-[#262b31]">
-                  <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 block">Department</span>
-                  <span className="font-semibold text-gray-900 dark:text-gray-100">{activeEmployeeDetail.department}</span>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-[#15181d] rounded-xl border border-gray-100 dark:border-[#262b31]">
-                  <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 block">Status</span>
-                  <span className="font-bold text-emerald-700">{activeEmployeeDetail.employmentStatus}</span>
-                </div>
-              </div>
-
-              <div className="p-3.5 bg-gray-50 dark:bg-[#15181d] rounded-xl border border-gray-100 dark:border-[#262b31] space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Basic Monthly Salary:</span>
-                  <span className="font-bold text-gray-950 dark:text-gray-100">{formatETB(activeEmployeeDetail.basicSalary)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Transport Allowance:</span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">{formatETB(activeEmployeeDetail.transportAllowance)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Housing Allowance:</span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">{formatETB(activeEmployeeDetail.housingAllowance)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Meal Allowance:</span>
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">{formatETB(activeEmployeeDetail.mealAllowance)}</span>
-                </div>
-              </div>
-
-              <div className="space-y-2 border-t border-gray-100 dark:border-[#262b31] pt-3">
-                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                  <CreditCard size={14} className="text-gray-400 dark:text-gray-500" />
-                  <span>Bank: {activeEmployeeDetail.bankName} • {activeEmployeeDetail.bankAccount || 'Missing Account #'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                  <FileText size={14} className="text-gray-400 dark:text-gray-500" />
-                  <span>TIN: {activeEmployeeDetail.tin || 'Not registered'}</span>
-                </div>
-              </div>
-            </div>
-            <div className="px-6 py-3 border-t border-gray-100 dark:border-[#262b31] bg-gray-50 dark:bg-[#15181d] flex justify-end">
-              <button
-                onClick={() => setActiveEmployeeDetail(null)}
-                className="px-4 py-1.5 rounded-lg bg-gray-900 text-white font-semibold text-xs"
-              >
-                Close
-              </button>
-            </div>
+            <div className="text-gray-500 dark:text-gray-400 font-medium">1 - {employees.length} of {employees.length}</div>
           </div>
         </div>
       )}
 
-      {/* Add Employee Modal */}
+      {/* Bulk action bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <span className="text-xs font-medium text-gray-300">{selectedIds.length} employee(s) selected</span>
+          <div className="h-4 w-px bg-gray-800" />
+          <button onClick={handleExportCSV} className="flex items-center gap-1.5 text-xs font-semibold text-white hover:text-gray-300">
+            <Download size={14} />
+            <span>Export CSV</span>
+          </button>
+          <button onClick={handleBulkDelete} className="flex items-center gap-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300">
+            <Trash2 size={14} />
+            <span>Delete</span>
+          </button>
+          <button onClick={() => setSelectedIds([])} className="p-1 text-gray-400 hover:text-white rounded-lg">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <AddEmployeeModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveEmployee}
-        existingEmployees={employees}
+        key={editingEmployee ? editingEmployee.id : 'new-employee'}
+        isOpen={isAddModalOpen || Boolean(editingEmployee)}
+        editingEmployee={editingEmployee}
+        onClose={() => { setIsAddModalOpen(false); setEditingEmployee(null) }}
+        onAdd={handleAddEmployee}
+        onEdit={handleUpdateEmployee}
+      />
+      <EmployeeDetailsModal
+        isOpen={isDetailsModalOpen}
+        employee={selectedEmployee}
+        onClose={() => { setIsDetailsModalOpen(false); setSelectedEmployee(null) }}
+        onUpdateStatus={handleUpdateStatus}
+        onDelete={handleDeleteEmployee}
+        onEdit={(emp) => {
+          setIsDetailsModalOpen(false)
+          setSelectedEmployee(null)
+          setEditingEmployee(emp)
+        }}
       />
     </div>
   )
 }
+
+export default Employees

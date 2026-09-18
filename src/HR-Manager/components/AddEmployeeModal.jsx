@@ -22,6 +22,9 @@ import {
   ShieldCheck,
   ChevronRight,
   Info,
+  IdCard,
+  Plus,
+  Landmark,
 } from 'lucide-react'
 import { HR_SETTINGS } from '../data/settingsData'
 import { lookupTax, isExempt } from '../lib/payroll'
@@ -67,6 +70,13 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
       email: '',
       address: '',
       emergencyContact: '',
+
+      // 1b. Government ID Verification
+      identityIdType: 'National ID (ET)',
+      identityIdNumber: '',
+      identityIssuedBy: '',
+      identityIssuedDate: '',
+      identityDocument: [],
 
       // 2. Job & Employment
       jobTitle: '',
@@ -154,6 +164,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
   const hasValidSalary = basicSalaryNum > 0
   const hasTin = Boolean(formData.tin.trim())
   const hasBankAccount = Boolean(formData.bankAccount.trim())
+  const hasIdentity = Boolean(formData.identityIdNumber.trim())
   const hasExitDateWhenNeeded = !shouldShowExitDate || Boolean(formData.exitDate)
 
   // Overall Data Check Status
@@ -167,6 +178,7 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
   const auditWarnings = []
   if (!hasTin) auditWarnings.push('Missing TIN (Will trigger audit review per Proc. 1395/2025)')
   if (isDuplicateTin) auditWarnings.push('Duplicate TIN detected across directory')
+  if (!hasIdentity) auditWarnings.push('Missing Government ID (Identity verification incomplete)')
   if (!hasBankAccount) auditWarnings.push('Missing Bank Account (Required for direct deposit)')
   if (shouldShowExitDate && !formData.exitDate) {
     auditWarnings.push(`Missing Exit Date for ${formData.employmentType} / ${formData.employmentStatus}`)
@@ -212,10 +224,22 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
   const handleFileChange = (field, e) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
-    if (field === 'cv') {
-      setFormData((prev) => ({ ...prev, cv: [files[0]] }))
+    if (field === 'cv' || field === 'identityDocument') {
+      setFormData((prev) => ({ ...prev, [field]: [files[0]] }))
     } else {
-      setFormData((prev) => ({ ...prev, certificates: [...prev.certificates, ...files] }))
+      setFormData((prev) => ({
+        ...prev,
+        certificates: [
+          ...prev.certificates,
+          ...files.map((f) => ({
+            id: `cert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            title: f.name.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' '),
+            issuer: '',
+            issueDate: '',
+            file: f,
+          })),
+        ],
+      }))
     }
     e.target.value = ''
   }
@@ -226,6 +250,38 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
       list.splice(index, 1)
       return { ...prev, [field]: list }
     })
+  }
+
+  const addCertificateEntry = () => {
+    setFormData((prev) => ({
+      ...prev,
+      certificates: [
+        ...prev.certificates,
+        {
+          id: `cert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          title: '',
+          issuer: '',
+          issueDate: '',
+          file: null,
+        },
+      ],
+    }))
+  }
+
+  const updateCertificateEntry = (certId, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      certificates: prev.certificates.map((c) =>
+        c.id === certId ? { ...c, [field]: value } : c
+      ),
+    }))
+  }
+
+  const removeCertificate = (certId) => {
+    setFormData((prev) => ({
+      ...prev,
+      certificates: prev.certificates.filter((c) => c.id !== certId),
+    }))
   }
 
   const formatFileSize = (bytes) => {
@@ -277,14 +333,30 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
       email: formData.email.trim(),
       address: formData.address.trim(),
       emergencyContact: formData.emergencyContact.trim(),
-      employmentStatus: formData.employmentStatus,
-      exitDate: shouldShowExitDate && formData.exitDate ? formData.exitDate : null,
-      certificates: formData.certificates.map((f) => ({
+      identityIdType: formData.identityIdType,
+      identityIdNumber: formData.identityIdNumber.trim(),
+      identityIssuedBy: formData.identityIssuedBy.trim(),
+      identityIssuedDate: formData.identityIssuedDate,
+      identityDocument: formData.identityDocument.map((f) => ({
         name: f.name,
         size: f.size,
         type: f.type,
         lastModified: f.lastModified,
       })),
+      employmentStatus: formData.employmentStatus,
+      exitDate: shouldShowExitDate && formData.exitDate ? formData.exitDate : null,
+      certificates: formData.certificates
+        .filter((c) => c.file || c.title.trim())
+        .map((c) => ({
+          id: c.id,
+          title: c.title.trim() || c.file?.name?.replace(/\.[^/.]+$/, '') || 'Untitled',
+          issuer: c.issuer.trim(),
+          issueDate: c.issueDate,
+          name: c.file?.name || c.title.trim(),
+          size: c.file?.size || 0,
+          type: c.file?.type || '',
+          lastModified: c.file?.lastModified || null,
+        })),
       cv: formData.cv.map((f) => ({
         name: f.name,
         size: f.size,
@@ -525,6 +597,137 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
                   onChange={(e) => handleChange('emergencyContact', e.target.value)}
                   className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 bg-white dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:placeholder:text-gray-500"
                 />
+              </div>
+            </div>
+
+            {/* 1b. Government ID Verification */}
+            <div
+              className={`rounded-xl border p-3.5 space-y-3 transition-colors ${
+                hasIdentity
+                  ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/10'
+                  : 'border-gray-200 dark:border-[#262b31] bg-gray-50/50 dark:bg-[#1c2026]'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <IdCard size={15} className="text-gray-900 dark:text-gray-100" />
+                  <h5 className="text-[11px] font-black uppercase tracking-wider text-gray-900 dark:text-gray-100">
+                    Government ID Verification
+                  </h5>
+                  {hasIdentity && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60">
+                      <CheckCircle2 size={11} /> Verified
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                  Optional — recommended for KYC / audit
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                {/* ID Type */}
+                <div>
+                  <label className="block font-bold text-gray-800 dark:text-gray-200 mb-1">
+                    ID Type
+                  </label>
+                  <select
+                    value={formData.identityIdType}
+                    onChange={(e) => handleChange('identityIdType', e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 bg-white dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:placeholder:text-gray-500 font-medium"
+                  >
+                    <option value="National ID (ET)">National ID (ET)</option>
+                    <option value="Kebele ID">Kebele ID</option>
+                    <option value="Passport">Passport</option>
+                    <option value="Driver License">Driver License</option>
+                    <option value="Student ID">Student ID</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                {/* ID Number */}
+                <div>
+                  <label className="block font-bold text-gray-800 dark:text-gray-200 mb-1">
+                    ID / Passport Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. ET-12345678"
+                    value={formData.identityIdNumber}
+                    onChange={(e) => handleChange('identityIdNumber', e.target.value)}
+                    className={`w-full px-3 py-2 text-xs rounded-lg border bg-white dark:bg-[#15181d] dark:text-gray-200 dark:placeholder:text-gray-500 focus:outline-none focus:ring-1 font-mono ${
+                      hasIdentity
+                        ? 'border-emerald-300 dark:border-emerald-700/60 focus:ring-emerald-500'
+                        : 'border-gray-300 dark:border-[#33383f] focus:ring-gray-900'
+                    }`}
+                  />
+                </div>
+
+                {/* Issued By */}
+                <div>
+                  <label className="block font-bold text-gray-800 dark:text-gray-200 mb-1">
+                    Issued By
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. GAIA / Kebele 04 / Passport Office"
+                    value={formData.identityIssuedBy}
+                    onChange={(e) => handleChange('identityIssuedBy', e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 bg-white dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:placeholder:text-gray-500"
+                  />
+                </div>
+
+                {/* Issue Date */}
+                <div>
+                  <label className="block font-bold text-gray-800 dark:text-gray-200 mb-1">
+                    Issue Date
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.identityIssuedDate}
+                    onChange={(e) => handleChange('identityIssuedDate', e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 bg-white dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:placeholder:text-gray-500"
+                  />
+                </div>
+              </div>
+
+              {/* ID Document Upload */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                  <Landmark size={13} className="text-gray-400" /> Attach ID scan / photo:
+                </span>
+                {formData.identityDocument.length === 0 ? (
+                  <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 dark:border-[#33383f] bg-white dark:bg-[#15181d] cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors">
+                    <UploadCloud size={14} className="text-gray-400" />
+                    <span className="text-xs text-gray-600 dark:text-gray-300">Upload document</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      className="hidden"
+                      onChange={(e) => handleFileChange('identityDocument', e)}
+                    />
+                  </label>
+                ) : (
+                  <div className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d]">
+                    <FileText size={15} className="text-emerald-600 shrink-0" />
+                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[180px]">
+                      {formData.identityDocument[0].name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeFile('identityDocument', 0)}
+                      className="text-gray-400 hover:text-rose-600 p-1 transition-colors shrink-0"
+                      title="Remove ID document"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                )}
+                {!hasIdentity && (
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                    No ID number yet — will show as an audit warning
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -933,54 +1136,144 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
                   <label className="block text-xs font-bold text-gray-800 dark:text-gray-200">
                     Certificates &amp; Credentials
                   </label>
-                  <span className="text-[10px] text-gray-400">Multiple allowed</span>
+                  <span className="text-[10px] text-gray-400">
+                    {formData.certificates.length} added
+                  </span>
                 </div>
-                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 dark:border-[#33383f] rounded-xl cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 bg-gray-50/50 dark:bg-[#1c2026] transition-colors">
-                  <UploadCloud size={20} className="text-gray-400 mb-1" />
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Add Certificates</span>
-                  <span className="text-[10px] text-gray-400">PDF, Images, etc.</span>
-                  <input
-                    type="file"
-                    multiple
-                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                    className="hidden"
-                    onChange={(e) => handleFileChange('certificates', e)}
-                  />
-                </label>
+                <div className="space-y-2">
+                  <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-gray-300 dark:border-[#33383f] rounded-xl cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 bg-gray-50/50 dark:bg-[#1c2026] transition-colors">
+                    <UploadCloud size={20} className="text-gray-400 mb-1" />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Quick-add files</span>
+                    <span className="text-[10px] text-gray-400">PDF, Images, etc. (multiple)</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                      className="hidden"
+                      onChange={(e) => handleFileChange('certificates', e)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addCertificateEntry}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-gray-300 dark:border-[#33383f] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors cursor-pointer"
+                  >
+                    <Plus size={14} className="text-gray-500" />
+                    Add Certificate (with details)
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Certificates List */}
             {formData.certificates.length > 0 && (
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-2 pt-1">
                 <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400">
                   Uploaded Certificates ({formData.certificates.length})
                 </span>
-                <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
-                  {formData.certificates.map((file, idx) => (
+                <div className="space-y-2">
+                  {formData.certificates.map((cert, idx) => (
                     <div
-                      key={idx}
-                      className="flex items-center justify-between p-2 rounded-lg border border-gray-200 dark:border-[#262b31] bg-gray-50 dark:bg-[#1c2026]"
+                      key={cert.id}
+                      className="rounded-lg border border-gray-200 dark:border-[#262b31] bg-gray-50 dark:bg-[#1c2026] p-3 space-y-2.5"
                     >
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <FileText size={15} className="text-emerald-600 shrink-0" />
-                        <div className="truncate">
-                          <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                            {file.name}
-                          </p>
-                          <p className="text-[10px] text-gray-400">{formatFileSize(file.size)}</p>
-                        </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5">
+                          <FileText size={13} className="text-emerald-600" />
+                          Certificate #{idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeCertificate(cert.id)}
+                          className="text-gray-400 hover:text-rose-600 p-1 transition-colors"
+                          title="Remove Certificate"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFile('certificates', idx)}
-                        className="text-gray-400 hover:text-rose-600 p-1 transition-colors"
-                        title="Remove Certificate"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <input
+                          type="text"
+                          placeholder="Title (e.g. BSc Computer Science)"
+                          value={cert.title}
+                          onChange={(e) => updateCertificateEntry(cert.id, 'title', e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 dark:placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Issued by (Institution)"
+                          value={cert.issuer}
+                          onChange={(e) => updateCertificateEntry(cert.id, 'issuer', e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 dark:placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                        />
+                        <input
+                          type="date"
+                          value={cert.issueDate}
+                          onChange={(e) => updateCertificateEntry(cert.id, 'issueDate', e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {cert.file ? (
+                          <>
+                            <div className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d]">
+                              <FileText size={14} className="text-emerald-600 shrink-0" />
+                              <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[160px]">
+                                {cert.file.name}
+                              </span>
+                              <span className="text-[10px] text-gray-400 shrink-0">
+                                {formatFileSize(cert.file.size)}
+                              </span>
+                            </div>
+                            <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-[#33383f] bg-white dark:bg-[#15181d] text-[11px] font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors">
+                              <UploadCloud size={12} className="text-gray-400" />
+                              Replace
+                              <input
+                                type="file"
+                                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                                className="hidden"
+                                onChange={(e) =>
+                                  updateCertificateEntry(cert.id, 'file', e.target.files?.[0] || null)
+                                }
+                              />
+                            </label>
+                          </>
+                        ) : (
+                          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 dark:border-[#33383f] bg-white dark:bg-[#15181d] text-[11px] font-semibold text-gray-600 dark:text-gray-300 cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors">
+                            <UploadCloud size={12} className="text-gray-400" />
+                            Attach file
+                            <input
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                              className="hidden"
+                              onChange={(e) =>
+                                updateCertificateEntry(cert.id, 'file', e.target.files?.[0] || null)
+                              }
+                            />
+                          </label>
+                        )}
+                        {(cert.title || cert.file) && (
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                            <CheckCircle2 size={11} className="text-emerald-600" />
+                            Will be saved
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={addCertificateEntry}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors cursor-pointer"
+                  >
+                    <Plus size={13} className="text-gray-500" />
+                    Add more certificate
+                  </button>
                 </div>
               </div>
             )}
@@ -1021,7 +1314,19 @@ export default function AddEmployeeModal({ isOpen, onClose, onSave, existingEmpl
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
+                <div className="bg-white dark:bg-[#15181d] p-2.5 rounded-lg border border-gray-200 dark:border-[#262b31]">
+                  <span className="text-gray-500 dark:text-gray-400 block">Identity / KYC</span>
+                  <span
+                    className={`font-bold inline-flex items-center gap-1 mt-0.5 ${
+                      hasIdentity ? 'text-emerald-700' : 'text-amber-700'
+                    }`}
+                  >
+                    {hasIdentity ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                    {hasIdentity ? `${formData.identityIdType} Verified` : 'Missing (KYC Flag)'}
+                  </span>
+                </div>
+
                 <div className="bg-white dark:bg-[#15181d] p-2.5 rounded-lg border border-gray-200 dark:border-[#262b31]">
                   <span className="text-gray-500 dark:text-gray-400 block">ID Validation</span>
                   <span

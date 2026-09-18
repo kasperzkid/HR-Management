@@ -83,10 +83,10 @@ function HRSidebar({ mobileOpen = false, onClose }) {
 
   const sidebarClass = (active, collapsedItem) =>
     [
-      'relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap',
+      'relative flex items-center gap-3 border-l-[3px] px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap',
       active
-        ? 'bg-slate-100 text-slate-950 font-semibold'
-        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+        ? 'border-slate-900 bg-slate-100 text-slate-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+        : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-[#1c2026] dark:hover:text-slate-100',
       collapsedItem ? 'justify-center' : '',
     ].join(' ')
 
@@ -147,7 +147,7 @@ function HRSidebar({ mobileOpen = false, onClose }) {
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-slate-200/70 bg-slate-50/80 py-1.5 pl-9 pr-12 text-xs text-slate-800 outline-none transition-all placeholder:text-slate-400 hover:bg-slate-100/80 focus:border-slate-400 focus:bg-white focus:ring-1 focus:ring-slate-300"
+                className="w-full rounded-lg border border-slate-200/70 bg-slate-50/80 py-2 pl-9 pr-12 text-[13px] text-slate-800 outline-none transition-all placeholder:text-slate-400 hover:bg-slate-100/80 focus:border-slate-400 focus:bg-white focus:ring-1 focus:ring-slate-300"
               />
               <span className="absolute right-2 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400 shadow-2xs">
                 ⌘ F
@@ -168,7 +168,7 @@ function HRSidebar({ mobileOpen = false, onClose }) {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-5">
           {!collapsed && (
-            <p className="px-3 pb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <p className="px-3 pb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
               HR Management
             </p>
           )}
@@ -185,9 +185,6 @@ function HRSidebar({ mobileOpen = false, onClose }) {
                   collapsed
                 )}
               >
-                {isRouteActive('/hr-manager/dashboard') && (
-                  <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full bg-slate-900" />
-                )}
                 <LayoutDashboard
                   size={19}
                   strokeWidth={2}
@@ -206,18 +203,18 @@ function HRSidebar({ mobileOpen = false, onClose }) {
 
               return (
                 <div key={section.key} className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => !collapsed && toggleSection(section.key)}
-                    title={collapsed ? section.label : undefined}
-                    className={[
-                      'flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap',
-                      collapsed ? 'justify-center' : '',
-                      sectionActive
-                        ? 'text-slate-950'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
-                    ].join(' ')}
-                  >
+<button
+                      type="button"
+                      onClick={() => !collapsed && toggleSection(section.key)}
+                      title={collapsed ? section.label : undefined}
+                      className={[
+                        'flex w-full items-center justify-between border-l-[3px] px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap',
+                        collapsed ? 'justify-center' : '',
+                        collapsed && sectionActive
+                          ? 'border-slate-900 bg-slate-100/70 text-slate-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                          : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-[#1c2026] dark:hover:text-slate-100',
+                      ].join(' ')}
+                    >
                     <div className="flex items-center gap-3">
                       <SectionIcon
                         size={19}
@@ -247,18 +244,13 @@ function HRSidebar({ mobileOpen = false, onClose }) {
                               to={item.path}
                               onClick={onClose}
                               className={[
-                                'relative flex items-center rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors',
+                                'relative flex items-center border-l-[3px] px-3 py-2 text-sm transition-colors',
                                 active
-                                  ? 'bg-slate-100/60 font-semibold text-slate-950'
-                                  : 'hover:bg-slate-100 hover:text-slate-950',
+                                  ? 'border-slate-900 bg-slate-50/60 font-semibold text-slate-950 dark:border-white dark:bg-slate-900/40 dark:text-white'
+                                  : 'border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900/30 dark:hover:text-slate-100',
                               ].join(' ')}
                             >
-                              {active && (
-                                <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full bg-slate-900" />
-                              )}
-                              <span className={active ? 'ml-1' : ''}>
-                                {item.label}
-                              </span>
+                              <span>{item.label}</span>
                             </Link>
                           )
                         })}
@@ -283,9 +275,6 @@ function HRSidebar({ mobileOpen = false, onClose }) {
                     title={collapsed ? item.label : undefined}
                     className={sidebarClass(active, collapsed)}
                   >
-                    {active && (
-                      <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full bg-slate-900" />
-                    )}
                     <Icon
                       size={19}
                       strokeWidth={2}

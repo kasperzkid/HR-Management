@@ -15,6 +15,7 @@ Check,
 } from 'lucide-react'
 import Topbar from './Topbar'
 import ProfileMenu from './ProfileMenu'
+import PunchWidget from './PunchWidget'
 import { useMessaging } from '../context/messagingStore'
 
 function EmployerLayout() {
@@ -69,6 +70,7 @@ function EmployerLayout() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <PunchWidget />
           <Link
             to="/employer/inbox"
             className="relative p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors"
@@ -129,7 +131,7 @@ function EmployerLayout() {
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-12 py-1.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white dark:bg-[#15181d] dark:hover:bg-[#1c2026] dark:focus:bg-gray-900 text-xs text-gray-800 dark:text-gray-200 rounded-lg border border-gray-200/70 dark:border-[#33383f] focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-400"
+                  className="w-full pl-9 pr-12 py-2 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white dark:bg-[#15181d] dark:hover:bg-[#1c2026] dark:focus:bg-gray-900 text-[13px] text-gray-800 dark:text-gray-200 rounded-lg border border-gray-200/70 dark:border-[#33383f] focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-400"
                 />
                 <span className="absolute right-2 text-[10px] font-medium text-gray-400 dark:text-gray-500 bg-white dark:bg-[#1c2026] px-1.5 py-0.5 rounded border border-gray-200 dark:border-[#33383f] shadow-2xs">
                   ⌘ F
@@ -149,14 +151,14 @@ function EmployerLayout() {
             {/* Dashboard Item */}
             <Link
               to="/employer/dashboard"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              className={`relative flex items-center gap-3 border-l-[3px] px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
                 isRouteActive('/employer/dashboard') && !location.pathname.includes('/employee')
-                  ? 'bg-gray-100 text-gray-950 font-semibold dark:bg-[#1c2026] dark:text-white'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
+                  ? 'border-gray-950 bg-gray-100 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
               }`}
               title={collapsed ? 'Dashboard' : undefined}
             >
-              <LayoutDashboard size={16} className="shrink-0 text-gray-500" />
+              <LayoutDashboard size={18} className="shrink-0 text-gray-500" />
               {!collapsed && <span>Dashboard</span>}
             </Link>
 
@@ -164,12 +166,17 @@ function EmployerLayout() {
             <div className="pt-1">
               <button
                 onClick={() => !collapsed && toggleSection('teams')}
-                className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors whitespace-nowrap ${
+                className={`w-full flex items-center justify-between border-l-[3px] px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors whitespace-nowrap ${
                   collapsed ? 'justify-center' : ''
+                } ${
+                  collapsed && (isRouteActive('/employer/attendance') ||
+                    isRouteActive('/employer/leave'))
+                    ? 'border-gray-950 bg-gray-100/70 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                    : 'border-transparent text-gray-700 dark:text-gray-300'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Users size={16} className="shrink-0 text-gray-500" />
+                  <Users size={18} className="shrink-0 text-gray-500" />
                   {!collapsed && <span className="font-semibold text-gray-900 dark:text-gray-100">Teams</span>}
                 </div>
                 {!collapsed && (
@@ -186,26 +193,22 @@ function EmployerLayout() {
               {(!collapsed && expandedSections.teams) && (
                 <div className="pl-4 pr-1 mt-0.5 space-y-0.5 whitespace-nowrap">
                   <Link
-                    to="/employer/employee"
-                    data-nav-active={isRouteActive('/employer/employee') ? 'true' : undefined}
-                    className={`relative flex items-center px-3 py-1.5 text-xs rounded-md ${
-                      isRouteActive('/employer/employee')
-                        ? 'text-gray-950 dark:text-white font-semibold bg-gray-50/60 dark:bg-[#1c2026]'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-                    }`}
-                  >
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-gray-950 dark:bg-gray-100 rounded-r-full" />
-                    <span className="ml-1">Employee</span>
-                  </Link>
-                  <Link
                     to="/employer/attendance"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors"
+                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                      isRouteActive('/employer/attendance')
+                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                    }`}
                   >
                     Attendance
                   </Link>
                   <Link
                     to="/employer/leave"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors"
+                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                      isRouteActive('/employer/leave')
+                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                    }`}
                   >
                     Leave
                   </Link>
@@ -217,12 +220,18 @@ function EmployerLayout() {
             <div className="pt-1">
               <button
                 onClick={() => !collapsed && toggleSection('finance')}
-                className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors whitespace-nowrap ${
+                className={`w-full flex items-center justify-between border-l-[3px] px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors whitespace-nowrap ${
                   collapsed ? 'justify-center' : ''
+                } ${
+                  collapsed && (isRouteActive('/employer/payroll') ||
+                    isRouteActive('/employer/payslips') ||
+                    isRouteActive('/employer/payment-info'))
+                    ? 'border-gray-950 bg-gray-100/70 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                    : 'border-transparent text-gray-700 dark:text-gray-300'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <BadgeDollarSign size={16} className="shrink-0 text-gray-500" />
+                  <BadgeDollarSign size={18} className="shrink-0 text-gray-500" />
                   {!collapsed && <span className="font-semibold text-gray-900 dark:text-gray-100">Finance</span>}
                 </div>
                 {!collapsed && (
@@ -239,19 +248,31 @@ function EmployerLayout() {
                 <div className="pl-4 pr-1 mt-0.5 space-y-0.5 whitespace-nowrap">
                   <Link
                     to="/employer/payroll"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors"
+                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                      isRouteActive('/employer/payroll')
+                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                    }`}
                   >
                     Payroll
                   </Link>
                   <Link
                     to="/employer/payslips"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors"
+                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                      isRouteActive('/employer/payslips')
+                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                    }`}
                   >
                     Payslips
                   </Link>
                   <Link
                     to="/employer/payment-info"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors"
+                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                      isRouteActive('/employer/payment-info')
+                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                    }`}
                   >
                     Payment information
                   </Link>
@@ -263,14 +284,14 @@ function EmployerLayout() {
             <div className="pt-6 space-y-1 border-t border-gray-100 dark:border-[#262b31]">
               <Link
                 to="/employer/reports"
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`relative flex items-center gap-3 border-l-[3px] px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
                   isRouteActive('/employer/reports')
-                    ? 'bg-gray-100 text-gray-950 font-semibold dark:bg-[#1c2026] dark:text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
+                    ? 'border-gray-950 bg-gray-100 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
                 }`}
                 title={collapsed ? 'Reports' : undefined}
               >
-                <BarChart3 size={16} className="shrink-0 text-gray-500" />
+                <BarChart3 size={18} className="shrink-0 text-gray-500" />
                 {!collapsed && <span>Reports</span>}
               </Link>
             </div>
@@ -280,17 +301,17 @@ function EmployerLayout() {
           <div className="p-3 border-t border-gray-100 dark:border-[#262b31]">
             <Link
               to="/employer/settings"
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+              className={`w-full flex items-center gap-3 border-l-[3px] px-3 py-2 transition-all ${
                 isRouteActive('/employer/settings') || isRouteActive('/employer/admin')
-                  ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950 font-bold shadow-xs'
-                  : 'text-gray-600 hover:text-gray-950 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#1c2026] font-medium'
+                  ? 'border-white bg-gray-950 text-white font-bold shadow-xs dark:border-gray-950 dark:bg-white dark:text-gray-950'
+                  : 'border-transparent text-gray-600 hover:text-gray-950 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#1c2026] font-medium'
               } ${collapsed ? 'justify-center px-2' : ''}`}
               title={collapsed ? 'Settings' : undefined}
             >
               <SettingsIcon size={18} className="shrink-0" />
               {!collapsed && (
                 <div className="flex-1 min-w-0 flex items-center justify-between">
-                  <span className="text-xs">Settings</span>
+                  <span className="text-sm">Settings</span>
                   <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 uppercase font-semibold">Config</span>
                 </div>
               )}

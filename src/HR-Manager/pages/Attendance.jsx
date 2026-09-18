@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { authHeaders } from '../../lib/hrApi'
 import {
   CalendarDays,
   Check,
@@ -7,11 +8,14 @@ import {
   Clock3,
   Loader2,
   Save,
-  Search,
   X,
 } from 'lucide-react'
+import LuxuryDataTable from '../components/LuxuryDataTable'
 
-const API_URL = 'http://localhost:4000/api/hr-manager'
+const API_URL = '/api/hr-manager'
+
+const selectClass =
+  'h-9 pl-2.5 pr-7 text-xs border border-slate-200 dark:border-[#262b31] rounded-xl bg-white dark:bg-[#1c2026] text-slate-800 dark:text-gray-200 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium'
 
 const MONTHS = [
   'January',
@@ -484,10 +488,16 @@ function Attendance() {
         ] = await Promise.all([
           fetch(
             `${API_URL}/employees`,
+            {
+              headers: authHeaders(),
+            },
           ),
 
           fetch(
             `${API_URL}/attendance?startDate=${monthStart}&endDate=${monthEnd}`,
+            {
+              headers: authHeaders(),
+            },
           ),
         ])
 
@@ -659,6 +669,153 @@ function Attendance() {
       },
     )
   }, [summaries])
+
+  const resetFilters = () => {
+    setSearch('')
+    setDepartment('All Departments')
+  }
+
+  const tableRows = useMemo(
+    () =>
+      filteredRows.map((row) => ({
+        ...row,
+        ...calculateSummary(row.employee, row.attendance, year, month),
+      })),
+    [filteredRows, year, month],
+  )
+
+  const columns = (() => {
+    const dayColumns = Array.from(
+      { length: daysInMonth },
+      (_, index) => {
+        const day = index + 1
+        const info = getDayInfo(year, month, day)
+        const dateKey = getDateKey(year, month, day)
+
+        return {
+          key: `day-${day}`,
+          header: `${day} ${info.dayName}`,
+          align: 'center',
+          className: info.isWeekend ? 'bg-slate-100' : '',
+          exportValue: (row) => row.attendance[dateKey]?.code || '',
+          render: (row) => (
+            <CodePicker
+              value={row.attendance[dateKey]?.code || ''}
+              disabled={info.isWeekend}
+              onChange={(code) =>
+                updateAttendanceCode(row.employeeKey, dateKey, code)
+              }
+            />
+          ),
+        }
+      },
+    )
+
+    return [
+      {
+        key: 'employeeId',
+        header: 'Employee ID',
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs font-bold text-slate-700">
+            {row.employeeId}
+          </span>
+        ),
+      },
+      {
+        key: 'name',
+        header: 'Employee Name',
+        sortable: true,
+        render: (row) => (
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
+              {getInitials(row.name)}
+            </div>
+            <span className="whitespace-nowrap text-sm font-semibold text-slate-800">
+              {row.name}
+            </span>
+          </div>
+        ),
+      },
+      {
+        key: 'department',
+        header: 'Department',
+        sortable: true,
+        render: (row) => (
+          <span className="whitespace-nowrap text-xs text-slate-500">
+            {row.department}
+          </span>
+        ),
+      },
+      ...dayColumns,
+      {
+        key: 'workingDays',
+        header: 'Working',
+        align: 'center',
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs font-semibold text-slate-700">
+            {row.workingDays}
+          </span>
+        ),
+      },
+      {
+        key: 'present',
+        header: 'Present',
+        align: 'center',
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs font-semibold text-emerald-700">
+            {row.present}
+          </span>
+        ),
+      },
+      {
+        key: 'absent',
+        header: 'Absent',
+        align: 'center',
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs font-semibold text-red-700">
+            {row.absent}
+          </span>
+        ),
+      },
+      {
+        key: 'leave',
+        header: 'Leave',
+        align: 'center',
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs font-semibold text-amber-700">
+            {row.leave}
+          </span>
+        ),
+      },
+      {
+        key: 'overtime',
+        header: 'OT',
+        align: 'center',
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs font-semibold text-blue-700">
+            {row.overtime.toFixed(1)}
+          </span>
+        ),
+      },
+      {
+        key: 'lateMinutes',
+        header: 'Late',
+        align: 'center',
+        sortable: true,
+        render: (row) => (
+          <span className="text-xs font-semibold text-slate-700">
+            {row.lateMinutes}
+          </span>
+        ),
+      },
+    ]
+  })()
 
   /*
    * Update an attendance code locally.
@@ -932,6 +1089,7 @@ function Attendance() {
                 `${API_URL}/attendance/${record.id}`,
                 {
                   method: 'DELETE',
+                  headers: authHeaders(),
                 },
               )
 
@@ -1038,6 +1196,7 @@ function Attendance() {
                   headers: {
                     'Content-Type':
                       'application/json',
+                    ...authHeaders(),
                   },
                   body: JSON.stringify(
                     payload,
@@ -1073,6 +1232,7 @@ function Attendance() {
                 headers: {
                   'Content-Type':
                     'application/json',
+                  ...authHeaders(),
                 },
                 body: JSON.stringify(
                   payload,
@@ -1103,6 +1263,9 @@ function Attendance() {
       const refreshedResponse =
         await fetch(
           `${API_URL}/attendance?startDate=${monthStart}&endDate=${monthEnd}`,
+          {
+            headers: authHeaders(),
+          },
         )
 
       if (!refreshedResponse.ok) {
@@ -1213,7 +1376,7 @@ function Attendance() {
             disabled={
               saving || loading
             }
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
           >
             {saving ? (
               <Loader2
@@ -1243,191 +1406,6 @@ function Attendance() {
             {successMessage}
           </div>
         )}
-
-        {/* Month / Year controls */}
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-wrap items-end gap-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Month
-                </label>
-
-                <select
-                  value={month}
-                  onChange={(event) =>
-                    setMonth(
-                      Number(
-                        event.target
-                          .value,
-                      ),
-                    )
-                  }
-                  className="h-11 min-w-40 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  {MONTHS.map(
-                    (
-                      monthName,
-                      index,
-                    ) => (
-                      <option
-                        key={
-                          monthName
-                        }
-                        value={
-                          index
-                        }
-                      >
-                        {monthName}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Year
-                </label>
-
-                <select
-                  value={year}
-                  onChange={(event) =>
-                    setYear(
-                      Number(
-                        event.target
-                          .value,
-                      ),
-                    )
-                  }
-                  className="h-11 min-w-28 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  {Array.from(
-                    {
-                      length: 11,
-                    },
-                    (
-                      _,
-                      index,
-                    ) =>
-                      getCurrentYear() -
-                      5 +
-                      index,
-                  ).map(
-                    (
-                      yearValue,
-                    ) => (
-                      <option
-                        key={
-                          yearValue
-                        }
-                        value={
-                          yearValue
-                        }
-                      >
-                        {yearValue}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={
-                  previousMonth
-                }
-                className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                title="Previous month"
-              >
-                <ChevronLeft
-                  size={18}
-                />
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  nextMonth
-                }
-                className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                title="Next month"
-              >
-                <ChevronRight
-                  size={18}
-                />
-              </button>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {ATTENDANCE_CODES.map(
-                (item) => (
-                  <div
-                    key={
-                      item.code
-                    }
-                    className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold ${
-                      CODE_CLASSES[
-                        item.code
-                      ]
-                    }`}
-                    title={
-                      item.label
-                    }
-                  >
-                    {item.code}
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="mb-5 grid gap-3 md:grid-cols-[1fr_220px]">
-          <div className="relative">
-            <Search
-              size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-
-            <input
-              value={search}
-              onChange={(event) =>
-                setSearch(
-                  event.target
-                    .value,
-                )
-              }
-              placeholder="Search employee ID or name..."
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-slate-400"
-            />
-          </div>
-
-          <select
-            value={
-              department
-            }
-            onChange={(event) =>
-              setDepartment(
-                event.target
-                  .value,
-              )
-            }
-            className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-          >
-            {departments.map(
-              (item) => (
-                <option
-                  key={item}
-                  value={item}
-                >
-                  {item}
-                </option>
-              ),
-            )}
-          </select>
-        </div>
 
         {/* KPI cards */}
         <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -1492,298 +1470,8 @@ function Attendance() {
           </div>
         </div>
 
-        {/* Attendance grid */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-            <div>
-              <h2 className="font-bold text-slate-900">
-                Daily Attendance Grid
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                {MONTHS[month]}{' '}
-                {year} ·{' '}
-                {daysInMonth}{' '}
-                days
-              </p>
-            </div>
-
-            <div className="hidden items-center gap-2 text-xs text-slate-500 md:flex">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Database connected
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="flex min-h-[300px] items-center justify-center">
-              <div className="flex items-center gap-3 text-sm font-medium text-slate-500">
-                <Loader2
-                  size={20}
-                  className="animate-spin"
-                />
-                Loading attendance...
-              </div>
-            </div>
-          ) : filteredRows.length === 0 ? (
-            <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center">
-              <CalendarDays
-                size={36}
-                className="text-slate-300"
-              />
-
-              <h3 className="mt-4 font-semibold text-slate-800">
-                No employees found
-              </h3>
-
-              <p className="mt-1 max-w-md text-sm text-slate-500">
-                Add employees in Employee
-                Management or change the
-                current search and department
-                filters.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-[1800px] border-collapse">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="sticky left-0 z-20 min-w-28 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                      Employee ID
-                    </th>
-
-                    <th className="sticky left-28 z-20 min-w-52 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                      Employee Name
-                    </th>
-
-                    <th className="sticky left-[20.5rem] z-20 min-w-36 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                      Department
-                    </th>
-
-                    {Array.from(
-                      {
-                        length:
-                          daysInMonth,
-                      },
-                      (_, index) => {
-                        const day =
-                          index + 1
-
-                        const info =
-                          getDayInfo(
-                            year,
-                            month,
-                            day,
-                          )
-
-                        return (
-                          <th
-                            key={day}
-                            className={`min-w-[58px] border-b border-r border-slate-200 px-1 py-2 text-center ${
-                              info.isWeekend
-                                ? 'bg-slate-100'
-                                : 'bg-slate-50'
-                            }`}
-                          >
-                            <div className="text-xs font-bold text-slate-700">
-                              {day}
-                            </div>
-
-                            <div className="text-[9px] font-medium uppercase text-slate-400">
-                              {
-                                info.dayName
-                              }
-                            </div>
-                          </th>
-                        )
-                      },
-                    )}
-
-                    <th className="min-w-24 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Working
-                    </th>
-
-                    <th className="min-w-20 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Present
-                    </th>
-
-                    <th className="min-w-20 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Absent
-                    </th>
-
-                    <th className="min-w-20 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Leave
-                    </th>
-
-                    <th className="min-w-20 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      OT
-                    </th>
-
-                    <th className="min-w-20 border-b border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Late
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredRows.map(
-                    (row) => {
-                      const summary =
-                        calculateSummary(
-                          row.employee,
-                          row.attendance,
-                          year,
-                          month,
-                        )
-
-                      return (
-                        <tr
-                          key={
-                            row.employeeKey
-                          }
-                          className="hover:bg-slate-50/70"
-                        >
-                          <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-white px-3 py-3">
-                            <span className="text-xs font-bold text-slate-700">
-                              {
-                                row.employeeId
-                              }
-                            </span>
-                          </td>
-
-                          <td className="sticky left-28 z-10 border-b border-r border-slate-200 bg-white px-3 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
-                                {getInitials(
-                                  row.name,
-                                )}
-                              </div>
-
-                              <span className="whitespace-nowrap text-sm font-semibold text-slate-800">
-                                {
-                                  row.name
-                                }
-                              </span>
-                            </div>
-                          </td>
-
-                          <td className="sticky left-[20.5rem] z-10 border-b border-r border-slate-200 bg-white px-3 py-3">
-                            <span className="whitespace-nowrap text-xs text-slate-500">
-                              {
-                                row.department
-                              }
-                            </span>
-                          </td>
-
-                          {Array.from(
-                            {
-                              length:
-                                daysInMonth,
-                            },
-                            (_, index) => {
-                              const day =
-                                index + 1
-
-                              const dateKey =
-                                getDateKey(
-                                  year,
-                                  month,
-                                  day,
-                                )
-
-                              const info =
-                                getDayInfo(
-                                  year,
-                                  month,
-                                  day,
-                                )
-
-                              const record =
-                                row
-                                  .attendance[
-                                  dateKey
-                                ]
-
-                              return (
-                                <td
-                                  key={
-                                    dateKey
-                                  }
-                                  className={`border-b border-r border-slate-200 px-1 py-2 text-center ${
-                                    info.isWeekend
-                                      ? 'bg-slate-50'
-                                      : ''
-                                  }`}
-                                >
-                                  <CodePicker
-                                    value={
-                                      record?.code ||
-                                      ''
-                                    }
-                                    disabled={
-                                      info.isWeekend
-                                    }
-                                    onChange={(
-                                      code,
-                                    ) =>
-                                      updateAttendanceCode(
-                                        row.employeeKey,
-                                        dateKey,
-                                        code,
-                                      )
-                                    }
-                                  />
-                                </td>
-                              )
-                            },
-                          )}
-
-                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700">
-                            {
-                              summary.workingDays
-                            }
-                          </td>
-
-                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-emerald-700">
-                            {
-                              summary.present
-                            }
-                          </td>
-
-                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-red-700">
-                            {
-                              summary.absent
-                            }
-                          </td>
-
-                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-amber-700">
-                            {
-                              summary.leave
-                            }
-                          </td>
-
-                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-blue-700">
-                            {summary.overtime.toFixed(
-                              1,
-                            )}
-                          </td>
-
-                          <td className="border-b border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700">
-                            {
-                              summary.lateMinutes
-                            }
-                          </td>
-                        </tr>
-                      )
-                    },
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Workbook terminology */}
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Attendance Codes */}
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-bold text-slate-900">
             Attendance Codes
           </h3>
@@ -1819,8 +1507,112 @@ function Attendance() {
             )}
           </div>
         </div>
+
+        {/* Attendance grid (Luxury) */}
+        <LuxuryDataTable
+          title="Daily Attendance Grid"
+          subtitle={`${MONTHS[month]} ${year} · ${daysInMonth} days`}
+          countBadge={filteredRows.length}
+          columns={columns}
+          data={tableRows}
+          loading={loading}
+          searchable
+          searchKeys={['name', 'employeeId']}
+          searchTerm={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search employee ID or name..."
+          exportable
+          exportFilename="HR_Attendance"
+          paginated
+          defaultPageSize={10}
+          emptyMessage="No employees found. Add employees in Employee Management or change the search and department filters."
+          onResetFilters={resetFilters}
+          scrollable
+          minWidth="2400px"
+          filterControls={
+            <>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="text-xs font-medium whitespace-nowrap text-slate-500">
+                  Month
+                </span>
+                <select
+                  value={month}
+                  onChange={(event) =>
+                    setMonth(Number(event.target.value))
+                  }
+                  className={selectClass}
+                >
+                  {MONTHS.map((monthName, index) => (
+                    <option key={monthName} value={index}>
+                      {monthName}
+                    </option>
+                  ))}
+                </select>
+
+                <span className="text-xs font-medium whitespace-nowrap text-slate-500">
+                  Year
+                </span>
+                <select
+                  value={year}
+                  onChange={(event) =>
+                    setYear(Number(event.target.value))
+                  }
+                  className={selectClass}
+                >
+                  {Array.from(
+                    { length: 11 },
+                    (_, index) => getCurrentYear() - 5 + index,
+                  ).map((yearValue) => (
+                    <option key={yearValue} value={yearValue}>
+                      {yearValue}
+                    </option>
+                  ))}
+                </select>
+
+                <span className="text-xs font-medium whitespace-nowrap text-slate-500">
+                  Department:
+                </span>
+                <select
+                  value={department}
+                  onChange={(event) =>
+                    setDepartment(event.target.value)
+                  }
+                  className={selectClass}
+                >
+                  {departments.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          }
+          headerActions={
+            <>
+              <button
+                type="button"
+                onClick={previousMonth}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 dark:border-[#262b31] bg-white dark:bg-[#1c2026] text-slate-500 dark:text-gray-400 transition-colors hover:bg-slate-50 dark:hover:bg-[#252a32] dark:hover:text-gray-200 cursor-pointer"
+                title="Previous month"
+              >
+                <ChevronLeft size={18} />
+              </button>
+
+              <button
+                type="button"
+                onClick={nextMonth}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 dark:border-[#262b31] bg-white dark:bg-[#1c2026] text-slate-500 dark:text-gray-400 transition-colors hover:bg-slate-50 dark:hover:bg-[#252a32] dark:hover:text-gray-200 cursor-pointer"
+                title="Next month"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </>
+          }
+        />
+
+        </div>
       </div>
-    </div>
   )
 }
 

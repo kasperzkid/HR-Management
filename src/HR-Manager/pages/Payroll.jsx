@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
+import { authHeaders } from '../../lib/hrApi'
 import {
   Calculator,
   Edit3,
   FileText,
-  Search,
   Users,
   X,
 } from 'lucide-react'
+import LuxuryDataTable from '../components/LuxuryDataTable'
 
-const API_BASE = 'http://localhost:4000/api/hr-manager'
+const selectClass =
+  'h-9 pl-2.5 pr-7 text-xs border border-slate-200 dark:border-[#262b31] rounded-xl bg-white dark:bg-[#1c2026] text-slate-800 dark:text-gray-200 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium'
+
+const API_BASE = '/api/hr-manager'
 
 const PENSION_RATE = 0.07
 const EMPLOYER_PENSION_RATE = 0.11
@@ -374,7 +378,7 @@ function PayrollModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 dark:border-[#262b31] bg-white dark:bg-[#1c2026] text-slate-500 dark:text-gray-400 transition-colors hover:bg-slate-50 dark:hover:bg-[#252a32] dark:hover:text-gray-200 cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
@@ -601,14 +605,14 @@ function PayrollModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-[#262b31] bg-white dark:bg-[#1c2026] text-xs font-semibold text-slate-700 dark:text-gray-300 shadow-2xs transition-colors hover:bg-slate-50 dark:hover:bg-[#252a32] cursor-pointer"
             >
               Cancel
             </button>
 
             <button
               type="submit"
-              className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-slate-800 cursor-pointer"
             >
               Save Payroll
             </button>
@@ -668,6 +672,9 @@ function Payroll() {
         const response =
           await fetch(
             `${API_BASE}/employees`,
+            {
+              headers: authHeaders(),
+            },
           )
 
         if (!response.ok) {
@@ -721,6 +728,9 @@ function Payroll() {
         const response =
           await fetch(
             `${API_BASE}/attendance?startDate=${startDate}&endDate=${endDate}`,
+            {
+              headers: authHeaders(),
+            },
           )
 
         if (!response.ok) {
@@ -981,6 +991,180 @@ function Payroll() {
     setEditingRecord(null)
   }
 
+  function resetFilters() {
+    setSearch('')
+    setDepartment('All Departments')
+  }
+
+  const columns = [
+    {
+      key: 'employeeName',
+      header: 'Employee',
+      render: (record) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700 dark:bg-[#1c2026] dark:text-gray-300">
+            {record.initials}
+          </div>
+
+          <div>
+            <p className="whitespace-nowrap text-sm font-semibold text-slate-900 dark:text-gray-100">
+              {record.employeeName}
+            </p>
+
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-gray-400">
+              {record.employeeId}
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'workingDays',
+      header: 'Working',
+      render: (record) => (
+        <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">
+          {record.workingDays}
+        </span>
+      ),
+    },
+    {
+      key: 'presentDays',
+      header: 'Present',
+      render: (record) => (
+        <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+          {record.presentDays}
+        </span>
+      ),
+    },
+    {
+      key: 'absentDays',
+      header: 'Absent',
+      render: (record) => (
+        <span className="text-sm font-semibold text-red-600 dark:text-red-400">
+          {record.absentDays}
+        </span>
+      ),
+    },
+    {
+      key: 'leaveDays',
+      header: 'Leave',
+      render: (record) => (
+        <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+          {record.leaveDays}
+        </span>
+      ),
+    },
+    {
+      key: 'overtimeHours',
+      header: 'OT Hours',
+      render: (record) => (
+        <span className="text-sm font-semibold text-slate-700 dark:text-gray-300 tabular-nums">
+          {Number(record.overtimeHours || 0).toFixed(2)}
+        </span>
+      ),
+    },
+    {
+      key: 'basicSalary',
+      header: 'Basic',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm text-slate-700 dark:text-gray-300 tabular-nums">
+          {formatCurrency(record.basicSalary)}
+        </span>
+      ),
+    },
+    {
+      key: 'transportAllowance',
+      header: 'Transport',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm text-slate-700 dark:text-gray-300 tabular-nums">
+          {formatCurrency(record.transportAllowance)}
+        </span>
+      ),
+    },
+    {
+      key: 'housingAllowance',
+      header: 'Housing',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm text-slate-700 dark:text-gray-300 tabular-nums">
+          {formatCurrency(record.housingAllowance)}
+        </span>
+      ),
+    },
+    {
+      key: 'mealAllowance',
+      header: 'Meal',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm text-slate-700 dark:text-gray-300 tabular-nums">
+          {formatCurrency(record.mealAllowance)}
+        </span>
+      ),
+    },
+    {
+      key: 'otherAllowance',
+      header: 'Other',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm text-slate-700 dark:text-gray-300 tabular-nums">
+          {formatCurrency(record.otherAllowance)}
+        </span>
+      ),
+    },
+    {
+      key: 'overtime',
+      header: 'Overtime',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm text-slate-700 dark:text-gray-300 tabular-nums">
+          {formatCurrency(record.overtime)}
+        </span>
+      ),
+    },
+    {
+      key: 'gross',
+      header: 'Gross',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm font-semibold text-slate-900 dark:text-gray-100 tabular-nums">
+          {formatCurrency(calculatePayroll(record).gross)}
+        </span>
+      ),
+    },
+    {
+      key: 'deductions',
+      header: 'Deductions',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm font-semibold text-red-600 dark:text-red-400 tabular-nums">
+          {formatCurrency(calculatePayroll(record).deductions)}
+        </span>
+      ),
+    },
+    {
+      key: 'netSalary',
+      header: 'Net Salary',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+          {formatCurrency(calculatePayroll(record).netSalary)}
+        </span>
+      ),
+    },
+    {
+      key: 'employerCost',
+      header: 'Employer Cost',
+      align: 'right',
+      render: (record) => (
+        <span className="text-sm font-semibold text-slate-900 dark:text-gray-100 tabular-nums">
+          {formatCurrency(calculatePayroll(record).employerCost)}
+        </span>
+      ),
+    },
+  ]
+
   return (
     <div className="min-h-full bg-[#F3F4F6] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-[1500px]">
@@ -1101,322 +1285,70 @@ function Payroll() {
           </div>
         </div>
 
-        <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_240px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        {error && (
+          <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>{error}</span>
 
-            <input
-              type="text"
-              value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="Search employee, ID or department..."
-              className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="shrink-0 inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-[#262b31] bg-white dark:bg-[#1c2026] text-xs font-semibold text-rose-600 dark:text-rose-400 shadow-2xs transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
+            >
+              Retry
+            </button>
           </div>
+        )}
 
-          <select
-            value={department}
-            onChange={(event) =>
-              setDepartment(
-                event.target.value,
-              )
-            }
-            className="rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-          >
-            {departments.map(
-              (item) => (
-                <option
-                  key={item}
-                  value={item}
-                >
-                  {item}
-                </option>
-              ),
-            )}
-          </select>
-        </div>
-
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-bold text-slate-950">
-                Employee Payroll
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                {filteredPayroll.length}{' '}
-                employee(s) shown
-              </p>
-            </div>
-
-            <div className="text-xs font-medium text-slate-500">
-              <span>
-                Period: {payrollMonth}
+        <LuxuryDataTable
+          title="Employee Payroll"
+          subtitle={`${filteredPayroll.length} employee(s) shown · Period: ${payrollMonth}`}
+          countBadge={filteredPayroll.length}
+          columns={columns}
+          data={filteredPayroll}
+          searchable
+          searchKeys={['employeeName', 'employeeId', 'department']}
+          searchPlaceholder="Search by employee name, ID or department..."
+          exportable
+          exportFilename="HR_Payroll"
+          paginated
+          defaultPageSize={10}
+          loading={loading}
+          emptyMessage="No payroll records found for this period."
+          onResetFilters={resetFilters}
+          filterControls={
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-500 dark:text-gray-400 font-medium whitespace-nowrap">
+                Department:
               </span>
 
+              <select
+                value={department}
+                onChange={(event) => setDepartment(event.target.value)}
+                className={selectClass}
+              >
+                {departments.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+          headerActions={
+            <div className="flex flex-wrap items-center gap-2.5">
               {attendanceLoading && (
-                <span className="ml-3 text-blue-600">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400">
                   Loading attendance...
                 </span>
               )}
             </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1700px]">
-              <thead className="bg-slate-50">
-                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-4">
-                    Employee
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Working
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Present
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Absent
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Leave
-                  </th>
-
-                  <th className="px-4 py-4">
-                    OT Hours
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Basic
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Transport
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Housing
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Meal
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Other
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Overtime
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Gross
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Deductions
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Net Salary
-                  </th>
-
-                  <th className="px-4 py-4">
-                    Employer Cost
-                  </th>
-
-                  <th className="px-4 py-4 text-right">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan="17"
-                      className="px-6 py-12 text-center text-sm text-slate-500"
-                    >
-                      Loading employees from database...
-                    </td>
-                  </tr>
-                ) : (
-                  filteredPayroll.map(
-                    (record) => {
-                      const calculation =
-                        calculatePayroll(
-                          record,
-                        )
-
-                      return (
-                        <tr
-                          key={
-                            record.employeeKey
-                          }
-                          className="transition hover:bg-slate-50"
-                        >
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
-                                {
-                                  record.initials
-                                }
-                              </div>
-
-                              <div>
-                                <p className="whitespace-nowrap text-sm font-semibold text-slate-900">
-                                  {
-                                    record.employeeName
-                                  }
-                                </p>
-
-                                <p className="mt-0.5 text-xs text-slate-500">
-                                  {
-                                    record.employeeId
-                                  }
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-semibold text-slate-700">
-                            {
-                              record.workingDays
-                            }
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-semibold text-emerald-600">
-                            {
-                              record.presentDays
-                            }
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-semibold text-red-600">
-                            {
-                              record.absentDays
-                            }
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-semibold text-blue-600">
-                            {
-                              record.leaveDays
-                            }
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-semibold text-slate-700">
-                            {Number(
-                              record.overtimeHours ||
-                                0,
-                            ).toFixed(2)}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm text-slate-700">
-                            {formatCurrency(
-                              record.basicSalary,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm text-slate-700">
-                            {formatCurrency(
-                              record.transportAllowance,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm text-slate-700">
-                            {formatCurrency(
-                              record.housingAllowance,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm text-slate-700">
-                            {formatCurrency(
-                              record.mealAllowance,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm text-slate-700">
-                            {formatCurrency(
-                              record.otherAllowance,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm text-slate-700">
-                            {formatCurrency(
-                              record.overtime,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-semibold text-slate-900">
-                            {formatCurrency(
-                              calculation.gross,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-semibold text-red-600">
-                            {formatCurrency(
-                              calculation.deductions,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-bold text-emerald-600">
-                            {formatCurrency(
-                              calculation.netSalary,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-sm font-semibold text-slate-900">
-                            {formatCurrency(
-                              calculation.employerCost,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 text-right">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setEditingRecord(
-                                  record,
-                                )
-                              }
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                            >
-                              <Edit3 className="h-3.5 w-3.5" />
-                              Edit
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    },
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {!loading &&
-            filteredPayroll.length ===
-              0 && (
-              <div className="px-6 py-12 text-center">
-                <Users className="mx-auto h-10 w-10 text-slate-300" />
-
-                <h3 className="mt-3 font-semibold text-slate-900">
-                  No payroll records found
-                </h3>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Try changing your search or department filter.
-                </p>
-              </div>
-            )}
-        </div>
+          }
+          primaryAction={{
+            label: 'Edit Payroll',
+            icon: Edit3,
+            onClick: (record) => setEditingRecord(record),
+          }}
+        />
 
         <div className="mt-6 rounded-2xl border border-amber-100 bg-amber-50 p-4">
           <div className="flex gap-3">
