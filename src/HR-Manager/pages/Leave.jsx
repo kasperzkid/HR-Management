@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Bell,
   CalendarDays,
   Check,
   ChevronDown,
@@ -11,6 +12,7 @@ import {
   Users,
   X,
   XCircle,
+  Save,
 } from 'lucide-react'
 
 const API_BASE = 'http://localhost:4000/api/hr-manager'
@@ -30,19 +32,7 @@ const APPROVAL_STATUSES = [
 
 const ALL_OPTION = 'All'
 
-const emptyForm = {
-  employeeId: '',
-  leaveType: 'Annual Leave',
-  requestDate: new Date().toISOString().slice(0, 10),
-  startDate: '',
-  endDate: '',
-  days: 0,
-  approvalStatus: 'Pending',
-  approvedBy: '',
-  approvedDate: '',
-  remarks: '',
-  balance: '',
-}
+const POLLING_INTERVAL = 15000
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString('en-US', {
@@ -89,8 +79,13 @@ function normalizeEmployee(employee) {
   return {
     ...employee,
     name,
-    employeeId: employee.employeeId || employee.id || '',
-    department: employee.department || '—',
+    employeeId:
+      employee.employeeId ||
+      employee.id ||
+      '',
+    department:
+      employee.department ||
+      '—',
     annualLeaveEntitled: Number(
       employee.annualLeaveEntitled || 0,
     ),
@@ -103,102 +98,66 @@ function normalizeEmployee(employee) {
 function normalizeLeaveRequest(request) {
   return {
     ...request,
+
     id: request.id,
+
     employeeId:
       request.employeeId ||
       request.employee?.employeeId ||
+      request.employee?.id ||
       '',
+
     employeeName:
       request.employeeName ||
       request.employee?.name ||
       'Unnamed Employee',
+
     department:
       request.department ||
       request.employee?.department ||
       '—',
+
     leaveType:
-      request.leaveType || 'Annual Leave',
+      request.leaveType ||
+      'Annual Leave',
+
     requestDate:
-      request.requestDate || '',
+      request.requestDate ||
+      '',
+
     startDate:
-      request.startDate || '',
+      request.startDate ||
+      '',
+
     endDate:
-      request.endDate || '',
-    days: Number(request.days || 0),
+      request.endDate ||
+      '',
+
+    days:
+      Number(request.days || 0),
+
     approvalStatus:
-      request.approvalStatus || 'Pending',
+      request.approvalStatus ||
+      'Pending',
+
     approvedBy:
-      request.approvedBy || '',
+      request.approvedBy ||
+      '',
+
     approvedDate:
-      request.approvedDate || '',
+      request.approvedDate ||
+      '',
+
     remarks:
-      request.remarks || '',
+      request.remarks ||
+      '',
+
     balance:
       request.balance === null ||
       request.balance === undefined
         ? null
         : Number(request.balance),
   }
-}
-
-/*
- * Workbook rule:
- * Count weekdays only.
- *
- * Monday-Friday = working day
- * Saturday-Sunday = weekend
- */
-function calculateWorkingDays(startDate, endDate) {
-  if (!startDate || !endDate) {
-    return 0
-  }
-
-  const start = new Date(`${startDate}T00:00:00`)
-  const end = new Date(`${endDate}T00:00:00`)
-
-  if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime()) ||
-    end < start
-  ) {
-    return 0
-  }
-
-  let days = 0
-  const current = new Date(start)
-
-  while (current <= end) {
-    const day = current.getDay()
-
-    if (day !== 0 && day !== 6) {
-      days += 1
-    }
-
-    current.setDate(current.getDate() + 1)
-  }
-
-  return days
-}
-
-function rangesOverlap(
-  startA,
-  endA,
-  startB,
-  endB,
-) {
-  if (
-    !startA ||
-    !endA ||
-    !startB ||
-    !endB
-  ) {
-    return false
-  }
-
-  return (
-    startA <= endB &&
-    endA >= startB
-  )
 }
 
 function getStatusClasses(status) {
@@ -238,6 +197,7 @@ function Field({
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
         {label}
+
         {required && (
           <span className="ml-1 text-red-500">
             *
@@ -280,13 +240,15 @@ function SelectField({
   value,
   onChange,
   children,
+  disabled = false,
 }) {
   return (
     <div className="relative">
       <select
         value={value}
         onChange={onChange}
-        className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 pr-10 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
+        disabled={disabled}
+        className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 pr-10 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
       >
         {children}
       </select>
@@ -299,292 +261,275 @@ function SelectField({
   )
 }
 
-function LeaveModal({
+function calculateWorkingDays(
+  startDate,
+  endDate,
+) {
+  if (!startDate || !endDate) {
+    return 0
+  }
+
+  const start = new Date(
+    `${startDate}T00:00:00`,
+  )
+
+  const end = new Date(
+    `${endDate}T00:00:00`,
+  )
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    start > end
+  ) {
+    return 0
+  }
+
+  let count = 0
+
+  const current = new Date(start)
+
+  while (current <= end) {
+    const day = current.getDay()
+
+    if (day !== 0 && day !== 6) {
+      count += 1
+    }
+
+    current.setDate(
+      current.getDate() + 1,
+    )
+  }
+
+  return count
+}
+
+function getTodayString() {
+  return new Date()
+    .toISOString()
+    .slice(0, 10)
+}
+
+/*
+ * ============================================================
+ * REVIEW MODAL
+ * ============================================================
+ *
+ * Pending requests are reviewed here.
+ *
+ * HR cannot change employee-submitted:
+ * - Employee
+ * - Leave type
+ * - Request date
+ * - Start date
+ * - End date
+ * - Days
+ *
+ * HR can:
+ * - Approve
+ * - Reject
+ * - Add HR review remarks
+ */
+function ReviewModal({
   open,
-  form,
-  employees,
-  editing,
+  request,
   saving,
   error,
-  overlapWarning,
+  reviewRemarks,
+  onRemarksChange,
   onClose,
-  onChange,
-  onSubmit,
+  onApprove,
+  onReject,
 }) {
-  if (!open) {
+  if (!open || !request) {
     return null
   }
 
-  const selectedEmployee = employees.find(
-    (employee) =>
-      getEmployeeId(employee) === form.employeeId,
-  )
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
-              Leave Management
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+                HR Review
+              </p>
+
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                Pending
+              </span>
+            </div>
 
             <h2 className="mt-1 text-xl font-bold text-slate-950">
-              {editing
-                ? 'Edit Leave Request'
-                : 'New Leave Request'}
+              Review Leave Request
             </h2>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Request {request.id}
+            </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            disabled={saving}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
           >
             <X size={18} />
           </button>
         </div>
 
-        <form
-          onSubmit={onSubmit}
-          className="p-6"
-        >
-          <div className="space-y-7">
-            <section>
-              <SectionTitle
-                icon={UserCheck}
-                title="Employee Information"
-                description="Select the employee requesting leave."
-              />
+        <div className="space-y-6 p-6">
+          <section>
+            <SectionTitle
+              icon={UserCheck}
+              title="Employee Information"
+              description="Information submitted by the employee."
+            />
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Employee"
-                  required
-                >
-                  <SelectField
-                    value={form.employeeId}
-                    onChange={(event) =>
-                      onChange(
-                        'employeeId',
-                        event.target.value,
-                      )
-                    }
-                  >
-                    <option value="">
-                      Select employee
-                    </option>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Employee
+                </p>
 
-                    {employees.map((employee) => (
-                      <option
-                        key={employee.id || employee.employeeId}
-                        value={getEmployeeId(employee)}
-                      >
-                        {getEmployeeId(employee)} —{' '}
-                        {getEmployeeName(employee)}
-                      </option>
-                    ))}
-                  </SelectField>
-                </Field>
+                <p className="mt-2 text-sm font-bold text-slate-900">
+                  {request.employeeName}
+                </p>
 
-                <Field label="Department">
-                  <input
-                    readOnly
-                    value={
-                      selectedEmployee?.department || ''
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600 outline-none"
-                  />
-                </Field>
-              </div>
-            </section>
-
-            <section>
-              <SectionTitle
-                icon={CalendarDays}
-                title="Leave Details"
-                description="Working days are calculated using weekdays only."
-              />
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Field
-                  label="Leave Type"
-                  required
-                >
-                  <SelectField
-                    value={form.leaveType}
-                    onChange={(event) =>
-                      onChange(
-                        'leaveType',
-                        event.target.value,
-                      )
-                    }
-                  >
-                    {LEAVE_TYPES.map((type) => (
-                      <option
-                        key={type}
-                        value={type}
-                      >
-                        {type}
-                      </option>
-                    ))}
-                  </SelectField>
-                </Field>
-
-                <Field
-                  label="Request Date"
-                  required
-                >
-                  <input
-                    type="date"
-                    value={form.requestDate}
-                    onChange={(event) =>
-                      onChange(
-                        'requestDate',
-                        event.target.value,
-                      )
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
-                  />
-                </Field>
-
-                <Field label="Approval Status">
-                  <SelectField
-                    value={form.approvalStatus}
-                    onChange={(event) =>
-                      onChange(
-                        'approvalStatus',
-                        event.target.value,
-                      )
-                    }
-                  >
-                    {APPROVAL_STATUSES.map(
-                      (status) => (
-                        <option
-                          key={status}
-                          value={status}
-                        >
-                          {status}
-                        </option>
-                      ),
-                    )}
-                  </SelectField>
-                </Field>
-
-                <Field
-                  label="Start Date"
-                  required
-                >
-                  <input
-                    type="date"
-                    value={form.startDate}
-                    onChange={(event) =>
-                      onChange(
-                        'startDate',
-                        event.target.value,
-                      )
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
-                  />
-                </Field>
-
-                <Field
-                  label="End Date"
-                  required
-                >
-                  <input
-                    type="date"
-                    value={form.endDate}
-                    min={form.startDate || undefined}
-                    onChange={(event) =>
-                      onChange(
-                        'endDate',
-                        event.target.value,
-                      )
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
-                  />
-                </Field>
-
-                <Field label="Number of Working Days">
-                  <input
-                    readOnly
-                    value={form.days}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none"
-                  />
-                </Field>
+                <p className="mt-1 text-xs text-slate-500">
+                  {request.employeeId}
+                </p>
               </div>
 
-              {overlapWarning && (
-                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-                  {overlapWarning}
-                </div>
-              )}
-            </section>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Department
+                </p>
 
-            <section>
-              <SectionTitle
-                icon={FileText}
-                title="Approval & Remarks"
-                description="Approval information and additional notes."
-              />
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Approved By">
-                  <input
-                    value={form.approvedBy}
-                    onChange={(event) =>
-                      onChange(
-                        'approvedBy',
-                        event.target.value,
-                      )
-                    }
-                    placeholder="HR Manager"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
-                  />
-                </Field>
-
-                <Field label="Approval Date">
-                  <input
-                    type="date"
-                    value={form.approvedDate}
-                    onChange={(event) =>
-                      onChange(
-                        'approvedDate',
-                        event.target.value,
-                      )
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
-                  />
-                </Field>
-
-                <div className="sm:col-span-2">
-                  <Field label="Remarks">
-                    <textarea
-                      rows={4}
-                      value={form.remarks}
-                      onChange={(event) =>
-                        onChange(
-                          'remarks',
-                          event.target.value,
-                        )
-                      }
-                      placeholder="Additional remarks..."
-                      className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
-                    />
-                  </Field>
-                </div>
+                <p className="mt-2 text-sm font-bold text-slate-900">
+                  {request.department}
+                </p>
               </div>
-            </section>
-          </div>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle
+              icon={CalendarDays}
+              title="Leave Details"
+              description="The HR reviewer cannot modify employee-submitted dates."
+            />
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Leave Type
+                </p>
+
+                <span
+                  className={`mt-2 inline-flex rounded-lg px-2.5 py-1.5 text-xs font-semibold ${getLeaveTypeClasses(
+                    request.leaveType,
+                  )}`}
+                >
+                  {request.leaveType}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Request Date
+                </p>
+
+                <p className="mt-2 text-sm font-bold text-slate-900">
+                  {request.requestDate || '—'}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Working Days
+                </p>
+
+                <p className="mt-2 text-sm font-bold text-slate-900">
+                  {formatNumber(request.days)}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Start Date
+                </p>
+
+                <p className="mt-2 text-sm font-bold text-slate-900">
+                  {request.startDate || '—'}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  End Date
+                </p>
+
+                <p className="mt-2 text-sm font-bold text-slate-900">
+                  {request.endDate || '—'}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Current Status
+                </p>
+
+                <span
+                  className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                    request.approvalStatus,
+                  )}`}
+                >
+                  {request.approvalStatus}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle
+              icon={FileText}
+              title="Employee Remarks"
+              description="Additional information submitted with the request."
+            />
+
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                {request.remarks ||
+                  'No employee remarks were provided.'}
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <Field label="HR Review Remark">
+              <textarea
+                rows={4}
+                value={reviewRemarks}
+                onChange={(event) =>
+                  onRemarksChange(
+                    event.target.value,
+                  )
+                }
+                placeholder="Enter an approval or rejection remark..."
+                className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
+              />
+            </Field>
+          </section>
 
           {error && (
-            <div className="mt-6 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </div>
           )}
 
-          <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onClose}
@@ -595,71 +540,581 @@ function LeaveModal({
             </button>
 
             <button
-              type="submit"
+              type="button"
+              onClick={onReject}
               disabled={saving}
-              className="rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
+              <XCircle size={17} />
+
               {saving
-                ? 'Saving...'
-                : editing
-                  ? 'Save Changes'
-                  : 'Create Leave Request'}
+                ? 'Processing...'
+                : 'Reject Request'}
+            </button>
+
+            <button
+              type="button"
+              onClick={onApprove}
+              disabled={saving}
+              className="flex items-center justify-center gap-2 rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Check size={17} />
+
+              {saving
+                ? 'Processing...'
+                : 'Approve Request'}
             </button>
           </div>
-        </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/*
+ * ============================================================
+ * EDIT MODAL
+ * ============================================================
+ *
+ * This modal is available ONLY after a request has already
+ * been Approved or Rejected.
+ *
+ * HR can correct/change the request after review.
+ *
+ * This does NOT create a new request.
+ */
+function EditLeaveModal({
+  open,
+  request,
+  employees,
+  saving,
+  error,
+  form,
+  onChange,
+  onClose,
+  onSave,
+}) {
+  if (!open || !request) {
+    return null
+  }
+
+  const calculatedDays =
+    calculateWorkingDays(
+      form.startDate,
+      form.endDate,
+    )
+
+  const selectedEmployee =
+    employees.find(
+      (employee) =>
+        getEmployeeId(employee) ===
+        form.employeeId,
+    )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+      <div className="max-h-[94vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+                HR Administration
+              </p>
+
+              <span
+                className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${getStatusClasses(
+                  request.approvalStatus,
+                )}`}
+              >
+                {request.approvalStatus}
+              </span>
+            </div>
+
+            <h2 className="mt-1 text-xl font-bold text-slate-950">
+              Edit Leave Request
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Request {request.id}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-6 p-6">
+          <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-800">
+              Editing an already reviewed request
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-amber-700">
+              Changes to an approved leave request may affect the employee's leave balance and attendance records. The system will synchronize those changes through the HR leave workflow.
+            </p>
+          </div>
+
+          <section>
+            <SectionTitle
+              icon={UserCheck}
+              title="Employee Information"
+              description="HR may correct the employee assigned to this existing request."
+            />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Employee"
+                required
+              >
+                <SelectField
+                  value={form.employeeId}
+                  onChange={(event) =>
+                    onChange(
+                      'employeeId',
+                      event.target.value,
+                    )
+                  }
+                  disabled={saving}
+                >
+                  <option value="">
+                    Select employee
+                  </option>
+
+                  {employees.map(
+                    (employee) => (
+                      <option
+                        key={
+                          employee.id ||
+                          employee.employeeId
+                        }
+                        value={getEmployeeId(
+                          employee,
+                        )}
+                      >
+                        {getEmployeeId(
+                          employee,
+                        )}{' '}
+                        —{' '}
+                        {getEmployeeName(
+                          employee,
+                        )}
+                      </option>
+                    ),
+                  )}
+                </SelectField>
+              </Field>
+
+              <Field label="Department">
+                <input
+                  value={
+                    selectedEmployee?.department ||
+                    form.department ||
+                    '—'
+                  }
+                  readOnly
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-500 outline-none"
+                />
+              </Field>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle
+              icon={CalendarDays}
+              title="Leave Details"
+              description="Update the existing request information."
+            />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Leave Type"
+                required
+              >
+                <SelectField
+                  value={form.leaveType}
+                  onChange={(event) =>
+                    onChange(
+                      'leaveType',
+                      event.target.value,
+                    )
+                  }
+                  disabled={saving}
+                >
+                  {LEAVE_TYPES.map(
+                    (type) => (
+                      <option
+                        key={type}
+                        value={type}
+                      >
+                        {type}
+                      </option>
+                    ),
+                  )}
+                </SelectField>
+              </Field>
+
+              <Field
+                label="Request Date"
+                required
+              >
+                <input
+                  type="date"
+                  value={form.requestDate}
+                  onChange={(event) =>
+                    onChange(
+                      'requestDate',
+                      event.target.value,
+                    )
+                  }
+                  disabled={saving}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
+                />
+              </Field>
+
+              <Field
+                label="Start Date"
+                required
+              >
+                <input
+                  type="date"
+                  value={form.startDate}
+                  onChange={(event) =>
+                    onChange(
+                      'startDate',
+                      event.target.value,
+                    )
+                  }
+                  disabled={saving}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
+                />
+              </Field>
+
+              <Field
+                label="End Date"
+                required
+              >
+                <input
+                  type="date"
+                  value={form.endDate}
+                  min={
+                    form.startDate ||
+                    undefined
+                  }
+                  onChange={(event) =>
+                    onChange(
+                      'endDate',
+                      event.target.value,
+                    )
+                  }
+                  disabled={saving}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
+                />
+              </Field>
+
+              <Field label="Calculated Working Days">
+                <input
+                  value={formatNumber(
+                    calculatedDays,
+                  )}
+                  readOnly
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none"
+                />
+              </Field>
+
+              <Field
+                label="Approval Status"
+                required
+              >
+                <SelectField
+                  value={form.approvalStatus}
+                  onChange={(event) =>
+                    onChange(
+                      'approvalStatus',
+                      event.target.value,
+                    )
+                  }
+                  disabled={saving}
+                >
+                  {APPROVAL_STATUSES.map(
+                    (status) => (
+                      <option
+                        key={status}
+                        value={status}
+                      >
+                        {status}
+                      </option>
+                    ),
+                  )}
+                </SelectField>
+              </Field>
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle
+              icon={FileText}
+              title="Remarks"
+              description="HR can update the remarks attached to this existing request."
+            />
+
+            <Field label="Remarks">
+              <textarea
+                rows={5}
+                value={form.remarks}
+                onChange={(event) =>
+                  onChange(
+                    'remarks',
+                    event.target.value,
+                  )
+                }
+                disabled={saving}
+                placeholder="Enter leave request remarks..."
+                className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
+              />
+            </Field>
+          </section>
+
+          {form.approvalStatus ===
+            'Approved' && (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+              <p className="text-sm font-semibold text-emerald-800">
+                Approved request
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-emerald-700">
+                Saving this request as Approved will keep it in the employee's approved leave balance and synchronize the corresponding attendance records.
+              </p>
+            </div>
+          )}
+
+          {form.approvalStatus ===
+            'Rejected' && (
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3">
+              <p className="text-sm font-semibold text-red-800">
+                Rejected request
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-red-700">
+                A rejected request does not count against the employee's approved leave balance.
+              </p>
+            </div>
+          )}
+
+          {form.approvalStatus ===
+            'Pending' && (
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-800">
+                Returned to Pending
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-amber-700">
+                This request will return to the HR review queue and must be reviewed again.
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="flex items-center justify-center gap-2 rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Save size={17} />
+
+              {saving
+                ? 'Saving Changes...'
+                : 'Save Changes'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
 function Leave() {
-  const [employees, setEmployees] = useState([])
-  const [requests, setRequests] = useState([])
+  const [employees, setEmployees] =
+    useState([])
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [requests, setRequests] =
+    useState([])
 
-  const [error, setError] = useState('')
+  const [loading, setLoading] =
+    useState(true)
 
-  const [search, setSearch] = useState('')
-  const [departmentFilter, setDepartmentFilter] =
-    useState(ALL_OPTION)
-  const [statusFilter, setStatusFilter] =
-    useState(ALL_OPTION)
-  const [leaveTypeFilter, setLeaveTypeFilter] =
-    useState(ALL_OPTION)
+  const [saving, setSaving] =
+    useState(false)
 
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editingRequest, setEditingRequest] =
-    useState(null)
-
-  const [selectedEmployeeId, setSelectedEmployeeId] =
+  const [error, setError] =
     useState('')
 
-  const [form, setForm] = useState(emptyForm)
+  const [search, setSearch] =
+    useState('')
+
+  const [
+    departmentFilter,
+    setDepartmentFilter,
+  ] = useState(ALL_OPTION)
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] = useState(ALL_OPTION)
+
+  const [
+    leaveTypeFilter,
+    setLeaveTypeFilter,
+  ] = useState(ALL_OPTION)
+
+  /*
+   * ============================================================
+   * REVIEW STATE
+   * ============================================================
+   */
+
+  const [
+    reviewModalOpen,
+    setReviewModalOpen,
+  ] = useState(false)
+
+  const [
+    reviewingRequest,
+    setReviewingRequest,
+  ] = useState(null)
+
+  const [
+    reviewRemarks,
+    setReviewRemarks,
+  ] = useState('')
+
+  /*
+   * ============================================================
+   * EDIT STATE
+   * ============================================================
+   */
+
+  const [
+    editModalOpen,
+    setEditModalOpen,
+  ] = useState(false)
+
+  const [
+    editingRequest,
+    setEditingRequest,
+  ] = useState(null)
+
+  const [
+    editForm,
+    setEditForm,
+  ] = useState({
+    employeeId: '',
+    department: '',
+    leaveType: 'Annual Leave',
+    requestDate: '',
+    startDate: '',
+    endDate: '',
+    approvalStatus: 'Pending',
+    remarks: '',
+  })
+
+  const [
+    editError,
+    setEditError,
+  ] = useState('')
+
+  /*
+   * ============================================================
+   * NEW REQUEST NOTIFICATION STATE
+   * ============================================================
+   */
+
+  const knownRequestIdsRef =
+    useRef(new Set())
+
+  const initialLoadRef =
+    useRef(true)
+
+  const [
+    newRequestIds,
+    setNewRequestIds,
+  ] = useState(new Set())
+
+  const [
+    newRequestCount,
+    setNewRequestCount,
+  ] = useState(0)
+
+  const [
+    notificationVisible,
+    setNotificationVisible,
+  ] = useState(false)
+
+  const [
+    notificationRequest,
+    setNotificationRequest,
+  ] = useState(null)
+
+  /*
+   * ============================================================
+   * API
+   * ============================================================
+   */
 
   async function fetchEmployees() {
     const response = await fetch(
       `${API_BASE}/employees`,
+      {
+        cache: 'no-store',
+      },
     )
 
-    const data = await response.json()
+    const data =
+      await response.json()
 
     if (!response.ok) {
       throw new Error(
-        data.message || 'Failed to load employees',
+        data.message ||
+          'Failed to load employees',
       )
     }
 
-    return data
+    return Array.isArray(data)
+      ? data
+      : data.employees || []
   }
 
   async function fetchLeaveRequests() {
     const response = await fetch(
       `${API_BASE}/leave`,
+      {
+        cache: 'no-store',
+      },
     )
 
-    const data = await response.json()
+    const data =
+      await response.json()
 
     if (!response.ok) {
       throw new Error(
@@ -668,31 +1123,9 @@ function Leave() {
       )
     }
 
-    return data
-  }
-
-  async function createLeaveRequest(payload) {
-    const response = await fetch(
-      `${API_BASE}/leave`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      },
-    )
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(
-        data.message ||
-          'Failed to create leave request',
-      )
-    }
-
-    return data
+    return Array.isArray(data)
+      ? data
+      : data.leaveRequests || []
   }
 
   async function updateLeaveRequest(
@@ -704,13 +1137,15 @@ function Leave() {
       {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type':
+            'application/json',
         },
         body: JSON.stringify(payload),
       },
     )
 
-    const data = await response.json()
+    const data =
+      await response.json()
 
     if (!response.ok) {
       throw new Error(
@@ -722,27 +1157,13 @@ function Leave() {
     return data
   }
 
-  async function deleteLeaveRequest(id) {
-    const response = await fetch(
-      `${API_BASE}/leave/${id}`,
-      {
-        method: 'DELETE',
-      },
-    )
+  /*
+   * ============================================================
+   * INITIAL LOAD
+   * ============================================================
+   */
 
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(
-        data.message ||
-          'Failed to delete leave request',
-      )
-    }
-
-    return data
-  }
-
-  async function loadData() {
+  async function loadInitialData() {
     setLoading(true)
     setError('')
 
@@ -755,15 +1176,32 @@ function Leave() {
         fetchLeaveRequests(),
       ])
 
+      const normalizedEmployees =
+        employeeData.map(
+          normalizeEmployee,
+        )
+
+      const normalizedRequests =
+        requestData.map(
+          normalizeLeaveRequest,
+        )
+
       setEmployees(
-        employeeData.map(normalizeEmployee),
+        normalizedEmployees,
       )
 
       setRequests(
-        requestData.map(
-          normalizeLeaveRequest,
-        ),
+        normalizedRequests,
       )
+
+      knownRequestIdsRef.current =
+        new Set(
+          normalizedRequests.map(
+            (request) => request.id,
+          ),
+        )
+
+      initialLoadRef.current = false
     } catch (err) {
       console.error(
         'Load leave data error:',
@@ -779,117 +1217,289 @@ function Leave() {
     }
   }
 
+  /*
+   * ============================================================
+   * BACKGROUND REFRESH / NEW REQUEST DETECTION
+   * ============================================================
+   */
+
+  async function refreshLeaveRequests({
+    notify = false,
+  } = {}) {
+    try {
+      const requestData =
+        await fetchLeaveRequests()
+
+      const normalizedRequests =
+        requestData.map(
+          normalizeLeaveRequest,
+        )
+
+      const incomingRequests =
+        normalizedRequests.filter(
+          (request) =>
+            request.approvalStatus ===
+              'Pending' &&
+            !knownRequestIdsRef.current.has(
+              request.id,
+            ),
+        )
+
+      normalizedRequests.forEach(
+        (request) => {
+          knownRequestIdsRef.current.add(
+            request.id,
+          )
+        },
+      )
+
+      setRequests(
+        normalizedRequests,
+      )
+
+      if (
+        notify &&
+        !initialLoadRef.current &&
+        incomingRequests.length > 0
+      ) {
+        const incomingIds =
+          new Set(
+            incomingRequests.map(
+              (request) =>
+                request.id,
+            ),
+          )
+
+        setNewRequestIds(
+          (current) => {
+            const next =
+              new Set(current)
+
+            incomingIds.forEach(
+              (id) =>
+                next.add(id),
+            )
+
+            return next
+          },
+        )
+
+        setNewRequestCount(
+          (current) =>
+            current +
+            incomingRequests.length,
+        )
+
+        setNotificationRequest(
+          incomingRequests[
+            incomingRequests.length - 1
+          ],
+        )
+
+        setNotificationVisible(
+          true,
+        )
+      }
+
+      return normalizedRequests
+    } catch (err) {
+      console.error(
+        'Refresh leave requests error:',
+        err,
+      )
+    }
+  }
+
   useEffect(() => {
-    loadData()
+    loadInitialData()
   }, [])
 
-  const departments = useMemo(() => {
-    return [
-      ALL_OPTION,
-      ...Array.from(
-        new Set(
-          employees
-            .map(
-              (employee) =>
-                employee.department,
-            )
-            .filter(Boolean),
-        ),
-      ),
-    ]
-  }, [employees])
+  useEffect(() => {
+    const interval =
+      window.setInterval(() => {
+        refreshLeaveRequests({
+          notify: true,
+        })
+      }, POLLING_INTERVAL)
 
-  const filteredRequests = useMemo(() => {
-    const query = search
-      .trim()
-      .toLowerCase()
-
-    return requests.filter((request) => {
-      const matchesSearch =
-        !query ||
-        String(
-          request.employeeId || '',
-        )
-          .toLowerCase()
-          .includes(query) ||
-        String(
-          request.employeeName || '',
-        )
-          .toLowerCase()
-          .includes(query) ||
-        String(
-          request.department || '',
-        )
-          .toLowerCase()
-          .includes(query) ||
-        String(
-          request.id || '',
-        )
-          .toLowerCase()
-          .includes(query)
-
-      const matchesDepartment =
-        departmentFilter === ALL_OPTION ||
-        request.department ===
-          departmentFilter
-
-      const matchesStatus =
-        statusFilter === ALL_OPTION ||
-        request.approvalStatus ===
-          statusFilter
-
-      const matchesLeaveType =
-        leaveTypeFilter === ALL_OPTION ||
-        request.leaveType ===
-          leaveTypeFilter
-
-      return (
-        matchesSearch &&
-        matchesDepartment &&
-        matchesStatus &&
-        matchesLeaveType
+    return () => {
+      window.clearInterval(
+        interval,
       )
-    })
-  }, [
-    requests,
-    search,
-    departmentFilter,
-    statusFilter,
-    leaveTypeFilter,
-  ])
+    }
+  }, [])
 
-  const pendingCount = requests.filter(
-    (request) =>
-      request.approvalStatus === 'Pending',
-  ).length
+  /*
+   * Refresh immediately when the HR user returns
+   * to this browser tab.
+   */
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (
+        document.visibilityState ===
+        'visible'
+      ) {
+        refreshLeaveRequests({
+          notify: true,
+        })
+      }
+    }
 
-  const approvedCount = requests.filter(
-    (request) =>
-      request.approvalStatus === 'Approved',
-  ).length
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange,
+    )
 
-  const rejectedCount = requests.filter(
-    (request) =>
-      request.approvalStatus === 'Rejected',
-  ).length
+    return () => {
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange,
+      )
+    }
+  }, [])
 
-  const totalApprovedDays = requests
-    .filter(
+  /*
+   * ============================================================
+   * FILTER OPTIONS
+   * ============================================================
+   */
+
+  const departments =
+    useMemo(() => {
+      return [
+        ALL_OPTION,
+        ...Array.from(
+          new Set(
+            employees
+              .map(
+                (employee) =>
+                  employee.department,
+              )
+              .filter(Boolean),
+          ),
+        ),
+      ]
+    }, [employees])
+
+  const filteredRequests =
+    useMemo(() => {
+      const query = search
+        .trim()
+        .toLowerCase()
+
+      return requests.filter(
+        (request) => {
+          const matchesSearch =
+            !query ||
+            String(
+              request.employeeId ||
+                '',
+            )
+              .toLowerCase()
+              .includes(query) ||
+            String(
+              request.employeeName ||
+                '',
+            )
+              .toLowerCase()
+              .includes(query) ||
+            String(
+              request.department ||
+                '',
+            )
+              .toLowerCase()
+              .includes(query) ||
+            String(
+              request.id || '',
+            )
+              .toLowerCase()
+              .includes(query)
+
+          const matchesDepartment =
+            departmentFilter ===
+              ALL_OPTION ||
+            request.department ===
+              departmentFilter
+
+          const matchesStatus =
+            statusFilter ===
+              ALL_OPTION ||
+            request.approvalStatus ===
+              statusFilter
+
+          const matchesLeaveType =
+            leaveTypeFilter ===
+              ALL_OPTION ||
+            request.leaveType ===
+              leaveTypeFilter
+
+          return (
+            matchesSearch &&
+            matchesDepartment &&
+            matchesStatus &&
+            matchesLeaveType
+          )
+        },
+      )
+    }, [
+      requests,
+      search,
+      departmentFilter,
+      statusFilter,
+      leaveTypeFilter,
+    ])
+
+  /*
+   * ============================================================
+   * KPIs
+   * ============================================================
+   */
+
+  const pendingCount =
+    requests.filter(
       (request) =>
-        request.approvalStatus === 'Approved',
-    )
-    .reduce(
-      (total, request) =>
-        total + Number(request.days || 0),
-      0,
-    )
+        request.approvalStatus ===
+        'Pending',
+    ).length
 
-  const selectedEmployee =
-    employees.find(
-      (employee) =>
-        getEmployeeId(employee) ===
-        selectedEmployeeId,
-    ) || null
+  const approvedCount =
+    requests.filter(
+      (request) =>
+        request.approvalStatus ===
+        'Approved',
+    ).length
+
+  const rejectedCount =
+    requests.filter(
+      (request) =>
+        request.approvalStatus ===
+        'Rejected',
+    ).length
+
+  const totalApprovedDays =
+    requests
+      .filter(
+        (request) =>
+          request.approvalStatus ===
+          'Approved',
+      )
+      .reduce(
+        (total, request) =>
+          total +
+          Number(request.days || 0),
+        0,
+      )
+
+  /*
+   * ============================================================
+   * EMPLOYEE BALANCE SECTION
+   * ============================================================
+   */
+
+  const [
+    selectedEmployee,
+    setSelectedEmployee,
+  ] = useState(null)
 
   const selectedEmployeeRequests =
     selectedEmployee
@@ -947,336 +1557,331 @@ function Leave() {
       0,
     )
 
-  const overlapWarning = useMemo(() => {
-    if (
-      !form.employeeId ||
-      !form.startDate ||
-      !form.endDate
-    ) {
-      return ''
-    }
+  /*
+   * ============================================================
+   * REVIEW
+   * ============================================================
+   */
 
-    const overlappingRequest =
-      requests.find((request) => {
-        if (
-          request.id ===
-          editingRequest?.id
-        ) {
-          return false
-        }
-
-        if (
-          request.employeeId !==
-          form.employeeId
-        ) {
-          return false
-        }
-
-        if (
-          request.approvalStatus !==
-          'Approved'
-        ) {
-          return false
-        }
-
-        return rangesOverlap(
-          form.startDate,
-          form.endDate,
-          request.startDate,
-          request.endDate,
-        )
-      })
-
-    if (!overlappingRequest) {
-      return ''
-    }
-
-    return `This date range overlaps an approved leave request (${overlappingRequest.id}).`
-  }, [
-    form.employeeId,
-    form.startDate,
-    form.endDate,
-    requests,
-    editingRequest,
-  ])
-
-  function openAddModal() {
-    setEditingRequest(null)
-
-    setForm({
-      ...emptyForm,
-      requestDate: new Date()
-        .toISOString()
-        .slice(0, 10),
-    })
-
+  function openReviewModal(
+    request,
+  ) {
+    setReviewingRequest(request)
+    setReviewRemarks('')
     setError('')
-    setModalOpen(true)
+    setReviewModalOpen(true)
+
+    setNewRequestIds(
+      (current) => {
+        const next = new Set(current)
+
+        next.delete(request.id)
+
+        return next
+      },
+    )
+
+    setNotificationCountAfterSeen(
+      request.id,
+    )
   }
 
-  function openEditModal(request) {
+  function setNotificationCountAfterSeen(
+    requestId,
+  ) {
+    setNewRequestCount(
+      (current) =>
+        Math.max(
+          current -
+            (newRequestIds.has(
+              requestId,
+            )
+              ? 1
+              : 0),
+          0,
+        ),
+    )
+  }
+
+  function closeReviewModal() {
+    if (saving) {
+      return
+    }
+
+    setReviewModalOpen(false)
+    setReviewingRequest(null)
+    setReviewRemarks('')
+    setError('')
+  }
+
+  /*
+   * ============================================================
+   * EDIT
+   * ============================================================
+   */
+
+  function openEditModal(
+    request,
+  ) {
     setEditingRequest(request)
 
-    setForm({
+    const employee =
+      employees.find(
+        (item) =>
+          getEmployeeId(item) ===
+          request.employeeId,
+      )
+
+    setEditForm({
       employeeId:
-        request.employeeId || '',
+        request.employeeId ||
+        '',
+      department:
+        employee?.department ||
+        request.department ||
+        '',
       leaveType:
         request.leaveType ||
         'Annual Leave',
       requestDate:
         request.requestDate ||
-        new Date()
-          .toISOString()
-          .slice(0, 10),
+        getTodayString(),
       startDate:
-        request.startDate || '',
+        request.startDate ||
+        '',
       endDate:
-        request.endDate || '',
-      days:
-        Number(request.days || 0),
+        request.endDate ||
+        '',
       approvalStatus:
         request.approvalStatus ||
         'Pending',
-      approvedBy:
-        request.approvedBy || '',
-      approvedDate:
-        request.approvedDate || '',
       remarks:
-        request.remarks || '',
-      balance:
-        request.balance === null ||
-        request.balance ===
-          undefined
-          ? ''
-          : request.balance,
+        request.remarks ||
+        '',
     })
 
+    setEditError('')
     setError('')
-    setModalOpen(true)
+    setEditModalOpen(true)
   }
 
-  function closeModal() {
+  function closeEditModal() {
     if (saving) {
       return
     }
 
-    setModalOpen(false)
+    setEditModalOpen(false)
     setEditingRequest(null)
-    setForm(emptyForm)
-    setError('')
+    setEditError('')
   }
 
-  function handleFormChange(
+  function handleEditFieldChange(
     field,
     value,
   ) {
-    setForm((current) => {
-      const next = {
-        ...current,
-        [field]: value,
-      }
-
-      if (
-        field === 'startDate' ||
-        field === 'endDate'
-      ) {
-        next.days =
-          calculateWorkingDays(
-            field === 'startDate'
-              ? value
-              : current.startDate,
-            field === 'endDate'
-              ? value
-              : current.endDate,
-          )
-      }
-
-      if (
-        field === 'approvalStatus'
-      ) {
-        if (value === 'Approved') {
-          next.approvedBy =
-            current.approvedBy ||
-            'HR Manager'
-
-          next.approvedDate =
-            current.approvedDate ||
-            new Date()
-              .toISOString()
-              .slice(0, 10)
+    setEditForm(
+      (current) => {
+        const next = {
+          ...current,
+          [field]: value,
         }
 
-        if (value === 'Pending') {
-          next.approvedBy = ''
-          next.approvedDate = ''
-        }
-      }
+        if (field === 'employeeId') {
+          const employee =
+            employees.find(
+              (item) =>
+                getEmployeeId(item) ===
+                value,
+            )
 
-      return next
-    })
+          next.department =
+            employee?.department ||
+            ''
+        }
+
+        return next
+      },
+    )
   }
 
-  async function saveRequest(
-    event,
-  ) {
-    event.preventDefault()
+  async function saveEditedRequest() {
+    if (!editingRequest) {
+      return
+    }
+
+    setEditError('')
+
+    if (!editForm.employeeId) {
+      setEditError(
+        'Please select an employee.',
+      )
+      return
+    }
+
+    if (!editForm.leaveType) {
+      setEditError(
+        'Please select a leave type.',
+      )
+      return
+    }
+
+    if (!editForm.requestDate) {
+      setEditError(
+        'Please select the request date.',
+      )
+      return
+    }
+
+    if (!editForm.startDate) {
+      setEditError(
+        'Please select the start date.',
+      )
+      return
+    }
+
+    if (!editForm.endDate) {
+      setEditError(
+        'Please select the end date.',
+      )
+      return
+    }
+
+    if (
+      editForm.endDate <
+      editForm.startDate
+    ) {
+      setEditError(
+        'The end date cannot be before the start date.',
+      )
+      return
+    }
+
+    const calculatedDays =
+      calculateWorkingDays(
+        editForm.startDate,
+        editForm.endDate,
+      )
+
+    if (calculatedDays <= 0) {
+      setEditError(
+        'The selected date range contains no working days.',
+      )
+      return
+    }
+
+    if (
+      !APPROVAL_STATUSES.includes(
+        editForm.approvalStatus,
+      )
+    ) {
+      setEditError(
+        'Please select a valid approval status.',
+      )
+      return
+    }
 
     setSaving(true)
-    setError('')
 
     try {
-      if (!form.employeeId) {
-        throw new Error(
-          'Please select an employee.',
-        )
-      }
-
-      if (!form.leaveType) {
-        throw new Error(
-          'Please select a leave type.',
-        )
-      }
-
-      if (!form.requestDate) {
-        throw new Error(
-          'Request date is required.',
-        )
-      }
-
-      if (
-        !form.startDate ||
-        !form.endDate
-      ) {
-        throw new Error(
-          'Start date and end date are required.',
-        )
-      }
-
-      if (
-        form.endDate <
-        form.startDate
-      ) {
-        throw new Error(
-          'End date cannot be before start date.',
-        )
-      }
-
-      const days =
-        calculateWorkingDays(
-          form.startDate,
-          form.endDate,
-        )
-
-      if (days <= 0) {
-        throw new Error(
-          'The selected dates contain no working days.',
-        )
-      }
-
-      if (overlapWarning) {
-        throw new Error(
-          overlapWarning,
-        )
-      }
-
-      const employee =
-        employees.find(
-          (item) =>
-            getEmployeeId(item) ===
-            form.employeeId,
-        )
-
-      if (!employee) {
-        throw new Error(
-          'Selected employee was not found.',
-        )
-      }
+      const isApproved =
+        editForm.approvalStatus ===
+        'Approved'
 
       const payload = {
         employeeId:
-          getEmployeeId(employee),
+          editForm.employeeId,
+
+        employeeName:
+          employees.find(
+            (employee) =>
+              getEmployeeId(
+                employee,
+              ) ===
+              editForm.employeeId,
+          )?.name ||
+          editingRequest.employeeName,
+
+        department:
+          editForm.department ||
+          '—',
 
         leaveType:
-          form.leaveType,
+          editForm.leaveType,
 
         requestDate:
-          form.requestDate,
+          editForm.requestDate,
 
         startDate:
-          form.startDate,
+          editForm.startDate,
 
         endDate:
-          form.endDate,
+          editForm.endDate,
 
-        days,
+        days: calculatedDays,
 
         approvalStatus:
-          form.approvalStatus ||
-          'Pending',
+          editForm.approvalStatus,
 
-        approvedBy:
-          form.approvalStatus ===
-          'Approved'
-            ? form.approvedBy ||
-              'HR Manager'
-            : null,
+        approvedBy: isApproved
+          ? 'HR Manager'
+          : null,
 
-        approvedDate:
-          form.approvalStatus ===
-          'Approved'
-            ? form.approvedDate ||
-              new Date()
-                .toISOString()
-                .slice(0, 10)
-            : null,
+        approvedDate: isApproved
+          ? getTodayString()
+          : null,
 
         remarks:
-          form.remarks || null,
-
-        balance:
-          form.balance === '' ||
-          form.balance === null ||
-          form.balance ===
-            undefined
-            ? null
-            : Number(form.balance),
+          editForm.remarks.trim() ||
+          null,
       }
 
-      if (editingRequest) {
-        await updateLeaveRequest(
-          editingRequest.id,
-          payload,
-        )
-      } else {
-        await createLeaveRequest(
-          payload,
-        )
-      }
+      await updateLeaveRequest(
+        editingRequest.id,
+        payload,
+      )
 
       const updatedRequests =
         await fetchLeaveRequests()
 
-      setRequests(
+      const normalizedRequests =
         updatedRequests.map(
           normalizeLeaveRequest,
-        ),
+        )
+
+      setRequests(
+        normalizedRequests,
       )
 
-      closeModal()
+      knownRequestIdsRef.current =
+        new Set(
+          normalizedRequests.map(
+            (item) => item.id,
+          ),
+        )
+
+      setEditModalOpen(false)
+      setEditingRequest(null)
+      setEditError('')
     } catch (err) {
       console.error(
-        'Save leave request error:',
+        'Edit leave request error:',
         err,
       )
 
-      setError(
+      setEditError(
         err.message ||
-          'Failed to save leave request.',
+          'Failed to save leave request changes.',
       )
     } finally {
       setSaving(false)
     }
   }
+
+  /*
+   * ============================================================
+   * APPROVE / REJECT
+   * ============================================================
+   */
 
   async function updateStatus(
     request,
@@ -1287,31 +1892,78 @@ function Leave() {
 
     try {
       const approved =
-        approvalStatus === 'Approved'
+        approvalStatus ===
+        'Approved'
+
+      const remarks =
+        reviewRemarks.trim()
 
       await updateLeaveRequest(
         request.id,
         {
           approvalStatus,
+
           approvedBy: approved
             ? 'HR Manager'
             : null,
+
           approvedDate: approved
-            ? new Date()
-                .toISOString()
-                .slice(0, 10)
+            ? getTodayString()
             : null,
+
+          remarks:
+            remarks ||
+            request.remarks ||
+            null,
         },
       )
 
       const updatedRequests =
         await fetchLeaveRequests()
 
-      setRequests(
+      const normalizedRequests =
         updatedRequests.map(
           normalizeLeaveRequest,
-        ),
+        )
+
+      setRequests(
+        normalizedRequests,
       )
+
+      knownRequestIdsRef.current =
+        new Set(
+          normalizedRequests.map(
+            (item) => item.id,
+          ),
+        )
+
+      setNewRequestIds(
+        (current) => {
+          const next =
+            new Set(current)
+
+          next.delete(request.id)
+
+          return next
+        },
+      )
+
+      setNewRequestCount(
+        (current) =>
+          Math.max(
+            current -
+              (newRequestIds.has(
+                request.id,
+              )
+                ? 1
+                : 0),
+            0,
+          ),
+      )
+
+      setReviewModalOpen(false)
+      setReviewingRequest(null)
+      setReviewRemarks('')
     } catch (err) {
       console.error(
         'Update leave status error:',
@@ -1327,124 +1979,276 @@ function Leave() {
     }
   }
 
-  async function approveRequest(
-    request,
-  ) {
+  async function approveRequest() {
+    if (!reviewingRequest) {
+      return
+    }
+
     await updateStatus(
-      request,
+      reviewingRequest,
       'Approved',
     )
   }
 
-  async function rejectRequest(
-    request,
-  ) {
+  async function rejectRequest() {
+    if (!reviewingRequest) {
+      return
+    }
+
     await updateStatus(
-      request,
+      reviewingRequest,
       'Rejected',
     )
   }
 
-  async function handleDelete(
-    request,
-  ) {
-    const confirmed =
-      window.confirm(
-        `Delete leave request ${request.id}? This action cannot be undone.`,
-      )
+  /*
+   * ============================================================
+   * NOTIFICATIONS
+   * ============================================================
+   */
 
-    if (!confirmed) {
-      return
-    }
-
-    setSaving(true)
-    setError('')
-
-    try {
-      await deleteLeaveRequest(
-        request.id,
-      )
-
-      const updatedRequests =
-        await fetchLeaveRequests()
-
-      setRequests(
-        updatedRequests.map(
-          normalizeLeaveRequest,
-        ),
-      )
-    } catch (err) {
-      console.error(
-        'Delete leave request error:',
-        err,
-      )
-
-      setError(
-        err.message ||
-          'Failed to delete leave request.',
-      )
-    } finally {
-      setSaving(false)
-    }
+  function dismissNotification() {
+    setNotificationVisible(false)
+    setNotificationRequest(null)
   }
+
+  function clearNewRequestNotifications() {
+    setNewRequestIds(
+      new Set(),
+    )
+
+    setNewRequestCount(0)
+
+    setNotificationVisible(false)
+    setNotificationRequest(null)
+  }
+
+  /*
+   * ============================================================
+   * RENDER
+   * ============================================================
+   */
 
   return (
     <div className="min-h-screen bg-[#F3F4F6] text-slate-950">
       <main className="mx-auto max-w-[1600px] px-5 py-6 sm:px-8">
+
+        {/* =====================================================
+            NEW REQUEST NOTIFICATION
+        ====================================================== */}
+
+        {notificationVisible &&
+          notificationRequest && (
+            <div className="mb-5 overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-lg">
+              <div className="flex items-start gap-4 p-4 sm:p-5">
+                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
+                  <Bell size={20} />
+
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    !
+                  </span>
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-bold text-slate-950">
+                      New Leave Request
+                    </p>
+
+                    <span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#4755AE]">
+                      Requires Review
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-sm text-slate-600">
+                    <span className="font-semibold text-slate-900">
+                      {
+                        notificationRequest.employeeName
+                      }
+                    </span>{' '}
+                    submitted a{' '}
+                    <span className="font-semibold text-slate-900">
+                      {
+                        notificationRequest.leaveType
+                      }
+                    </span>{' '}
+                    request for{' '}
+                    <span className="font-semibold text-slate-900">
+                      {formatNumber(
+                        notificationRequest.days,
+                      )}{' '}
+                      days
+                    </span>
+                    .
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    {
+                      notificationRequest.startDate
+                    }{' '}
+                    →{' '}
+                    {
+                      notificationRequest.endDate
+                    }
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openReviewModal(
+                          notificationRequest,
+                        )
+                      }
+                      className="rounded-lg bg-[#4755AE] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#3d4998]"
+                    >
+                      Review Request
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={
+                        dismissNotification
+                      }
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={
+                    dismissNotification
+                  }
+                  className="shrink-0 text-slate-400 transition hover:text-slate-700"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+
         {/* =====================================================
             HEADER
         ====================================================== */}
 
         <header className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
-              HR Management
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+                HR Management
+              </p>
+
+              {pendingCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  {pendingCount} Pending
+                </span>
+              )}
+
+              {newRequestCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-red-700">
+                  <Bell size={11} />
+                  {newRequestCount} New
+                </span>
+              )}
+            </div>
 
             <h1 className="mt-1 text-2xl font-bold tracking-tight">
               Leave Management
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              Manage leave requests, approvals and employee leave balances.
+              Review, approve, reject, and administer employee-submitted leave requests.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="flex w-fit items-center gap-2 rounded-xl bg-[#4755AE] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998]"
-          >
-            <CalendarDays size={17} />
-            New Leave Request
-          </button>
+          <div className="flex items-center gap-2">
+            {newRequestCount > 0 && (
+              <button
+                type="button"
+                onClick={
+                  clearNewRequestNotifications
+                }
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
+              >
+                <Check size={16} />
+                Mark New as Seen
+              </button>
+            )}
+
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              HR Review Inbox
+            </div>
+          </div>
         </header>
 
         {/* =====================================================
             ERROR
         ====================================================== */}
 
-        {error && (
-          <div className="mb-6 flex items-start justify-between gap-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            <span>{error}</span>
+        {error &&
+          !reviewModalOpen &&
+          !editModalOpen && (
+            <div className="mb-6 flex items-start justify-between gap-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              <span>{error}</span>
 
-            <button
-              type="button"
-              onClick={() =>
-                setError('')
-              }
-              className="shrink-0 text-red-400 hover:text-red-700"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
+              <button
+                type="button"
+                onClick={() =>
+                  setError('')
+                }
+                className="shrink-0 text-red-400 hover:text-red-700"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
 
         {/* =====================================================
             KPI CARDS
         ====================================================== */}
 
         <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div
+            className={`rounded-2xl border bg-white p-5 shadow-sm ${
+              pendingCount > 0
+                ? 'border-amber-200 ring-1 ring-amber-100'
+                : 'border-slate-200'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Pending Review
+                </p>
+
+                <p className="mt-2 text-2xl font-bold text-slate-950">
+                  {pendingCount}
+                </p>
+
+                {pendingCount > 0 && (
+                  <p className="mt-1 text-xs font-medium text-amber-600">
+                    Requires HR action
+                  </p>
+                )}
+              </div>
+
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                <Clock3 size={20} />
+
+                {pendingCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {pendingCount}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
@@ -1459,24 +2263,6 @@ function Leave() {
 
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
                 <FileText size={20} />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Pending
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {pendingCount}
-                </p>
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                <Clock3 size={20} />
               </div>
             </div>
           </div>
@@ -1618,29 +2404,48 @@ function Leave() {
         </section>
 
         {/* =====================================================
-            LEAVE REQUESTS
+            LEAVE REQUEST INBOX
         ====================================================== */}
 
         <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
-                Leave Requests
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+                  Employee Requests
+                </p>
+
+                {pendingCount > 0 && (
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                    {pendingCount}
+                  </span>
+                )}
+              </div>
 
               <h2 className="mt-1 text-lg font-bold">
-                Requests & Approvals
+                Leave Review Inbox
               </h2>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Employee-submitted requests awaiting HR review.
+              </p>
             </div>
 
-            <p className="text-sm text-slate-500">
-              {filteredRequests.length}{' '}
-              request
-              {filteredRequests.length ===
-              1
-                ? ''
-                : 's'}
-            </p>
+            <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                Automatically checking for new requests
+              </div>
+
+              <p className="text-sm text-slate-500">
+                {filteredRequests.length}{' '}
+                request
+                {filteredRequests.length ===
+                1
+                  ? ''
+                  : 's'}
+              </p>
+            </div>
           </div>
 
           {loading ? (
@@ -1649,7 +2454,7 @@ function Leave() {
                 <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#4755AE]" />
 
                 <p className="text-sm font-medium text-slate-500">
-                  Loading leave data...
+                  Loading employee leave requests...
                 </p>
               </div>
             </div>
@@ -1665,12 +2470,12 @@ function Leave() {
               </h3>
 
               <p className="mt-1 max-w-md text-sm text-slate-500">
-                Create a leave request or adjust your filters to see records.
+                Employee-submitted leave requests will automatically appear here.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1150px]">
+              <table className="w-full min-w-[1280px]">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60 text-left">
                     <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -1697,217 +2502,212 @@ function Leave() {
                       Status
                     </th>
 
-                    <th className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Approved By
-                    </th>
-
                     <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Actions
+                      HR Action
                     </th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {filteredRequests.map(
-                    (request) => (
-                      <tr
-                        key={request.id}
-                        className="border-b border-slate-50 transition hover:bg-slate-50/60"
-                      >
-                        <td className="px-5 py-4">
-                          <p className="text-sm font-semibold text-slate-900">
-                            {request.id}
-                          </p>
+                    (request) => {
+                      const isNew =
+                        newRequestIds.has(
+                          request.id,
+                        )
 
-                          <p className="mt-0.5 text-xs text-slate-400">
-                            Requested{' '}
-                            {request.requestDate ||
-                              '—'}
-                          </p>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-[#4755AE]">
-                              {getEmployeeInitials(
-                                employees.find(
-                                  (
-                                    employee,
-                                  ) =>
-                                    getEmployeeId(
-                                      employee,
-                                    ) ===
-                                    request.employeeId,
-                                ) || {
-                                  name: request.employeeName,
-                                },
+                      return (
+                        <tr
+                          key={
+                            request.id
+                          }
+                          className={`border-b border-slate-50 transition ${
+                            isNew
+                              ? 'bg-indigo-50/40 hover:bg-indigo-50/70'
+                              : 'hover:bg-slate-50/60'
+                          }`}
+                        >
+                          <td className="px-5 py-4">
+                            <div className="flex items-start gap-2">
+                              {isNew && (
+                                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />
                               )}
-                            </div>
 
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {request.employeeName}
-                              </p>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {request.id}
+                                  </p>
 
-                              <div className="mt-0.5 flex items-center gap-2">
-                                <span className="text-xs font-medium text-slate-400">
-                                  {request.employeeId ||
+                                  {isNew && (
+                                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-600">
+                                      New
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="mt-0.5 text-xs text-slate-400">
+                                  Requested{' '}
+                                  {request.requestDate ||
                                     '—'}
-                                </span>
-
-                                <span className="text-slate-300">
-                                  •
-                                </span>
-
-                                <span className="text-xs text-slate-400">
-                                  {request.department ||
-                                    '—'}
-                                </span>
+                                </p>
                               </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex rounded-lg px-2.5 py-1.5 text-xs font-semibold ${getLeaveTypeClasses(
-                              request.leaveType,
-                            )}`}
-                          >
-                            {request.leaveType}
-                          </span>
-                        </td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-[#4755AE]">
+                                {getEmployeeInitials(
+                                  employees.find(
+                                    (
+                                      employee,
+                                    ) =>
+                                      getEmployeeId(
+                                        employee,
+                                      ) ===
+                                      request.employeeId,
+                                  ) || {
+                                    name:
+                                      request.employeeName,
+                                  },
+                                )}
+                              </div>
 
-                        <td className="px-5 py-4">
-                          <p className="text-sm font-medium text-slate-700">
-                            {request.startDate ||
-                              '—'}
-                          </p>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {
+                                    request.employeeName
+                                  }
+                                </p>
 
-                          <p className="mt-0.5 text-xs text-slate-400">
-                            to{' '}
-                            {request.endDate ||
-                              '—'}
-                          </p>
-                        </td>
+                                <div className="mt-0.5 flex items-center gap-2">
+                                  <span className="text-xs font-medium text-slate-400">
+                                    {
+                                      request.employeeId
+                                    }
+                                  </span>
 
-                        <td className="px-5 py-4">
-                          <span className="text-sm font-bold text-slate-900">
-                            {formatNumber(
-                              request.days,
-                            )}
-                          </span>
+                                  <span className="text-slate-300">
+                                    •
+                                  </span>
 
-                          <span className="ml-1 text-xs text-slate-400">
-                            days
-                          </span>
-                        </td>
+                                  <span className="text-xs text-slate-400">
+                                    {
+                                      request.department
+                                    }
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
 
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
-                              request.approvalStatus,
-                            )}`}
-                          >
-                            {request.approvalStatus}
-                          </span>
-                        </td>
+                          <td className="px-5 py-4">
+                            <span
+                              className={`inline-flex rounded-lg px-2.5 py-1.5 text-xs font-semibold ${getLeaveTypeClasses(
+                                request.leaveType,
+                              )}`}
+                            >
+                              {
+                                request.leaveType
+                              }
+                            </span>
+                          </td>
 
-                        <td className="px-5 py-4">
-                          <p className="text-sm text-slate-700">
-                            {request.approvedBy ||
-                              '—'}
-                          </p>
-
-                          {request.approvedDate && (
-                            <p className="mt-0.5 text-xs text-slate-400">
-                              {request.approvedDate}
+                          <td className="px-5 py-4">
+                            <p className="text-sm font-medium text-slate-700">
+                              {
+                                request.startDate
+                              }
                             </p>
-                          )}
-                        </td>
 
-                        <td className="px-5 py-4">
-                          <div className="flex justify-end gap-1">
-                            {request.approvalStatus ===
-                              'Pending' && (
-                              <>
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              to{' '}
+                              {
+                                request.endDate
+                              }
+                            </p>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span className="text-sm font-bold text-slate-900">
+                              {formatNumber(
+                                request.days,
+                              )}
+                            </span>
+
+                            <span className="ml-1 text-xs text-slate-400">
+                              days
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                                request.approvalStatus,
+                              )}`}
+                            >
+                              {
+                                request.approvalStatus
+                              }
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex justify-end gap-2">
+                              {request.approvalStatus ===
+                              'Pending' ? (
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    approveRequest(
+                                    openReviewModal(
                                       request,
                                     )
                                   }
                                   disabled={
                                     saving
                                   }
-                                  title="Approve request"
-                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-emerald-500 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-40"
+                                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                                    isNew
+                                      ? 'bg-[#4755AE] text-white hover:bg-[#3d4998]'
+                                      : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                  }`}
                                 >
-                                  <Check
-                                    size={16}
+                                  <UserCheck
+                                    size={
+                                      15
+                                    }
                                   />
-                                </button>
 
+                                  Review
+                                </button>
+                              ) : (
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    rejectRequest(
+                                    openEditModal(
                                       request,
                                     )
                                   }
                                   disabled={
                                     saving
                                   }
-                                  title="Reject request"
-                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                                  className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-[#4755AE] transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
                                 >
-                                  <XCircle
-                                    size={16}
+                                  <Edit3
+                                    size={
+                                      15
+                                    }
                                   />
+
+                                  Edit
                                 </button>
-                              </>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openEditModal(
-                                  request,
-                                )
-                              }
-                              disabled={
-                                saving
-                              }
-                              title="Edit request"
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
-                            >
-                              <Edit3
-                                size={16}
-                              />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDelete(
-                                  request,
-                                )
-                              }
-                              disabled={
-                                saving
-                              }
-                              title="Delete request"
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <X
-                                size={16}
-                              />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ),
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    },
                   )}
                 </tbody>
               </table>
@@ -1917,6 +2717,7 @@ function Leave() {
 
         {/* =====================================================
             EMPLOYEE LEAVE BALANCE
+            KEEPING THE BOTTOM SECTION
         ====================================================== */}
 
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1947,13 +2748,27 @@ function Leave() {
               <Field label="Select Employee">
                 <SelectField
                   value={
-                    selectedEmployeeId
+                    selectedEmployee
+                      ? getEmployeeId(
+                          selectedEmployee,
+                        )
+                      : ''
                   }
-                  onChange={(event) =>
-                    setSelectedEmployeeId(
-                      event.target.value,
+                  onChange={(event) => {
+                    const employee =
+                      employees.find(
+                        (item) =>
+                          getEmployeeId(
+                            item,
+                          ) ===
+                          event.target.value,
+                      )
+
+                    setSelectedEmployee(
+                      employee ||
+                        null,
                     )
-                  }
+                  }}
                 >
                   <option value="">
                     Select employee
@@ -2103,7 +2918,9 @@ function Leave() {
                               className="border-b border-slate-50"
                             >
                               <td className="px-4 py-3 text-sm font-semibold text-slate-700">
-                                {request.id}
+                                {
+                                  request.id
+                                }
                               </td>
 
                               <td className="px-4 py-3">
@@ -2175,39 +2992,60 @@ function Leave() {
         </section>
 
         {/* =====================================================
-            WORKBOOK LOGIC NOTE
+            HR REVIEW WORKFLOW
+            KEEPING THE BOTTOM SECTION
         ====================================================== */}
 
         <section className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#4755AE] shadow-sm">
-              <Clock3 size={17} />
+              <Bell size={17} />
             </div>
 
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                Leave calculation rules
+                HR Leave Review Workflow
               </h3>
 
               <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
                 <li>
-                  • Number of leave days uses working days only.
+                  • Employees submit their leave requests from the Employee Dashboard.
                 </li>
 
                 <li>
-                  • Saturday and Sunday are excluded from the day count.
+                  • Submitted requests automatically appear in this HR review inbox.
+                </li>
+
+                <li>
+                  • The HR dashboard checks for new requests automatically every 15 seconds.
+                </li>
+
+                <li>
+                  • New requests are highlighted and generate an HR notification.
+                </li>
+
+                <li>
+                  • HR reviews the request before approving or rejecting it.
+                </li>
+
+                <li>
+                  • Once a request is Approved or Rejected, an Edit button becomes available.
+                </li>
+
+                <li>
+                  • Editing an existing approved request can update the employee, leave type, dates, status, or remarks.
+                </li>
+
+                <li>
+                  • Returning an edited request to Pending sends it back into the HR review workflow.
+                </li>
+
+                <li>
+                  • HR cannot create a brand-new leave request from this screen.
                 </li>
 
                 <li>
                   • Only Approved leave counts against the employee leave balance.
-                </li>
-
-                <li>
-                  • Approved overlapping leave requests are prevented.
-                </li>
-
-                <li>
-                  • Leave data is now persisted through the Prisma/API layer.
                 </li>
               </ul>
             </div>
@@ -2215,17 +3053,52 @@ function Leave() {
         </section>
       </main>
 
-      <LeaveModal
-        open={modalOpen}
-        form={form}
-        employees={employees}
-        editing={Boolean(editingRequest)}
+      {/* =======================================================
+          REVIEW MODAL
+      ======================================================== */}
+
+      <ReviewModal
+        open={reviewModalOpen}
+        request={reviewingRequest}
         saving={saving}
         error={error}
-        overlapWarning={overlapWarning}
-        onClose={closeModal}
-        onChange={handleFormChange}
-        onSubmit={saveRequest}
+        reviewRemarks={
+          reviewRemarks
+        }
+        onRemarksChange={
+          setReviewRemarks
+        }
+        onClose={
+          closeReviewModal
+        }
+        onApprove={
+          approveRequest
+        }
+        onReject={
+          rejectRequest
+        }
+      />
+
+      {/* =======================================================
+          EDIT MODAL
+      ======================================================== */}
+
+      <EditLeaveModal
+        open={editModalOpen}
+        request={editingRequest}
+        employees={employees}
+        saving={saving}
+        error={editError}
+        form={editForm}
+        onChange={
+          handleEditFieldChange
+        }
+        onClose={
+          closeEditModal
+        }
+        onSave={
+          saveEditedRequest
+        }
       />
     </div>
   )

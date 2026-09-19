@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   BarChart3,
   BriefcaseBusiness,
   Building2,
@@ -8,17 +9,7 @@ import {
   Users,
 } from 'lucide-react'
 
-import { INITIAL_EMPLOYEES } from '../../Employer/data/employeeData'
-
-const DEPARTMENTS = [
-  'All Departments',
-  'Engineering',
-  'Human Resources',
-  'Finance',
-  'Marketing',
-  'Sales',
-  'Operations',
-]
+const API_URL = 'http://localhost:4000/api/hr-manager'
 
 const EMPLOYMENT_TYPES = [
   'All Employment Types',
@@ -35,12 +26,7 @@ const STATUSES = [
 ]
 
 function getEmployeeName(employee) {
-  if (employee.name) return employee.name
-
-  const firstName = employee.firstName || ''
-  const lastName = employee.lastName || ''
-
-  return `${firstName} ${lastName}`.trim() || 'Unnamed Employee'
+  return employee.name || 'Unnamed Employee'
 }
 
 function getEmployeeId(employee) {
@@ -52,27 +38,11 @@ function getDepartment(employee) {
 }
 
 function getEmploymentType(employee) {
-  return (
-    employee.employmentType ||
-    employee.employment_type ||
-    'Permanent'
-  )
+  return employee.employmentType || 'Permanent'
 }
 
 function getStatus(employee) {
-  return employee.employmentStatus || employee.status || 'Active'
-}
-
-function getSalary(employee) {
-  const salary =
-    employee.basicSalary ??
-    employee.salary ??
-    employee.basic_salary ??
-    0
-
-  const numericSalary = Number(salary)
-
-  return Number.isFinite(numericSalary) ? numericSalary : 0
+  return employee.employmentStatus || 'Active'
 }
 
 function formatCurrency(value) {
@@ -80,21 +50,20 @@ function formatCurrency(value) {
     style: 'currency',
     currency: 'ETB',
     maximumFractionDigits: 0,
-  }).format(value)
+  }).format(Number(value) || 0)
 }
 
-function getInitials(employee) {
-  if (employee.initials) return employee.initials
+function getCurrentMonth() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
 
-  const name = getEmployeeName(employee)
-
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
+function formatMonth(month) {
+  if (!month) return ''
+  return new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  })
 }
 
 function StatCard({ icon: Icon, label, value, description }) {
@@ -102,19 +71,10 @@ function StatCard({ icon: Icon, label, value, description }) {
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-slate-500">
-            {label}
-          </p>
-
-          <p className="mt-2 text-2xl font-bold text-slate-950">
-            {value}
-          </p>
-
-          <p className="mt-1 text-xs text-slate-400">
-            {description}
-          </p>
+          <p className="text-sm font-medium text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+          <p className="mt-1 text-xs text-slate-400">{description}</p>
         </div>
-
         <div className="rounded-xl bg-slate-100 p-3">
           <Icon className="h-5 w-5 text-slate-700" />
         </div>
@@ -127,201 +87,372 @@ function ReportSection({ title, description, children }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-5">
-        <h2 className="text-lg font-bold text-slate-950">
-          {title}
-        </h2>
-
-        <p className="mt-1 text-sm text-slate-500">
-          {description}
-        </p>
+        <h2 className="text-lg font-bold text-slate-950">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
-
       {children}
     </section>
   )
 }
 
+function csvDownload(filename, headers, rows) {
+  const csv = [headers, ...rows]
+    .map((row) =>
+      row
+        .map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`)
+        .join(','),
+    )
+    .join('\n')
+
+  const blob = new Blob([csv], {
+    type: 'text/csv;charset=utf-8;',
+  })
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = filename
+
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+
+  URL.revokeObjectURL(url)
+}
+
 function HRReports() {
+  const [month, setMonth] = useState(getCurrentMonth)
   const [department, setDepartment] = useState('All Departments')
-  const [employmentType, setEmploymentType] = useState(
-    'All Employment Types',
-  )
+  const [employmentType, setEmploymentType] = useState('All Employment Types')
   const [status, setStatus] = useState('All Statuses')
 
-  const employees = Array.isArray(INITIAL_EMPLOYEES)
-    ? INITIAL_EMPLOYEES
-    : []
+  const [report, setReport] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [apiError, setApiError] = useState('')
 
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((employee) => {
-      const departmentMatches =
-        department === 'All Departments' ||
-        getDepartment(employee) === department
+  useEffect(() => {
+    let cancelled = false
 
-      const employmentTypeMatches =
-        employmentType === 'All Employment Types' ||
-        getEmploymentType(employee) === employmentType
+    async function loadReports() {
+      setLoading(true)
+      setApiError('')
 
-      const statusMatches =
-        status === 'All Statuses' ||
-        getStatus(employee) === status
+      try {
+        const response = await fetch(
+          `${API_URL}/reports?payrollMonth=${encodeURIComponent(month)}`,
+        )
 
-      return (
-        departmentMatches &&
-        employmentTypeMatches &&
-        statusMatches
-      )
-    })
-  }, [employees, department, employmentType, status])
+        const data = await response.json().catch(() => null)
 
-  const reportStats = useMemo(() => {
-    const total = filteredEmployees.length
+        if (!response.ok) {
+          throw new Error(
+            data?.message || 'Failed to load HR reports.',
+          )
+        }
 
-    const active = filteredEmployees.filter(
-      (employee) => getStatus(employee) === 'Active',
+        if (!cancelled) {
+          setReport(data)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setApiError(
+            error.message || 'Unable to load HR reports.',
+          )
+          setReport(null)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadReports()
+
+    return () => {
+      cancelled = true
+    }
+  }, [month])
+
+  const employees = report?.employees || []
+  const backendMetrics = report?.metrics || {}
+  const backendDepartments = report?.departmentHeadcount || []
+  const alerts = report?.alerts || {}
+  const alertTotal = Number(report?.alertTotal || 0)
+
+  const departments = useMemo(
+    () => [
+      'All Departments',
+      ...Array.from(
+        new Set(
+          employees
+            .map(getDepartment)
+            .filter(Boolean),
+        ),
+      ),
+    ],
+    [employees],
+  )
+
+  const filteredEmployees = useMemo(
+    () =>
+      employees.filter((employee) => {
+        const departmentMatches =
+          department === 'All Departments' ||
+          getDepartment(employee) === department
+
+        const employmentTypeMatches =
+          employmentType === 'All Employment Types' ||
+          getEmploymentType(employee) === employmentType
+
+        const statusMatches =
+          status === 'All Statuses' ||
+          getStatus(employee) === status
+
+        return (
+          departmentMatches &&
+          employmentTypeMatches &&
+          statusMatches
+        )
+      }),
+    [
+      employees,
+      department,
+      employmentType,
+      status,
+    ],
+  )
+
+  const filteredRows = useMemo(() => {
+    return filteredEmployees.map((employee) => ({
+      ...employee,
+      attendance: employee.attendance || {
+        present: 0,
+        absent: 0,
+        leave: 0,
+        overtimeHours: 0,
+        lateMinutes: 0,
+      },
+      payroll: employee.payroll || null,
+    }))
+  }, [filteredEmployees])
+
+  const stats = useMemo(() => {
+    const total = filteredRows.length
+
+    const active = filteredRows.filter(
+      (employee) =>
+        getStatus(employee) === 'Active',
     ).length
 
-    const onLeave = filteredEmployees.filter(
-      (employee) => getStatus(employee) === 'On Leave',
+    const onLeave = filteredRows.filter(
+      (employee) =>
+        getStatus(employee) === 'On Leave',
     ).length
 
-    const resigned = filteredEmployees.filter(
-      (employee) => getStatus(employee) === 'Resigned',
+    const resigned = filteredRows.filter(
+      (employee) =>
+        getStatus(employee) === 'Resigned',
     ).length
 
-    const totalPayroll = filteredEmployees.reduce(
-      (sum, employee) => sum + getSalary(employee),
+    const basicSalary = filteredRows.reduce(
+      (sum, employee) =>
+        sum + Number(employee.basicSalary || 0),
       0,
     )
 
-    const averageSalary =
-      total > 0 ? totalPayroll / total : 0
+    const grossPayroll = filteredRows.reduce(
+      (sum, employee) =>
+        sum +
+        Number(employee.payroll?.grossSalary || 0),
+      0,
+    )
+
+    const netPayroll = filteredRows.reduce(
+      (sum, employee) =>
+        sum +
+        Number(employee.payroll?.netSalary || 0),
+      0,
+    )
+
+    const overtimePay = filteredRows.reduce(
+      (sum, employee) =>
+        sum +
+        Number(employee.payroll?.overtimePay || 0),
+      0,
+    )
+
+    const overtimeHours = filteredRows.reduce(
+      (sum, employee) =>
+        sum +
+        Number(
+          employee.attendance?.overtimeHours || 0,
+        ),
+      0,
+    )
+
+    const present = filteredRows.reduce(
+      (sum, employee) =>
+        sum +
+        Number(employee.attendance?.present || 0),
+      0,
+    )
+
+    const absent = filteredRows.reduce(
+      (sum, employee) =>
+        sum +
+        Number(employee.attendance?.absent || 0),
+      0,
+    )
+
+    const leave = filteredRows.reduce(
+      (sum, employee) =>
+        sum +
+        Number(employee.attendance?.leave || 0),
+      0,
+    )
+
+    const lateMinutes = filteredRows.reduce(
+      (sum, employee) =>
+        sum +
+        Number(
+          employee.attendance?.lateMinutes || 0,
+        ),
+      0,
+    )
 
     return {
       total,
       active,
       onLeave,
       resigned,
-      totalPayroll,
-      averageSalary,
+      averageSalary:
+        total > 0 ? basicSalary / total : 0,
+      grossPayroll,
+      netPayroll,
+      overtimePay,
+      overtimeHours,
+      present,
+      absent,
+      leave,
+      lateMinutes,
     }
-  }, [filteredEmployees])
+  }, [filteredRows])
 
   const departmentReport = useMemo(() => {
     const counts = {}
 
-    filteredEmployees.forEach((employee) => {
-      const departmentName = getDepartment(employee)
-
-      counts[departmentName] =
-        (counts[departmentName] || 0) + 1
+    filteredRows.forEach((employee) => {
+      const name = getDepartment(employee)
+      counts[name] = (counts[name] || 0) + 1
     })
 
     return Object.entries(counts).sort(
       (a, b) => b[1] - a[1],
     )
-  }, [filteredEmployees])
+  }, [filteredRows])
 
   const employmentTypeReport = useMemo(() => {
     const counts = {}
 
-    filteredEmployees.forEach((employee) => {
+    filteredRows.forEach((employee) => {
       const type = getEmploymentType(employee)
-
       counts[type] = (counts[type] || 0) + 1
     })
 
     return Object.entries(counts).sort(
       (a, b) => b[1] - a[1],
     )
-  }, [filteredEmployees])
+  }, [filteredRows])
 
-  const salaryReport = useMemo(() => {
-    return [...filteredEmployees]
-      .sort((a, b) => getSalary(b) - getSalary(a))
-      .slice(0, 10)
-  }, [filteredEmployees])
+  const salaryReport = useMemo(
+    () =>
+      [...filteredRows]
+        .sort(
+          (a, b) =>
+            Number(b.basicSalary || 0) -
+            Number(a.basicSalary || 0),
+        )
+        .slice(0, 10),
+    [filteredRows],
+  )
 
-  const handleExport = () => {
-    const headers = [
-      'Employee ID',
-      'Employee Name',
-      'Department',
-      'Employment Type',
-      'Status',
-      'Basic Salary',
-    ]
+  function handleExport() {
+    const rows = filteredRows.map(
+      (employee) => [
+        getEmployeeId(employee),
+        getEmployeeName(employee),
+        getDepartment(employee),
+        getEmploymentType(employee),
+        getStatus(employee),
+        Number(
+          employee.basicSalary || 0,
+        ).toFixed(2),
+        Number(
+          employee.payroll?.grossSalary || 0,
+        ).toFixed(2),
+        Number(
+          employee.attendance?.overtimeHours || 0,
+        ).toFixed(2),
+        Number(
+          employee.payroll?.overtimePay || 0,
+        ).toFixed(2),
+        Number(
+          employee.payroll?.netSalary || 0,
+        ).toFixed(2),
+      ],
+    )
 
-    const rows = filteredEmployees.map((employee) => [
-      getEmployeeId(employee),
-      getEmployeeName(employee),
-      getDepartment(employee),
-      getEmploymentType(employee),
-      getStatus(employee),
-      getSalary(employee),
-    ])
-
-    const csv = [
-      headers,
-      ...rows,
-    ]
-      .map((row) =>
-        row
-          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-          .join(','),
-      )
-      .join('\n')
-
-    const blob = new Blob([csv], {
-      type: 'text/csv;charset=utf-8;',
-    })
-
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-
-    link.href = url
-    link.download = 'yanol-tech-hr-report.csv'
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-
-    URL.revokeObjectURL(url)
+    csvDownload(
+      `yanol-tech-hr-report-${month}.csv`,
+      [
+        'Employee ID',
+        'Employee Name',
+        'Department',
+        'Employment Type',
+        'Status',
+        'Basic Salary',
+        'Gross Payroll',
+        'Overtime Hours',
+        'Overtime Pay',
+        'Net Salary',
+      ],
+      rows,
+    )
   }
 
   return (
     <div className="min-h-full bg-[#F3F4F6] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        {/* Header */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-slate-900 p-3">
-                <BarChart3 className="h-6 w-6 text-white" />
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-slate-900 p-3">
+              <BarChart3 className="h-6 w-6 text-white" />
+            </div>
 
-              <div>
-                <h1 className="text-2xl font-bold text-slate-950 sm:text-3xl">
-                  HR Reports
-                </h1>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-950 sm:text-3xl">
+                HR Reports
+              </h1>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Workforce and employee analytics for Yanol Tech.
-                </p>
-              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                Database-backed workforce, attendance and payroll analytics for Yanol Tech.
+              </p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={handleExport}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            disabled={loading || filteredRows.length === 0}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             Export Report
           </button>
         </div>
 
-        {/* Filters */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <FileText className="h-5 w-5 text-slate-700" />
@@ -332,13 +463,28 @@ function HRReports() {
               </h2>
 
               <p className="text-xs text-slate-500">
-                Filter the HR report by workforce category.
+                The selected month is loaded through the consolidated HR Reports API.
               </p>
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="block">
+          <div className="grid gap-4 md:grid-cols-4">
+            <label>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Payroll Month
+              </span>
+
+              <input
+                type="month"
+                value={month}
+                onChange={(event) =>
+                  setMonth(event.target.value)
+                }
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+              />
+            </label>
+
+            <label>
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Department
               </span>
@@ -348,9 +494,9 @@ function HRReports() {
                 onChange={(event) =>
                   setDepartment(event.target.value)
                 }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"
               >
-                {DEPARTMENTS.map((item) => (
+                {departments.map((item) => (
                   <option key={item} value={item}>
                     {item}
                   </option>
@@ -358,7 +504,7 @@ function HRReports() {
               </select>
             </label>
 
-            <label className="block">
+            <label>
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Employment Type
               </span>
@@ -368,7 +514,7 @@ function HRReports() {
                 onChange={(event) =>
                   setEmploymentType(event.target.value)
                 }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"
               >
                 {EMPLOYMENT_TYPES.map((item) => (
                   <option key={item} value={item}>
@@ -378,7 +524,7 @@ function HRReports() {
               </select>
             </label>
 
-            <label className="block">
+            <label>
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Employment Status
               </span>
@@ -388,7 +534,7 @@ function HRReports() {
                 onChange={(event) =>
                   setStatus(event.target.value)
                 }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-slate-400"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400"
               >
                 {STATUSES.map((item) => (
                   <option key={item} value={item}>
@@ -400,272 +546,495 @@ function HRReports() {
           </div>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            icon={Users}
-            label="Employees"
-            value={reportStats.total}
-            description="Employees in current report"
-          />
-
-          <StatCard
-            icon={BriefcaseBusiness}
-            label="Active Employees"
-            value={reportStats.active}
-            description="Currently active workforce"
-          />
-
-          <StatCard
-            icon={Building2}
-            label="Departments"
-            value={departmentReport.length}
-            description="Departments represented"
-          />
-
-          <StatCard
-            icon={FileText}
-            label="Average Salary"
-            value={formatCurrency(reportStats.averageSalary)}
-            description="Average basic salary"
-          />
-        </div>
-
-        {/* Status Summary */}
-        <ReportSection
-          title="Employment Status Summary"
-          description="Current employee status distribution."
-        >
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">
-                Active
-              </p>
-
-              <p className="mt-2 text-2xl font-bold text-slate-950">
-                {reportStats.active}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">
-                On Leave
-              </p>
-
-              <p className="mt-2 text-2xl font-bold text-slate-950">
-                {reportStats.onLeave}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">
-                Resigned
-              </p>
-
-              <p className="mt-2 text-2xl font-bold text-slate-950">
-                {reportStats.resigned}
-              </p>
-            </div>
+        {apiError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {apiError}
           </div>
-        </ReportSection>
+        )}
 
-        {/* Department + Employment Type */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <ReportSection
-            title="Employees by Department"
-            description="Workforce distribution across departments."
-          >
-            {departmentReport.length === 0 ? (
-              <div className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">
-                No employees match the selected filters.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {departmentReport.map(
-                  ([departmentName, count]) => {
-                    const percentage =
-                      reportStats.total > 0
-                        ? (count / reportStats.total) * 100
-                        : 0
+        {!loading && report && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+            Reports connected to the consolidated database API for{' '}
+            <strong>
+              {formatMonth(
+                report.period?.payrollMonth || month,
+              )}
+            </strong>
+            .
+          </div>
+        )}
 
-                    return (
-                      <div key={departmentName}>
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <span className="text-sm font-medium text-slate-700">
-                            {departmentName}
-                          </span>
+        {loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500 shadow-sm">
+            Loading live HR reports...
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                icon={Users}
+                label="Employees"
+                value={stats.total}
+                description="Matching employees"
+              />
 
-                          <span className="text-sm font-semibold text-slate-950">
-                            {count}
-                          </span>
-                        </div>
+              <StatCard
+                icon={BriefcaseBusiness}
+                label="Active Employees"
+                value={stats.active}
+                description="Currently active"
+              />
 
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className="h-full rounded-full bg-slate-800"
-                            style={{
-                              width: `${percentage}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  },
+              <StatCard
+                icon={Building2}
+                label="Departments"
+                value={departmentReport.length}
+                description="Departments represented"
+              />
+
+              <StatCard
+                icon={FileText}
+                label="Average Salary"
+                value={formatCurrency(
+                  stats.averageSalary,
                 )}
+                description="Average basic salary"
+              />
+            </div>
+
+            <ReportSection
+              title={`Payroll Summary — ${formatMonth(month)}`}
+              description="Payroll values are supplied by the HR Reports backend and originate from database payroll records."
+            >
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    Gross Payroll
+                  </p>
+
+                  <p className="mt-2 text-xl font-bold text-slate-950">
+                    {formatCurrency(
+                      stats.grossPayroll,
+                    )}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Backend total:{' '}
+                    {formatCurrency(
+                      backendMetrics.totalMonthlyGrossPayroll,
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    Net Payroll
+                  </p>
+
+                  <p className="mt-2 text-xl font-bold text-slate-950">
+                    {formatCurrency(
+                      stats.netPayroll,
+                    )}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Backend total:{' '}
+                    {formatCurrency(
+                      backendMetrics.totalNetPayroll,
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    Income Tax
+                  </p>
+
+                  <p className="mt-2 text-xl font-bold text-slate-950">
+                    {formatCurrency(
+                      backendMetrics.totalIncomeTax,
+                    )}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    Employee Pension
+                  </p>
+
+                  <p className="mt-2 text-xl font-bold text-slate-950">
+                    {formatCurrency(
+                      backendMetrics.totalEmployeePension,
+                    )}
+                  </p>
+                </div>
               </div>
-            )}
-          </ReportSection>
 
-          <ReportSection
-            title="Employment Type"
-            description="Employees grouped by employment arrangement."
-          >
-            {employmentTypeReport.length === 0 ? (
-              <div className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">
-                No employees match the selected filters.
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-100 p-4">
+                  <p className="text-sm text-slate-500">
+                    Overtime Hours
+                  </p>
+
+                  <p className="mt-2 text-2xl font-bold text-slate-950">
+                    {stats.overtimeHours.toFixed(2)}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Backend total:{' '}
+                    {Number(
+                      backendMetrics.totalOvertimeHours || 0,
+                    ).toFixed(2)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-100 p-4">
+                  <p className="text-sm text-slate-500">
+                    Overtime Pay
+                  </p>
+
+                  <p className="mt-2 text-2xl font-bold text-slate-950">
+                    {formatCurrency(
+                      stats.overtimePay,
+                    )}
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {employmentTypeReport.map(
-                  ([type, count]) => (
-                    <div
-                      key={type}
-                      className="flex items-center justify-between rounded-xl border border-slate-100 p-4"
-                    >
-                      <div>
-                        <p className="font-medium text-slate-800">
-                          {type}
-                        </p>
+            </ReportSection>
 
-                        <p className="mt-1 text-xs text-slate-400">
-                          Employment arrangement
-                        </p>
-                      </div>
-
-                      <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-700">
-                        {count}
-                      </span>
-                    </div>
-                  ),
-                )}
-              </div>
-            )}
-          </ReportSection>
-        </div>
-
-        {/* Salary Report */}
-        <ReportSection
-          title="Salary Overview"
-          description="Employees ordered by basic salary."
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-left">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Employee
-                  </th>
-
-                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Department
-                  </th>
-
-                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Employment Type
-                  </th>
-
-                  <th className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Status
-                  </th>
-
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Basic Salary
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {salaryReport.map((employee) => (
-                  <tr
-                    key={getEmployeeId(employee)}
-                    className="border-b border-slate-100 last:border-0"
+            <ReportSection
+              title="Attendance Summary"
+              description={`Attendance data supplied by the consolidated HR Reports API for ${formatMonth(month)}.`}
+            >
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                {[
+                  ['Present', stats.present],
+                  ['Absent', stats.absent],
+                  ['Leave', stats.leave],
+                  ['Late Minutes', stats.lateMinutes],
+                  [
+                    'OT Hours',
+                    stats.overtimeHours.toFixed(2),
+                  ],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-slate-100 p-4"
                   >
-                    <td className="px-3 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
-                          {getInitials(employee)}
-                        </div>
+                    <p className="text-sm text-slate-500">
+                      {label}
+                    </p>
 
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {getEmployeeName(employee)}
-                          </p>
+                    <p className="mt-2 text-2xl font-bold text-slate-950">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </ReportSection>
 
-                          <p className="text-xs text-slate-400">
-                            {getEmployeeId(employee)}
-                          </p>
+            <ReportSection
+              title="Employment Status Summary"
+              description="Current employee status distribution from the employee database."
+            >
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    Active
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {stats.active}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    On Leave
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {stats.onLeave}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">
+                    Resigned
+                  </p>
+                  <p className="mt-2 text-2xl font-bold">
+                    {stats.resigned}
+                  </p>
+                </div>
+              </div>
+            </ReportSection>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <ReportSection
+                title="Employees by Department"
+                description="Filtered employee distribution. Backend headcount is also available from the reporting API."
+              >
+                {departmentReport.length === 0 ? (
+                  <div className="rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">
+                    No matching employees.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {departmentReport.map(
+                      ([name, count]) => {
+                        const percentage =
+                          stats.total > 0
+                            ? (count / stats.total) *
+                              100
+                            : 0
+
+                        return (
+                          <div key={name}>
+                            <div className="mb-2 flex justify-between">
+                              <span className="text-sm font-medium text-slate-700">
+                                {name}
+                              </span>
+
+                              <span className="text-sm font-semibold">
+                                {count}
+                              </span>
+                            </div>
+
+                            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-slate-800"
+                                style={{
+                                  width: `${percentage}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )
+                      },
+                    )}
+                  </div>
+                )}
+
+                {backendDepartments.length > 0 && (
+                  <div className="mt-5 border-t border-slate-100 pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Backend Active Headcount
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {backendDepartments.map(
+                        (item) => (
+                          <span
+                            key={item.department}
+                            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700"
+                          >
+                            {item.department}: {item.count}
+                          </span>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
+              </ReportSection>
+
+              <ReportSection
+                title="Employment Type"
+                description="Employees grouped by employment arrangement."
+              >
+                <div className="space-y-3">
+                  {employmentTypeReport.map(
+                    ([type, count]) => (
+                      <div
+                        key={type}
+                        className="flex items-center justify-between rounded-xl border border-slate-100 p-4"
+                      >
+                        <span className="font-medium text-slate-800">
+                          {type}
+                        </span>
+
+                        <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-bold">
+                          {count}
+                        </span>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </ReportSection>
+            </div>
+
+            <ReportSection
+              title="Data Quality & Validation"
+              description="Validation checks generated by the HR Reports backend based on the workbook reporting requirements."
+            >
+              {alertTotal === 0 ? (
+                <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="rounded-lg bg-emerald-100 p-2">
+                    <FileText className="h-5 w-5 text-emerald-700" />
+                  </div>
+
+                  <div>
+                    <p className="font-semibold text-emerald-800">
+                      No validation alerts
+                    </p>
+
+                    <p className="text-sm text-emerald-700">
+                      The current reporting checks did not find any flagged records.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {Object.entries(alerts)
+                    .filter(
+                      ([, value]) =>
+                        Number(value || 0) > 0,
+                    )
+                    .map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="rounded-xl border border-amber-200 bg-amber-50 p-4"
+                      >
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+
+                          <div>
+                            <p className="text-sm font-semibold text-amber-900">
+                              {key}
+                            </p>
+
+                            <p className="mt-1 text-2xl font-bold text-amber-800">
+                              {value}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </td>
+                    ))}
+                </div>
+              )}
+            </ReportSection>
 
-                    <td className="px-3 py-4 text-sm text-slate-600">
-                      {getDepartment(employee)}
-                    </td>
+            <ReportSection
+              title="Salary & Payroll Overview"
+              description="Top basic salaries with payroll values supplied by the consolidated reports API."
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[950px] text-left">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      {[
+                        'Employee',
+                        'Department',
+                        'Status',
+                        'Basic Salary',
+                        'OT Hours',
+                        'Gross',
+                        'Net',
+                      ].map((heading) => (
+                        <th
+                          key={heading}
+                          className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                        >
+                          {heading}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
 
-                    <td className="px-3 py-4 text-sm text-slate-600">
-                      {getEmploymentType(employee)}
-                    </td>
+                  <tbody>
+                    {salaryReport.map(
+                      (employee) => {
+                        const id =
+                          getEmployeeId(employee)
 
-                    <td className="px-3 py-4">
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                        {getStatus(employee)}
-                      </span>
-                    </td>
+                        return (
+                          <tr
+                            key={id}
+                            className="border-b border-slate-100 last:border-0"
+                          >
+                            <td className="px-3 py-4">
+                              <p className="text-sm font-semibold text-slate-900">
+                                {getEmployeeName(
+                                  employee,
+                                )}
+                              </p>
 
-                    <td className="px-3 py-4 text-right text-sm font-semibold text-slate-900">
-                      {formatCurrency(getSalary(employee))}
-                    </td>
-                  </tr>
-                ))}
+                              <p className="text-xs text-slate-400">
+                                {id}
+                              </p>
+                            </td>
 
-                {salaryReport.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan="5"
-                      className="px-3 py-8 text-center text-sm text-slate-500"
-                    >
-                      No employees match the selected filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </ReportSection>
+                            <td className="px-3 py-4 text-sm text-slate-600">
+                              {getDepartment(
+                                employee,
+                              )}
+                            </td>
 
-        {/* Phase 1 note */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex gap-3">
-            <div className="rounded-lg bg-slate-100 p-2">
-              <FileText className="h-5 w-5 text-slate-700" />
+                            <td className="px-3 py-4 text-sm text-slate-600">
+                              {getStatus(
+                                employee,
+                              )}
+                            </td>
+
+                            <td className="px-3 py-4 text-sm font-semibold">
+                              {formatCurrency(
+                                employee.basicSalary,
+                              )}
+                            </td>
+
+                            <td className="px-3 py-4 text-sm font-semibold">
+                              {Number(
+                                employee
+                                  .attendance
+                                  ?.overtimeHours ||
+                                  0,
+                              ).toFixed(2)}
+                            </td>
+
+                            <td className="px-3 py-4 text-sm font-semibold">
+                              {formatCurrency(
+                                employee.payroll
+                                  ?.grossSalary ||
+                                  0,
+                              )}
+                            </td>
+
+                            <td className="px-3 py-4 text-sm font-bold text-emerald-700">
+                              {formatCurrency(
+                                employee.payroll
+                                  ?.netSalary ||
+                                  0,
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      },
+                    )}
+
+                    {salaryReport.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="px-3 py-8 text-center text-sm text-slate-500"
+                        >
+                          No employees match the selected filters.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </ReportSection>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500 shadow-sm">
+              <strong className="text-slate-700">
+                Reporting architecture:
+              </strong>{' '}
+              this page uses one consolidated{' '}
+              <code className="rounded bg-slate-100 px-1.5 py-0.5">
+                /api/hr-manager/reports
+              </code>{' '}
+              request. The backend combines Employees, Attendance, Leave and Payroll data according to the HR workbook reporting logic.
             </div>
-
-            <div>
-              <h3 className="font-semibold text-slate-950">
-                Phase 1 Report Foundation
-              </h3>
-
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                These reports currently use the existing employee
-                data available in the frontend. Database-powered
-                attendance, leave, payroll, statutory calculations,
-                historical reporting, and advanced Excel/PDF reports
-                will be connected during the backend and production
-                phases.
-              </p>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   )

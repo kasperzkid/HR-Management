@@ -1,4 +1,11 @@
 import { Router } from 'express'
+import {
+  getHRSettings,
+  updateHRSettings,
+} from '../controllers/hr-settings.controller.js'
+import {
+  getHRReports,
+} from '../controllers/hr-reports.controller.js'
 
 import {
   getDashboard,
@@ -45,6 +52,10 @@ router.get('/employees/:id', getEmployee)
 router.post('/employees', createEmployee)
 router.put('/employees/:id', updateEmployee)
 router.delete('/employees/:id', deleteEmployee)
+// HR Settings
+router.get('/settings', getHRSettings)
+router.put('/settings', updateHRSettings)
+router.get('/reports', getHRReports)
 
 // ============================================================
 // ATTENDANCE

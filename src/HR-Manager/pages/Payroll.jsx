@@ -16,37 +16,56 @@ import {
 
 const API_BASE = 'http://localhost:4000/api/hr-manager'
 
-const EMPLOYEE_PENSION_RATE = 0.07
-const EMPLOYER_PENSION_RATE = 0.11
-
-// Workbook overtime rule:
-// Overtime Hours × (Basic Salary ÷ 208) × 1.5
-const STANDARD_MONTHLY_HOURS = 208
-const OVERTIME_MULTIPLIER = 1.5
+const DEFAULT_PAYROLL_CONFIGURATION = {
+  overtimeRateMultiplier: 1.5,
+  standardMonthlyWorkingHours: 208,
+  taxablePercentOfAllowances: 1,
+  employeePensionRate: 0.07,
+  employerPensionRate: 0.11,
+}
 
 const PAYE_BRACKETS = [
-  { min: 0, max: 2000, rate: 0, subtraction: 0 },
-  { min: 2001, max: 4000, rate: 0.15, subtraction: 300 },
-  { min: 4001, max: 7000, rate: 0.2, subtraction: 500 },
-  { min: 7001, max: 10000, rate: 0.25, subtraction: 850 },
-  { min: 10001, max: 14000, rate: 0.3, subtraction: 1350 },
-  { min: 14001, max: Infinity, rate: 0.35, subtraction: 2050 },
+  {
+    min: 0,
+    max: 2000,
+    rate: 0,
+    subtraction: 0,
+  },
+  {
+    min: 2001,
+    max: 4000,
+    rate: 0.15,
+    subtraction: 300,
+  },
+  {
+    min: 4001,
+    max: 7000,
+    rate: 0.2,
+    subtraction: 500,
+  },
+  {
+    min: 7001,
+    max: 10000,
+    rate: 0.25,
+    subtraction: 850,
+  },
+  {
+    min: 10001,
+    max: 14000,
+    rate: 0.3,
+    subtraction: 1350,
+  },
+  {
+    min: 14001,
+    max: Infinity,
+    rate: 0.35,
+    subtraction: 2050,
+  },
 ]
-
-const ATTENDANCE_CODES = {
-  P: 'Present',
-  A: 'Absent',
-  SL: 'Sick Leave',
-  AL: 'Annual Leave',
-  ML: 'Maternity Leave',
-  OL: 'Other Leave',
-  PH: 'Public Holiday',
-  WK: 'Weekend',
-  HD: 'Half Day',
-}
 
 const emptyPayrollForm = {
   payrollMonth: '',
+  overtimeHours: 0,
   overtimePay: 0,
   loanDeduction: 0,
   otherDeduction: 0,
@@ -61,18 +80,6 @@ function formatCurrency(value) {
   }).format(number)
 }
 
-function formatDate(value) {
-  if (!value) return '-'
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return date.toLocaleDateString()
-}
-
 function getMonthRange(month) {
   if (!month) {
     return {
@@ -81,10 +88,21 @@ function getMonthRange(month) {
     }
   }
 
-  const [year, monthNumber] = month.split('-').map(Number)
+  const [year, monthNumber] = month
+    .split('-')
+    .map(Number)
 
-  const start = new Date(year, monthNumber - 1, 1)
-  const end = new Date(year, monthNumber, 0)
+  const start = new Date(
+    year,
+    monthNumber - 1,
+    1,
+  )
+
+  const end = new Date(
+    year,
+    monthNumber,
+    0,
+  )
 
   return {
     start: start.toISOString().slice(0, 10),
@@ -95,34 +113,57 @@ function getMonthRange(month) {
 function getCurrentMonth() {
   const now = new Date()
 
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return `${now.getFullYear()}-${String(
+    now.getMonth() + 1,
+  ).padStart(2, '0')}`
 }
 
 function calculateIncomeTax(taxableIncome) {
-  const income = Math.max(0, Number(taxableIncome || 0))
+  const income = Math.max(
+    0,
+    Number(taxableIncome || 0),
+  )
 
   const bracket =
     PAYE_BRACKETS.find(
-      (item) => income >= item.min && income <= item.max,
-    ) || PAYE_BRACKETS[PAYE_BRACKETS.length - 1]
+      (item) =>
+        income >= item.min &&
+        income <= item.max,
+    ) ||
+    PAYE_BRACKETS[
+      PAYE_BRACKETS.length - 1
+    ]
 
-  return Math.max(0, income * bracket.rate - bracket.subtraction)
+  return Math.max(
+    0,
+    income * bracket.rate -
+      bracket.subtraction,
+  )
 }
 
-function isExcludedFromStatutoryDeductions(employee) {
+function isExcludedFromStatutoryDeductions(
+  employee,
+) {
   const type = String(
     employee?.employmentType ||
       employee?.employment_type ||
       '',
   ).toLowerCase()
 
-  return type === 'contractual' || type === 'intern'
+  return (
+    type === 'contractual' ||
+    type === 'intern'
+  )
 }
 
 function getEmployeeName(employee) {
-  if (!employee) return 'Unknown Employee'
+  if (!employee) {
+    return 'Unknown Employee'
+  }
 
-  if (employee.name) return employee.name
+  if (employee.name) {
+    return employee.name
+  }
 
   const firstName =
     employee.firstName ||
@@ -134,7 +175,10 @@ function getEmployeeName(employee) {
     employee.last_name ||
     ''
 
-  return `${firstName} ${lastName}`.trim() || 'Unknown Employee'
+  return (
+    `${firstName} ${lastName}`.trim() ||
+    'Unknown Employee'
+  )
 }
 
 function getEmployeeId(employee) {
@@ -151,6 +195,7 @@ function normalizeEmployee(employee) {
     ...employee,
 
     id: employee.id,
+
     employeeId:
       employee.employeeId ||
       employee.employee_id ||
@@ -320,23 +365,55 @@ function normalizePayroll(record) {
   }
 }
 
-function calculateOvertimePay(basicSalary, overtimeHours) {
+function calculateOvertimePay(
+  basicSalary,
+  overtimeHours,
+  payrollConfiguration = DEFAULT_PAYROLL_CONFIGURATION,
+) {
   const salary = Number(basicSalary || 0)
   const hours = Number(overtimeHours || 0)
 
-  if (salary <= 0 || hours <= 0) {
+  const standardHours = Number(
+    payrollConfiguration
+      ?.standardMonthlyWorkingHours ??
+      DEFAULT_PAYROLL_CONFIGURATION.standardMonthlyWorkingHours,
+  )
+
+  const multiplier = Number(
+    payrollConfiguration
+      ?.overtimeRateMultiplier ??
+      DEFAULT_PAYROLL_CONFIGURATION.overtimeRateMultiplier,
+  )
+
+  if (
+    salary <= 0 ||
+    hours <= 0 ||
+    standardHours <= 0 ||
+    multiplier <= 0
+  ) {
     return 0
   }
 
-  const hourlyRate = salary / STANDARD_MONTHLY_HOURS
+  const hourlyRate =
+    salary / standardHours
 
   return Number(
-    (hours * hourlyRate * OVERTIME_MULTIPLIER).toFixed(2),
+    (
+      hours *
+      hourlyRate *
+      multiplier
+    ).toFixed(2),
   )
 }
 
-function calculatePreview(employee, form) {
-  const basicSalary = Number(employee?.basicSalary || 0)
+function calculatePreview(
+  employee,
+  form,
+  payrollConfiguration = DEFAULT_PAYROLL_CONFIGURATION,
+) {
+  const basicSalary = Number(
+    employee?.basicSalary || 0,
+  )
 
   const transportAllowance = Number(
     employee?.transportAllowance || 0,
@@ -354,7 +431,16 @@ function calculatePreview(employee, form) {
     employee?.otherAllowance || 0,
   )
 
-  const overtimePay = Number(form?.overtimePay || 0)
+  const overtimeHours = Number(
+    form?.overtimeHours || 0,
+  )
+
+  const overtimePay =
+    calculateOvertimePay(
+      basicSalary,
+      overtimeHours,
+      payrollConfiguration,
+    )
 
   const loanDeduction = Number(
     form?.loanDeduction || 0,
@@ -373,20 +459,59 @@ function calculatePreview(employee, form) {
     overtimePay
 
   const excluded =
-    isExcludedFromStatutoryDeductions(employee)
+    isExcludedFromStatutoryDeductions(
+      employee,
+    )
+
+  const employeePensionRate =
+    Number(
+      payrollConfiguration
+        ?.employeePensionRate ??
+        DEFAULT_PAYROLL_CONFIGURATION.employeePensionRate,
+    )
+
+  const employerPensionRate =
+    Number(
+      payrollConfiguration
+        ?.employerPensionRate ??
+        DEFAULT_PAYROLL_CONFIGURATION.employerPensionRate,
+    )
+
+  const taxablePercentOfAllowances =
+    Number(
+      payrollConfiguration
+        ?.taxablePercentOfAllowances ??
+        DEFAULT_PAYROLL_CONFIGURATION.taxablePercentOfAllowances,
+    )
 
   const pensionDeduction = excluded
     ? 0
-    : basicSalary * EMPLOYEE_PENSION_RATE
+    : basicSalary *
+      employeePensionRate
+
+  const totalAllowances =
+    transportAllowance +
+    housingAllowance +
+    mealAllowance +
+    otherAllowance
+
+  const taxableAllowances =
+    totalAllowances *
+    taxablePercentOfAllowances
 
   const taxableIncome = Math.max(
     0,
-    grossSalary - pensionDeduction,
+    basicSalary +
+      taxableAllowances +
+      overtimePay -
+      pensionDeduction,
   )
 
   const incomeTax = excluded
     ? 0
-    : calculateIncomeTax(taxableIncome)
+    : calculateIncomeTax(
+        taxableIncome,
+      )
 
   const totalDeductions =
     pensionDeduction +
@@ -399,7 +524,8 @@ function calculatePreview(employee, form) {
 
   const employerPension = excluded
     ? 0
-    : basicSalary * EMPLOYER_PENSION_RATE
+    : basicSalary *
+      employerPensionRate
 
   const employerCost =
     grossSalary + employerPension
@@ -410,6 +536,7 @@ function calculatePreview(employee, form) {
     housingAllowance,
     mealAllowance,
     otherAllowance,
+    overtimeHours,
     overtimePay,
     grossSalary,
     pensionDeduction,
@@ -423,7 +550,9 @@ function calculatePreview(employee, form) {
   }
 }
 
-function getAttendanceSummary(attendance) {
+function getAttendanceSummary(
+  attendance,
+) {
   const summary = {
     workingDays: 0,
     presentDays: 0,
@@ -446,7 +575,10 @@ function getAttendanceSummary(attendance) {
         '',
     ).toUpperCase()
 
-    if (code === 'WK' || code === 'PH') {
+    if (
+      code === 'WK' ||
+      code === 'PH'
+    ) {
       return
     }
 
@@ -461,7 +593,9 @@ function getAttendanceSummary(attendance) {
     }
 
     if (
-      ['SL', 'AL', 'ML', 'OL'].includes(code)
+      ['SL', 'AL', 'ML', 'OL'].includes(
+        code,
+      )
     ) {
       summary.leaveDays += 1
     }
@@ -525,22 +659,36 @@ function PayrollModal({
   payroll,
   month,
   attendanceSummary,
+  payrollConfiguration,
   onClose,
   onSaved,
 }) {
+  const automaticOvertimeHours =
+    Number(
+      attendanceSummary?.overtimeHours ||
+        0,
+    )
+
+  const automaticOvertimePay =
+    calculateOvertimePay(
+      employee?.basicSalary,
+      automaticOvertimeHours,
+      payrollConfiguration,
+    )
+
   const [form, setForm] = useState({
     ...emptyPayrollForm,
+
     payrollMonth:
       payroll?.payrollMonth ||
       month ||
       getCurrentMonth(),
 
-    // Overtime is always calculated from Attendance for the selected month.
-    // A saved payroll overtime value must never override fresh attendance data.
-    overtimePay: calculateOvertimePay(
-      employee?.basicSalary,
-      attendanceSummary?.overtimeHours,
-    ),
+    overtimeHours:
+      automaticOvertimeHours,
+
+    overtimePay:
+      automaticOvertimePay,
 
     loanDeduction:
       payroll?.loanDeduction ?? 0,
@@ -549,15 +697,30 @@ function PayrollModal({
       payroll?.otherDeduction ?? 0,
   })
 
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [saving, setSaving] =
+    useState(false)
+
+  const [error, setError] =
+    useState('')
 
   const preview = useMemo(
-    () => calculatePreview(employee, form),
-    [employee, form],
+    () =>
+      calculatePreview(
+        employee,
+        form,
+        payrollConfiguration,
+      ),
+    [
+      employee,
+      form,
+      payrollConfiguration,
+    ],
   )
 
-  function updateField(field, value) {
+  function updateField(
+    field,
+    value,
+  ) {
     setForm((current) => ({
       ...current,
       [field]: value,
@@ -568,12 +731,16 @@ function PayrollModal({
     event.preventDefault()
 
     if (!employee) {
-      setError('Employee information is missing.')
+      setError(
+        'Employee information is missing.',
+      )
       return
     }
 
     if (!form.payrollMonth) {
-      setError('Payroll month is required.')
+      setError(
+        'Payroll month is required.',
+      )
       return
     }
 
@@ -581,14 +748,32 @@ function PayrollModal({
       setSaving(true)
       setError('')
 
-      const payload = {
-        employeeId: getEmployeeId(employee),
-        payrollMonth: form.payrollMonth,
+      /*
+       * Overtime is always taken from Attendance.
+       * The value saved here is recalculated from
+       * the current HR Settings configuration.
+       */
+      const overtimeHours =
+        Number(
+          attendanceSummary?.overtimeHours ||
+            0,
+        )
 
-        overtimePay: calculateOvertimePay(
+      const overtimePay =
+        calculateOvertimePay(
           employee.basicSalary,
-          attendanceSummary?.overtimeHours,
-        ),
+          overtimeHours,
+          payrollConfiguration,
+        )
+
+      const payload = {
+        employeeId:
+          getEmployeeId(employee),
+
+        payrollMonth:
+          form.payrollMonth,
+
+        overtimePay,
 
         loanDeduction: Number(
           form.loanDeduction || 0,
@@ -599,24 +784,32 @@ function PayrollModal({
         ),
       }
 
-      const isEditing = Boolean(payroll?.id)
+      const isEditing =
+        Boolean(payroll?.id)
 
-      const response = await fetch(
-        isEditing
-          ? `${API_BASE}/payroll/${payroll.id}`
-          : `${API_BASE}/payroll`,
-        {
-          method: isEditing ? 'PUT' : 'POST',
+      const response =
+        await fetch(
+          isEditing
+            ? `${API_BASE}/payroll/${payroll.id}`
+            : `${API_BASE}/payroll`,
+          {
+            method: isEditing
+              ? 'PUT'
+              : 'POST',
 
-          headers: {
-            'Content-Type': 'application/json',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body: JSON.stringify(
+              payload,
+            ),
           },
+        )
 
-          body: JSON.stringify(payload),
-        },
-      )
-
-      const data = await response.json()
+      const data =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -626,9 +819,14 @@ function PayrollModal({
         )
       }
 
-      onSaved(normalizePayroll(data))
+      onSaved(
+        normalizePayroll(data),
+      )
     } catch (err) {
-      console.error('Save payroll error:', err)
+      console.error(
+        'Save payroll error:',
+        err,
+      )
 
       setError(
         err.message ||
@@ -651,9 +849,12 @@ function PayrollModal({
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              {getEmployeeName(employee)}
+              {getEmployeeName(
+                employee,
+              )}
               {' · '}
-              {employee?.department || '-'}
+              {employee?.department ||
+                '-'}
             </p>
           </div>
 
@@ -685,7 +886,9 @@ function PayrollModal({
               <Field
                 label="Payroll Month"
                 type="month"
-                value={form.payrollMonth}
+                value={
+                  form.payrollMonth
+                }
                 onChange={(value) =>
                   updateField(
                     'payrollMonth',
@@ -700,7 +903,9 @@ function PayrollModal({
                 </div>
 
                 <div className="mt-1 text-lg font-semibold text-slate-900">
-                  {attendanceSummary.workingDays}
+                  {
+                    attendanceSummary.workingDays
+                  }
                 </div>
 
                 <div className="mt-1 text-xs text-slate-500">
@@ -714,9 +919,13 @@ function PayrollModal({
                 </div>
 
                 <div className="mt-1 text-lg font-semibold text-slate-900">
-                  {attendanceSummary.presentDays}
+                  {
+                    attendanceSummary.presentDays
+                  }
                   {' / '}
-                  {attendanceSummary.leaveDays}
+                  {
+                    attendanceSummary.leaveDays
+                  }
                 </div>
 
                 <div className="mt-1 text-xs text-slate-500">
@@ -736,9 +945,14 @@ function PayrollModal({
                 <div className="text-xs font-medium text-slate-500">
                   Overtime Hours (Attendance)
                 </div>
+
                 <div className="mt-1 text-lg font-semibold text-slate-900">
-                  {Number(attendanceSummary?.overtimeHours || 0).toFixed(2)} hrs
+                  {automaticOvertimeHours.toFixed(
+                    2,
+                  )}{' '}
+                  hrs
                 </div>
+
                 <div className="mt-1 text-xs text-slate-500">
                   Pulled automatically from Attendance.
                 </div>
@@ -748,16 +962,22 @@ function PayrollModal({
                 <div className="text-xs font-medium text-slate-500">
                   Overtime Pay (Auto)
                 </div>
+
                 <div className="mt-1 text-lg font-semibold text-slate-900">
                   {formatCurrency(
-                    calculateOvertimePay(
-                      employee?.basicSalary,
-                      attendanceSummary?.overtimeHours,
-                    ),
+                    automaticOvertimePay,
                   )}
                 </div>
+
                 <div className="mt-1 text-xs text-slate-500">
-                  Attendance hours × hourly rate × 1.5.
+                  Hours ÷{' '}
+                  {Number(
+                    payrollConfiguration.standardMonthlyWorkingHours,
+                  )}{' '}
+                  ×{' '}
+                  {Number(
+                    payrollConfiguration.overtimeRateMultiplier,
+                  )}
                 </div>
               </div>
 
@@ -766,7 +986,9 @@ function PayrollModal({
                 type="number"
                 min="0"
                 step="0.01"
-                value={form.loanDeduction}
+                value={
+                  form.loanDeduction
+                }
                 onChange={(value) =>
                   updateField(
                     'loanDeduction',
@@ -780,7 +1002,9 @@ function PayrollModal({
                 type="number"
                 min="0"
                 step="0.01"
-                value={form.otherDeduction}
+                value={
+                  form.otherDeduction
+                }
                 onChange={(value) =>
                   updateField(
                     'otherDeduction',
@@ -858,7 +1082,12 @@ function PayrollModal({
             <div className="grid gap-3 md:grid-cols-4">
               <div className="rounded-xl border border-slate-200 p-4">
                 <div className="text-xs text-slate-500">
-                  Pension 7%
+                  Pension{' '}
+                  {Number(
+                    payrollConfiguration.employeePensionRate *
+                      100,
+                  ).toFixed(2)}
+                  %
                 </div>
 
                 <div className="mt-1 font-semibold text-slate-900">
@@ -906,6 +1135,43 @@ function PayrollModal({
             </div>
           </div>
 
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600">
+              <span>
+                Employee Pension:{' '}
+                {Number(
+                  payrollConfiguration.employeePensionRate *
+                    100,
+                ).toFixed(2)}
+                %
+              </span>
+
+              <span>
+                Employer Pension:{' '}
+                {Number(
+                  payrollConfiguration.employerPensionRate *
+                    100,
+                ).toFixed(2)}
+                %
+              </span>
+
+              <span>
+                OT:{' '}
+                {Number(
+                  payrollConfiguration.overtimeRateMultiplier,
+                )}
+                ×
+              </span>
+
+              <span>
+                Monthly Hours:{' '}
+                {Number(
+                  payrollConfiguration.standardMonthlyWorkingHours,
+                )}
+              </span>
+            </div>
+          </div>
+
           <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-5">
             <button
               type="button"
@@ -946,43 +1212,71 @@ export default function Payroll() {
   const [payrollMonth, setPayrollMonth] =
     useState(getCurrentMonth)
 
-  const [employees, setEmployees] = useState([])
-  const [attendance, setAttendance] = useState([])
-  const [payroll, setPayroll] = useState([])
+  const [employees, setEmployees] =
+    useState([])
 
-  const [loading, setLoading] = useState(true)
-  const [payrollLoading, setPayrollLoading] =
-    useState(false)
+  const [attendance, setAttendance] =
+    useState([])
 
-  const [error, setError] = useState('')
-  const [payrollError, setPayrollError] =
+  const [payroll, setPayroll] =
+    useState([])
+
+  const [
+    payrollConfiguration,
+    setPayrollConfiguration,
+  ] = useState(
+    DEFAULT_PAYROLL_CONFIGURATION,
+  )
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const [
+    payrollLoading,
+    setPayrollLoading,
+  ] = useState(false)
+
+  const [error, setError] =
     useState('')
+
+  const [
+    payrollError,
+    setPayrollError,
+  ] = useState('')
 
   const [modalOpen, setModalOpen] =
     useState(false)
 
-  const [selectedEmployee, setSelectedEmployee] =
-    useState(null)
+  const [
+    selectedEmployee,
+    setSelectedEmployee,
+  ] = useState(null)
 
-  const [selectedPayroll, setSelectedPayroll] =
-    useState(null)
+  const [
+    selectedPayroll,
+    setSelectedPayroll,
+  ] = useState(null)
 
   const [generating, setGenerating] =
     useState(false)
 
-  const [deletingId, setDeletingId] =
-    useState(null)
+  const [
+    deletingId,
+    setDeletingId,
+  ] = useState(null)
 
   async function loadEmployees() {
     try {
       setLoading(true)
       setError('')
 
-      const response = await fetch(
-        `${API_BASE}/employees`,
-      )
+      const response =
+        await fetch(
+          `${API_BASE}/employees`,
+        )
 
-      const data = await response.json()
+      const data =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -992,9 +1286,12 @@ export default function Payroll() {
         )
       }
 
-      const normalized = Array.isArray(data)
-        ? data.map(normalizeEmployee)
-        : []
+      const normalized =
+        Array.isArray(data)
+          ? data.map(
+              normalizeEmployee,
+            )
+          : []
 
       setEmployees(normalized)
     } catch (err) {
@@ -1012,25 +1309,78 @@ export default function Payroll() {
     }
   }
 
-  async function loadAttendance() {
-    if (!payrollMonth) return
+  async function loadPayrollSettings() {
+    try {
+      const response =
+        await fetch(
+          `${API_BASE}/settings`,
+          {
+            cache: 'no-store',
+          },
+        )
 
-    const { start, end } =
-      getMonthRange(payrollMonth)
+      const data =
+        await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            data?.message ||
+            'Failed to load HR payroll settings.',
+        )
+      }
+
+      setPayrollConfiguration({
+        ...DEFAULT_PAYROLL_CONFIGURATION,
+        ...(data?.payrollConfiguration ||
+          {}),
+      })
+    } catch (err) {
+      console.error(
+        'Load payroll settings error:',
+        err,
+      )
+
+      /*
+       * Workbook defaults remain active
+       * if the settings endpoint cannot
+       * be reached.
+       */
+      setPayrollConfiguration(
+        DEFAULT_PAYROLL_CONFIGURATION,
+      )
+    }
+  }
+
+  async function loadAttendance() {
+    if (!payrollMonth) {
+      return
+    }
+
+    const {
+      start,
+      end,
+    } = getMonthRange(
+      payrollMonth,
+    )
 
     try {
-      const response = await fetch(
-        `${API_BASE}/attendance?startDate=${start}&endDate=${end}`,
-      )
+      const response =
+        await fetch(
+          `${API_BASE}/attendance?startDate=${start}&endDate=${end}`,
+        )
 
       if (!response.ok) {
         return
       }
 
-      const data = await response.json()
+      const data =
+        await response.json()
 
       setAttendance(
-        Array.isArray(data) ? data : [],
+        Array.isArray(data)
+          ? data
+          : [],
       )
     } catch (err) {
       console.error(
@@ -1042,30 +1392,27 @@ export default function Payroll() {
     }
   }
 
-  /*
-   * IMPORTANT:
-   * Payroll records are loaded directly from the database.
-   *
-   * We do NOT rebuild payroll rows from employees here.
-   * This is what makes saved payroll survive a page refresh.
-   */
   async function loadSavedPayroll() {
-    if (!payrollMonth) return
+    if (!payrollMonth) {
+      return
+    }
 
     try {
       setPayrollLoading(true)
       setPayrollError('')
 
-      const response = await fetch(
-        `${API_BASE}/payroll?payrollMonth=${encodeURIComponent(
-          payrollMonth,
-        )}`,
-        {
-          cache: 'no-store',
-        },
-      )
+      const response =
+        await fetch(
+          `${API_BASE}/payroll?payrollMonth=${encodeURIComponent(
+            payrollMonth,
+          )}`,
+          {
+            cache: 'no-store',
+          },
+        )
 
-      const data = await response.json()
+      const data =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -1075,9 +1422,12 @@ export default function Payroll() {
         )
       }
 
-      const records = Array.isArray(data)
-        ? data.map(normalizePayroll)
-        : []
+      const records =
+        Array.isArray(data)
+          ? data.map(
+              normalizePayroll,
+            )
+          : []
 
       setPayroll(records)
     } catch (err) {
@@ -1099,6 +1449,7 @@ export default function Payroll() {
 
   useEffect(() => {
     loadEmployees()
+    loadPayrollSettings()
   }, [])
 
   useEffect(() => {
@@ -1109,144 +1460,219 @@ export default function Payroll() {
     loadSavedPayroll()
   }, [payrollMonth])
 
-  const activeEmployees = useMemo(
-    () =>
-      employees.filter((employee) => {
-        const status = String(
-          employee.status || '',
-        ).toLowerCase()
+  const activeEmployees =
+    useMemo(
+      () =>
+        employees.filter(
+          (employee) => {
+            const status =
+              String(
+                employee.status ||
+                  '',
+              ).toLowerCase()
 
-        return (
-          status === 'active' ||
-          status === ''
-        )
-      }),
-    [employees],
+            return (
+              status === 'active' ||
+              status === ''
+            )
+          },
+        ),
+      [employees],
+    )
+
+  const payrollByEmployee =
+    useMemo(() => {
+      const map = new Map()
+
+      payroll.forEach(
+        (record) => {
+          map.set(
+            String(
+              record.employeeId,
+            ),
+            record,
+          )
+        },
+      )
+
+      return map
+    }, [payroll])
+
+  const attendanceByEmployee =
+    useMemo(() => {
+      const map = new Map()
+
+      employees.forEach(
+        (employee) => {
+          const ids = [
+            employee.id,
+            employee.employeeId,
+          ].filter(Boolean)
+
+          const records =
+            attendance.filter(
+              (item) => {
+                const attendanceEmployeeId =
+                  item.employeeId ||
+                  item.employee_id
+
+                return ids.some(
+                  (id) =>
+                    String(
+                      attendanceEmployeeId,
+                    ) ===
+                    String(id),
+                )
+              },
+            )
+
+          map.set(
+            String(
+              getEmployeeId(
+                employee,
+              ),
+            ),
+            records,
+          )
+
+          if (employee.id) {
+            map.set(
+              String(employee.id),
+              records,
+            )
+          }
+
+          if (
+            employee.employeeId
+          ) {
+            map.set(
+              String(
+                employee.employeeId,
+              ),
+              records,
+            )
+          }
+        },
+      )
+
+      return map
+    }, [
+      employees,
+      attendance,
+    ])
+
+  const employeeById =
+    useMemo(() => {
+      const map = new Map()
+
+      employees.forEach(
+        (employee) => {
+          map.set(
+            String(
+              getEmployeeId(
+                employee,
+              ),
+            ),
+            employee,
+          )
+
+          if (employee.id) {
+            map.set(
+              String(employee.id),
+              employee,
+            )
+          }
+
+          if (
+            employee.employeeId
+          ) {
+            map.set(
+              String(
+                employee.employeeId,
+              ),
+              employee,
+            )
+          }
+        },
+      )
+
+      return map
+    }, [employees])
+
+  const rows = useMemo(
+    () =>
+      payroll.map(
+        (record) => {
+          const employee =
+            employeeById.get(
+              String(
+                record.employeeId,
+              ),
+            ) || null
+
+          const attendanceForEmployee =
+            attendanceByEmployee.get(
+              String(
+                record.employeeId,
+              ),
+            ) || []
+
+          return {
+            ...record,
+            employee,
+            attendanceSummary:
+              getAttendanceSummary(
+                attendanceForEmployee,
+              ),
+          }
+        },
+      ),
+    [
+      payroll,
+      employeeById,
+      attendanceByEmployee,
+    ],
   )
 
-  const payrollByEmployee = useMemo(() => {
-    const map = new Map()
-
-    payroll.forEach((record) => {
-      map.set(
-        String(record.employeeId),
-        record,
-      )
-    })
-
-    return map
-  }, [payroll])
-
-  const attendanceByEmployee = useMemo(() => {
-    const map = new Map()
-
-    employees.forEach((employee) => {
-      const ids = [
-        employee.id,
-        employee.employeeId,
-      ].filter(Boolean)
-
-      const records = attendance.filter((item) => {
-        const attendanceEmployeeId =
-          item.employeeId || item.employee_id
-
-        return ids.some(
-          (id) =>
-            String(attendanceEmployeeId) ===
-            String(id),
-        )
-      })
-
-      map.set(
-        String(getEmployeeId(employee)),
-        records,
-      )
-
-      if (employee.id) {
-        map.set(String(employee.id), records)
-      }
-
-      if (employee.employeeId) {
-        map.set(String(employee.employeeId), records)
-      }
-    })
-
-    return map
-  }, [employees, attendance])
-
-  const employeeById = useMemo(() => {
-    const map = new Map()
-
-    employees.forEach((employee) => {
-      map.set(
-        String(getEmployeeId(employee)),
-        employee,
-      )
-    })
-
-    return map
-  }, [employees])
-
-  const rows = useMemo(() => {
-    /*
-     * Only saved database payroll records are displayed.
-     *
-     * Employees without a payroll record are intentionally
-     * not inserted automatically. They are added by
-     * "Generate Payroll".
-     */
-    return payroll.map((record) => {
-      const employee =
-        employeeById.get(
-          String(record.employeeId),
-        ) || null
-
-      const attendanceForEmployee =
-        attendanceByEmployee.get(
-          String(record.employeeId),
-        ) || []
-
-      return {
-        ...record,
-        employee,
-        attendanceSummary:
-          getAttendanceSummary(
-            attendanceForEmployee,
-          ),
-      }
-    })
-  }, [
-    payroll,
-    employeeById,
-    attendanceByEmployee,
-  ])
-
   const summary = useMemo(() => {
-    const totalGross = payroll.reduce(
-      (sum, item) =>
-        sum + Number(item.grossSalary || 0),
-      0,
-    )
+    const totalGross =
+      payroll.reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.grossSalary || 0,
+          ),
+        0,
+      )
 
     const totalDeductions =
       payroll.reduce(
         (sum, item) =>
           sum +
-          Number(item.totalDeductions || 0),
+          Number(
+            item.totalDeductions ||
+              0,
+          ),
         0,
       )
 
-    const totalNet = payroll.reduce(
-      (sum, item) =>
-        sum + Number(item.netSalary || 0),
-      0,
-    )
+    const totalNet =
+      payroll.reduce(
+        (sum, item) =>
+          sum +
+          Number(
+            item.netSalary || 0,
+          ),
+        0,
+      )
 
     const totalEmployerCost =
       payroll.reduce(
         (sum, item) =>
           sum +
-          Number(item.employerCost || 0),
+          Number(
+            item.employerCost || 0,
+          ),
         0,
       )
 
@@ -1259,16 +1685,22 @@ export default function Payroll() {
     }
   }, [payroll])
 
-  function openCreateModal(employee) {
+  function openCreateModal(
+    employee,
+  ) {
     setSelectedEmployee(employee)
     setSelectedPayroll(null)
     setModalOpen(true)
   }
 
-  function openEditModal(record) {
+  function openEditModal(
+    record,
+  ) {
     const employee =
       employeeById.get(
-        String(record.employeeId),
+        String(
+          record.employeeId,
+        ),
       ) || null
 
     if (!employee) {
@@ -1285,34 +1717,43 @@ export default function Payroll() {
   }
 
   function closeModal() {
-    if (generating) return
+    if (generating) {
+      return
+    }
 
     setModalOpen(false)
     setSelectedEmployee(null)
     setSelectedPayroll(null)
   }
 
-  async function handleSaved(savedRecord) {
-    /*
-     * Update local state immediately after a successful
-     * POST/PUT. Then reload from the database so the UI
-     * and database stay synchronized.
-     */
-    setPayroll((current) => {
-      const exists = current.some(
-        (item) => item.id === savedRecord.id,
-      )
+  async function handleSaved(
+    savedRecord,
+  ) {
+    setPayroll(
+      (current) => {
+        const exists =
+          current.some(
+            (item) =>
+              item.id ===
+              savedRecord.id,
+          )
 
-      if (exists) {
-        return current.map((item) =>
-          item.id === savedRecord.id
-            ? savedRecord
-            : item,
-        )
-      }
+        if (exists) {
+          return current.map(
+            (item) =>
+              item.id ===
+              savedRecord.id
+                ? savedRecord
+                : item,
+          )
+        }
 
-      return [...current, savedRecord]
-    })
+        return [
+          ...current,
+          savedRecord,
+        ]
+      },
+    )
 
     setModalOpen(false)
     setSelectedEmployee(null)
@@ -1330,7 +1771,9 @@ export default function Payroll() {
       return
     }
 
-    if (!activeEmployees.length) {
+    if (
+      !activeEmployees.length
+    ) {
       setPayrollError(
         'There are no active employees available for payroll.',
       )
@@ -1342,23 +1785,21 @@ export default function Payroll() {
       setGenerating(true)
       setPayrollError('')
 
-      /*
-       * IMPORTANT:
-       * Only create records that do not already exist.
-       *
-       * Existing saved records are never overwritten by
-       * a refresh or by Generate Payroll.
-       */
       const employeesWithoutPayroll =
         activeEmployees.filter(
           (employee) =>
             !payrollByEmployee.has(
-              String(getEmployeeId(employee)),
+              String(
+                getEmployeeId(
+                  employee,
+                ),
+              ),
             ),
         )
 
       if (
-        employeesWithoutPayroll.length === 0
+        employeesWithoutPayroll.length ===
+        0
       ) {
         await loadSavedPayroll()
         return
@@ -1366,40 +1807,60 @@ export default function Payroll() {
 
       const results = []
 
-      for (const employee of employeesWithoutPayroll) {
-        const response = await fetch(
-          `${API_BASE}/payroll`,
-          {
-            method: 'POST',
-
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-
-            body: JSON.stringify({
-              employeeId:
-                getEmployeeId(employee),
-
-              payrollMonth,
-
-              overtimePay: calculateOvertimePay(
-                employee.basicSalary,
-                getAttendanceSummary(
-                  attendanceByEmployee.get(
-                    String(getEmployeeId(employee)),
-                  ) || [],
-                ).overtimeHours,
+      for (
+        const employee of employeesWithoutPayroll
+      ) {
+        const employeeAttendance =
+          attendanceByEmployee.get(
+            String(
+              getEmployeeId(
+                employee,
               ),
+            ),
+          ) || []
 
-              loanDeduction: 0,
+        const attendanceSummary =
+          getAttendanceSummary(
+            employeeAttendance,
+          )
 
-              otherDeduction: 0,
-            }),
-          },
-        )
+        const overtimePay =
+          calculateOvertimePay(
+            employee.basicSalary,
+            attendanceSummary.overtimeHours,
+            payrollConfiguration,
+          )
 
-        const data = await response.json()
+        const response =
+          await fetch(
+            `${API_BASE}/payroll`,
+            {
+              method: 'POST',
+
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+
+              body: JSON.stringify({
+                employeeId:
+                  getEmployeeId(
+                    employee,
+                  ),
+
+                payrollMonth,
+
+                overtimePay,
+
+                loanDeduction: 0,
+
+                otherDeduction: 0,
+              }),
+            },
+          )
+
+        const data =
+          await response.json()
 
         if (!response.ok) {
           throw new Error(
@@ -1411,13 +1872,17 @@ export default function Payroll() {
           )
         }
 
-        results.push(normalizePayroll(data))
+        results.push(
+          normalizePayroll(data),
+        )
       }
 
-      setPayroll((current) => [
-        ...current,
-        ...results,
-      ])
+      setPayroll(
+        (current) => [
+          ...current,
+          ...results,
+        ],
+      )
 
       await loadSavedPayroll()
     } catch (err) {
@@ -1435,34 +1900,44 @@ export default function Payroll() {
     }
   }
 
-  async function handleDelete(record) {
+  async function handleDelete(
+    record,
+  ) {
     const employee =
       employeeById.get(
-        String(record.employeeId),
+        String(
+          record.employeeId,
+        ),
       )
 
-    const employeeName = getEmployeeName(
-      employee,
-    )
+    const employeeName =
+      getEmployeeName(
+        employee,
+      )
 
-    const confirmed = window.confirm(
-      `Delete the payroll record for ${employeeName} for ${record.payrollMonth}?`,
-    )
+    const confirmed =
+      window.confirm(
+        `Delete the payroll record for ${employeeName} for ${record.payrollMonth}?`,
+      )
 
-    if (!confirmed) return
+    if (!confirmed) {
+      return
+    }
 
     try {
       setDeletingId(record.id)
       setPayrollError('')
 
-      const response = await fetch(
-        `${API_BASE}/payroll/${record.id}`,
-        {
-          method: 'DELETE',
-        },
-      )
+      const response =
+        await fetch(
+          `${API_BASE}/payroll/${record.id}`,
+          {
+            method: 'DELETE',
+          },
+        )
 
-      const data = await response.json()
+      const data =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -1472,10 +1947,13 @@ export default function Payroll() {
         )
       }
 
-      setPayroll((current) =>
-        current.filter(
-          (item) => item.id !== record.id,
-        ),
+      setPayroll(
+        (current) =>
+          current.filter(
+            (item) =>
+              item.id !==
+              record.id,
+          ),
       )
 
       await loadSavedPayroll()
@@ -1495,8 +1973,12 @@ export default function Payroll() {
   }
 
   function moveMonth(offset) {
-    const [year, month] =
-      payrollMonth.split('-').map(Number)
+    const [
+      year,
+      month,
+    ] = payrollMonth
+      .split('-')
+      .map(Number)
 
     const next = new Date(
       year,
@@ -1514,6 +1996,7 @@ export default function Payroll() {
   async function refreshPayroll() {
     await Promise.all([
       loadEmployees(),
+      loadPayrollSettings(),
       loadAttendance(),
       loadSavedPayroll(),
     ])
@@ -1544,7 +2027,9 @@ export default function Payroll() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => moveMonth(-1)}
+              onClick={() =>
+                moveMonth(-1)
+              }
               className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50"
               title="Previous month"
             >
@@ -1564,7 +2049,9 @@ export default function Payroll() {
 
             <button
               type="button"
-              onClick={() => moveMonth(1)}
+              onClick={() =>
+                moveMonth(1)
+              }
               className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50"
               title="Next month"
             >
@@ -1573,8 +2060,13 @@ export default function Payroll() {
 
             <button
               type="button"
-              onClick={refreshPayroll}
-              disabled={loading || payrollLoading}
+              onClick={
+                refreshPayroll
+              }
+              disabled={
+                loading ||
+                payrollLoading
+              }
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               <RefreshCw
@@ -1591,7 +2083,9 @@ export default function Payroll() {
 
             <button
               type="button"
-              onClick={generateAllPayroll}
+              onClick={
+                generateAllPayroll
+              }
               disabled={
                 generating ||
                 payrollLoading ||
@@ -1605,7 +2099,9 @@ export default function Payroll() {
                   className="animate-spin"
                 />
               ) : (
-                <Calculator size={17} />
+                <Calculator
+                  size={17}
+                />
               )}
 
               {generating
@@ -1702,18 +2198,27 @@ export default function Payroll() {
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Current payroll calculations used by
-                the HR payroll module.
+                Current payroll calculations loaded from HR Settings.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700">
-                Employee Pension: 7%
+                Employee Pension:{' '}
+                {Number(
+                  payrollConfiguration.employeePensionRate *
+                    100,
+                ).toFixed(2)}
+                %
               </span>
 
               <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700">
-                Employer Pension: 11%
+                Employer Pension:{' '}
+                {Number(
+                  payrollConfiguration.employerPensionRate *
+                    100,
+                ).toFixed(2)}
+                %
               </span>
 
               <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700">
@@ -1721,8 +2226,70 @@ export default function Payroll() {
               </span>
 
               <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700">
-                Overtime: Hours ÷ 208 × 1.5
+                Overtime: Hours ÷{' '}
+                {Number(
+                  payrollConfiguration.standardMonthlyWorkingHours,
+                )}{' '}
+                ×{' '}
+                {Number(
+                  payrollConfiguration.overtimeRateMultiplier,
+                )}
               </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs text-slate-500">
+                Standard Monthly Hours
+              </div>
+
+              <div className="mt-1 text-lg font-semibold text-slate-900">
+                {Number(
+                  payrollConfiguration.standardMonthlyWorkingHours,
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs text-slate-500">
+                Overtime Multiplier
+              </div>
+
+              <div className="mt-1 text-lg font-semibold text-slate-900">
+                {Number(
+                  payrollConfiguration.overtimeRateMultiplier,
+                )}
+                ×
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs text-slate-500">
+                Employee Pension
+              </div>
+
+              <div className="mt-1 text-lg font-semibold text-slate-900">
+                {Number(
+                  payrollConfiguration.employeePensionRate *
+                    100,
+                ).toFixed(2)}
+                %
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs text-slate-500">
+                Employer Pension
+              </div>
+
+              <div className="mt-1 text-lg font-semibold text-slate-900">
+                {Number(
+                  payrollConfiguration.employerPensionRate *
+                    100,
+                ).toFixed(2)}
+                %
+              </div>
             </div>
           </div>
 
@@ -1746,7 +2313,10 @@ export default function Payroll() {
 
               <tbody>
                 {PAYE_BRACKETS.map(
-                  (bracket, index) => (
+                  (
+                    bracket,
+                    index,
+                  ) => (
                     <tr
                       key={`${bracket.min}-${index}`}
                       className="border-b border-slate-100 last:border-0"
@@ -1765,7 +2335,9 @@ export default function Payroll() {
                       </td>
 
                       <td className="px-3 py-2 font-medium text-slate-900">
-                        {bracket.rate * 100}%
+                        {bracket.rate *
+                          100}
+                        %
                       </td>
 
                       <td className="px-3 py-2 text-slate-700">
@@ -1887,7 +2459,8 @@ export default function Payroll() {
                       </div>
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
+                ) : rows.length ===
+                  0 ? (
                   <tr>
                     <td
                       colSpan={13}
@@ -1914,10 +2487,14 @@ export default function Payroll() {
                           onClick={
                             generateAllPayroll
                           }
-                          disabled={generating}
+                          disabled={
+                            generating
+                          }
                           className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
                         >
-                          <Calculator size={16} />
+                          <Calculator
+                            size={16}
+                          />
 
                           Generate Payroll
                         </button>
@@ -1925,170 +2502,176 @@ export default function Payroll() {
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => {
-                    const employee =
-                      row.employee
+                  rows.map(
+                    (row) => {
+                      const employee =
+                        row.employee
 
-                    const attendanceSummary =
-                      row.attendanceSummary ||
-                      {}
+                      const attendanceSummary =
+                        row.attendanceSummary ||
+                        {}
 
-                    const allowanceTotal =
-                      Number(
-                        row.transportAllowance ||
-                          0,
-                      ) +
-                      Number(
-                        row.housingAllowance ||
-                          0,
-                      ) +
-                      Number(
-                        row.mealAllowance || 0,
-                      ) +
-                      Number(
-                        row.otherAllowance || 0,
-                      )
+                      const allowanceTotal =
+                        Number(
+                          row.transportAllowance ||
+                            0,
+                        ) +
+                        Number(
+                          row.housingAllowance ||
+                            0,
+                        ) +
+                        Number(
+                          row.mealAllowance ||
+                            0,
+                        ) +
+                        Number(
+                          row.otherAllowance ||
+                            0,
+                        )
 
-                    return (
-                      <tr
-                        key={row.id}
-                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
-                      >
-                        <td className="px-4 py-4">
-                          <div className="font-medium text-slate-900">
-                            {getEmployeeName(
-                              employee,
-                            )}
-                          </div>
-
-                          <div className="mt-1 text-xs text-slate-500">
-                            {employee?.employeeId ||
-                              row.employeeId ||
-                              '-'}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-4 text-slate-600">
-                          {employee?.department ||
-                            '-'}
-                        </td>
-
-                        <td className="px-4 py-4 text-right font-medium text-slate-700">
-                          {formatCurrency(
-                            row.basicSalary,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-right text-slate-700">
-                          {formatCurrency(
-                            allowanceTotal,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-right text-slate-700">
-                          <div className="inline-flex items-center gap-1">
-                            <Clock3
-                              size={14}
-                              className="text-slate-400"
-                            />
-
-                            {Number(
-                              attendanceSummary.overtimeHours ||
-                                0,
-                            ).toFixed(2)}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-4 text-right font-semibold text-slate-900">
-                          {formatCurrency(
-                            row.grossSalary,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-right text-slate-700">
-                          {formatCurrency(
-                            row.pensionDeduction,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-right text-slate-700">
-                          {formatCurrency(
-                            row.incomeTax,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-right text-slate-700">
-                          {formatCurrency(
-                            row.totalDeductions,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-right font-bold text-slate-900">
-                          {formatCurrency(
-                            row.netSalary,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-right font-semibold text-slate-700">
-                          {formatCurrency(
-                            row.employerCost,
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                            Saved
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-4">
-                          <div className="flex justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openEditModal(
-                                  row,
-                                )
-                              }
-                              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                              title="Edit payroll"
-                            >
-                              <Edit3
-                                size={16}
-                              />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDelete(
-                                  row,
-                                )
-                              }
-                              disabled={
-                                deletingId ===
-                                row.id
-                              }
-                              className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50"
-                              title="Delete payroll"
-                            >
-                              {deletingId ===
-                              row.id ? (
-                                <Loader2
-                                  size={16}
-                                  className="animate-spin"
-                                />
-                              ) : (
-                                <Trash2
-                                  size={16}
-                                />
+                      return (
+                        <tr
+                          key={row.id}
+                          className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+                        >
+                          <td className="px-4 py-4">
+                            <div className="font-medium text-slate-900">
+                              {getEmployeeName(
+                                employee,
                               )}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
+                            </div>
+
+                            <div className="mt-1 text-xs text-slate-500">
+                              {employee?.employeeId ||
+                                row.employeeId ||
+                                '-'}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4 text-slate-600">
+                            {employee?.department ||
+                              '-'}
+                          </td>
+
+                          <td className="px-4 py-4 text-right font-medium text-slate-700">
+                            {formatCurrency(
+                              row.basicSalary,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-slate-700">
+                            {formatCurrency(
+                              allowanceTotal,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-slate-700">
+                            <div className="inline-flex items-center gap-1">
+                              <Clock3
+                                size={14}
+                                className="text-slate-400"
+                              />
+
+                              {Number(
+                                attendanceSummary.overtimeHours ||
+                                  0,
+                              ).toFixed(
+                                2,
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4 text-right font-semibold text-slate-900">
+                            {formatCurrency(
+                              row.grossSalary,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-slate-700">
+                            {formatCurrency(
+                              row.pensionDeduction,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-slate-700">
+                            {formatCurrency(
+                              row.incomeTax,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right text-slate-700">
+                            {formatCurrency(
+                              row.totalDeductions,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right font-bold text-slate-900">
+                            {formatCurrency(
+                              row.netSalary,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right font-semibold text-slate-700">
+                            {formatCurrency(
+                              row.employerCost,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              Saved
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditModal(
+                                    row,
+                                  )
+                                }
+                                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                                title="Edit payroll"
+                              >
+                                <Edit3
+                                  size={16}
+                                />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDelete(
+                                    row,
+                                  )
+                                }
+                                disabled={
+                                  deletingId ===
+                                  row.id
+                                }
+                                className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                                title="Delete payroll"
+                              >
+                                {deletingId ===
+                                row.id ? (
+                                  <Loader2
+                                    size={16}
+                                    className="animate-spin"
+                                  />
+                                ) : (
+                                  <Trash2
+                                    size={16}
+                                  />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    },
+                  )
                 )}
               </tbody>
             </table>
@@ -2118,7 +2701,7 @@ export default function Payroll() {
             <p className="mt-2 text-sm text-slate-500">
               Gross salary includes basic salary,
               allowances and automatically calculated
-              overtime pay from Attendance.
+              overtime pay using the HR Settings rules.
             </p>
           </div>
 
@@ -2129,8 +2712,9 @@ export default function Payroll() {
             </div>
 
             <p className="mt-2 text-sm text-slate-500">
-              Saved payroll records are loaded from
-              PostgreSQL whenever the page is refreshed.
+              Saved payroll records and HR Settings are
+              loaded from PostgreSQL whenever the page
+              is refreshed.
             </p>
           </div>
         </div>
@@ -2138,9 +2722,18 @@ export default function Payroll() {
 
       {modalOpen && (
         <PayrollModal
-          employee={selectedEmployee}
-          payroll={selectedPayroll}
-          month={payrollMonth}
+          employee={
+            selectedEmployee
+          }
+          payroll={
+            selectedPayroll
+          }
+          month={
+            payrollMonth
+          }
+          payrollConfiguration={
+            payrollConfiguration
+          }
           attendanceSummary={getAttendanceSummary(
             selectedEmployee
               ? attendanceByEmployee.get(
