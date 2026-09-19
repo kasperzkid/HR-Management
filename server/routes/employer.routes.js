@@ -1,14 +1,36 @@
 // ------------------------------------------------------------------
 // EMPLOYER TEAM — OWN THIS FILE
-// Place all employer endpoints here (attendance, leave, salary, etc.)
-// The HR-Manager team will never touch this file.
+// Employer routes: punch clock + leave requests.
 // ------------------------------------------------------------------
 
 import { Router } from 'express'
-import { getDashboard } from '../controllers/employer.controller.js'
+import {
+  getPunchStatus,
+  punchCheckIn,
+  punchCheckOut,
+} from '../controllers/punch.controller.js'
+import {
+  getMyLeave,
+  createLeave,
+} from '../controllers/leave.controller.js'
+import {
+  getEmployees,
+  getAttendance,
+} from '../controllers/hr-manager.controller.js'
 
 const router = Router()
 
-router.get('/dashboard', getDashboard)
+// Punch clock
+router.get('/punch', getPunchStatus)
+router.post('/punch/check-in', punchCheckIn)
+router.post('/punch/check-out', punchCheckOut)
+
+// Leave requests
+router.get('/leave', getMyLeave)
+router.post('/leave', createLeave)
+
+// Employees & attendance (shared with HR-Manager queries)
+router.get('/employees', getEmployees)
+router.get('/attendance', getAttendance)
 
 export default router

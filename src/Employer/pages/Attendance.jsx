@@ -6,11 +6,19 @@ import { resolveEmployee } from '../lib/currentUser'
 import { attendanceTotals } from '../lib/attendanceUtils'
 import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
 function Attendance() {
   const [employees, setEmployees] = useState([])
   const [attendance, setAttendance] = useState([])
   const [loading, setLoading] = useState(true)
   const currentEmployee = resolveEmployee(employees)
+  const today = new Date()
+  const [monthSel, setMonthSel] = useState(today.getMonth() + 1)
+  const [yearSel, setYearSel] = useState(today.getFullYear())
 
   useEffect(() => {
     let cancelled = false
@@ -30,10 +38,15 @@ function Attendance() {
     }
   }, [])
 
-  // Strictly filter to current logged in employee
+  // Strictly filter to current logged in employee and selected month/year
   const filtered = useMemo(() => {
-    return attendance.filter((a) => a.employeeId === currentEmployee.employeeId)
-  }, [attendance, currentEmployee.employeeId])
+    return attendance.filter((a) => {
+      const [y, m] = String(a.date).split('-').map(Number)
+      const monthMatches = m === monthSel && y === yearSel
+      const empMatches = a.employeeId === currentEmployee.employeeId
+      return monthMatches && empMatches
+    })
+  }, [attendance, monthSel, yearSel, currentEmployee.employeeId])
 
   const totals = useMemo(() => {
     const agg = { regular: 0, overtime: 0, late: 0, present: 0, absent: 0, sick: 0 }
@@ -73,27 +86,52 @@ function Attendance() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm('Emergency check-out will mark you as checked out right now. Continue?')) {
-              const now = new Date()
-              const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-              const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-              const updated = attendance.map((a) =>
-                a.employeeId === currentEmployee.employeeId && a.date === dateKey
-                  ? { ...a, checkOut: timeStr, status: a.status || 'Present' }
-                  : a,
-              )
-              setAttendance(updated)
-            }
-          }}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors cursor-pointer"
-          title="Emergency check-out — marks you as checked out immediately"
-        >
-          <LogOut size={14} />
-          Emergency Check-Out
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={monthSel}
+            onChange={(e) => setMonthSel(Number(e.target.value))}
+            className="px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white font-semibold text-gray-800 dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 cursor-pointer"
+          >
+            {MONTH_NAMES.map((m, i) => (
+              <option key={m} value={i + 1}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <select
+            value={yearSel}
+            onChange={(e) => setYearSel(Number(e.target.value))}
+            className="px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white font-semibold text-gray-800 dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 cursor-pointer"
+          >
+            {[2025, 2026].map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('Emergency check-out will mark you as checked out right now. Continue?')) {
+                const now = new Date()
+                const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+                const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+                const updated = attendance.map((a) =>
+                  a.employeeId === currentEmployee.employeeId && a.date === dateKey
+                    ? { ...a, checkOut: timeStr, status: a.status || 'Present' }
+                    : a,
+                )
+                setAttendance(updated)
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors cursor-pointer"
+            title="Emergency check-out — marks you as checked out immediately"
+          >
+            <LogOut size={14} />
+            Emergency Check-Out
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -119,7 +157,33 @@ function Attendance() {
             ))}
           </div>
 
-          {/* Punch status cards */}
+          {/* Current Employee Monthly Hours Summary */}
+          <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs p-5 dark:bg-[#15181d] dark:border-[#262b31] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-gray-950 dark:text-gray-100">
+                Monthly Hours Breakdown — {MONTH_NAMES[monthSel - 1]} {yearSel}
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Verified working days and overtime submitted to payroll for disbursement.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <div className="bg-slate-50 dark:bg-[#1c2026] border border-slate-200 dark:border-[#262b31] px-3 py-2 rounded-xl">
+                <span className="text-slate-400 text-[10px] uppercase font-bold block">Worked Days</span>
+                <span className="font-bold text-slate-800 dark:text-gray-100 text-sm">{myTotal.days}</span>
+              </div>
+              <div className="bg-slate-50 dark:bg-[#1c2026] border border-slate-200 dark:border-[#262b31] px-3 py-2 rounded-xl">
+                <span className="text-slate-400 text-[10px] uppercase font-bold block">Total Hours</span>
+                <span className="font-bold text-slate-800 dark:text-gray-100 text-sm">{myTotal.totalHours}h</span>
+              </div>
+              <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50 px-3 py-2 rounded-xl">
+                <span className="text-indigo-600 dark:text-indigo-400 text-[10px] uppercase font-bold block">Overtime</span>
+                <span className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">{myTotal.totalOtHours}h</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Punch status cards, emergency check-out (check-in/out live in the header) */}
           <PunchCard />
 
           {/* Daily log */}

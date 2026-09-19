@@ -22,6 +22,9 @@ export function networkdays(start, end) {
 
 function monthsWorked(joinDate, asOf = new Date()) {
   const join = new Date(joinDate)
+  // Missing or invalid join date (e.g. placeholder user with no employee
+  // record) counts as no tenure — keeps leave math at 0 instead of NaN.
+  if (isNaN(join.getTime())) return 0
   const months = (asOf.getFullYear() - join.getFullYear()) * 12 + (asOf.getMonth() - join.getMonth())
   return Math.max(0, months)
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, CalendarCheck, User, Building, Calendar, Hash, FileText, Paperclip, CheckCircle2, Clock, ShieldCheck } from 'lucide-react'
 import { SETTINGS } from '../data/settingsData'
 import { networkdays, formatDate } from '../lib/leave'
+import LuxuryDatePicker from '../../HR-Manager/components/add-employee-modal/LuxuryDatePicker'
 
 // Per-type guidance so employees know what to submit for each leave category
 const REMARK_HINTS = {
@@ -189,12 +190,11 @@ function ApplyLeaveModal({ isOpen, onClose, onApply, employee = {} }) {
               <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
                 5. Start Date <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="date"
-                required
+              <LuxuryDatePicker
                 value={form.startDate}
-                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                className="w-full px-3 py-2 text-xs border border-gray-200 dark:border-[#262b31] rounded-xl bg-white dark:bg-[#1c2026] text-gray-950 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-100"
+                onChange={(val) => setForm({ ...form, startDate: val })}
+                placeholder="Select start date"
+                minDate={todayStr}
               />
             </div>
 
@@ -202,13 +202,11 @@ function ApplyLeaveModal({ isOpen, onClose, onApply, employee = {} }) {
               <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
                 6. End Date <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="date"
-                required
-                min={form.startDate || undefined}
+              <LuxuryDatePicker
                 value={form.endDate}
-                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                className="w-full px-3 py-2 text-xs border border-gray-200 dark:border-[#262b31] rounded-xl bg-white dark:bg-[#1c2026] text-gray-950 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-100"
+                onChange={(val) => setForm({ ...form, endDate: val })}
+                placeholder="Select end date"
+                minDate={form.startDate || todayStr}
               />
             </div>
           </div>

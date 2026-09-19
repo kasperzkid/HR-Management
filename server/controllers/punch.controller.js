@@ -245,6 +245,12 @@ export async function punchCheckOut(req, res) {
 
     const { day, minutes, time, date } = getAddisNow()
 
+    try {
+      assertWithinPunchRadius(req)
+    } catch (err) {
+      return res.status(403).json({ message: err.message, code: err.code })
+    }
+
     if (!isWorkDay(day)) {
       return res.status(400).json({ message: 'Weekend — check-out is disabled (Mon–Fri only).' })
     }

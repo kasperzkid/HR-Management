@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Printer,
   Search,
@@ -11,31 +11,54 @@ import {
   Building2,
   Calendar,
 } from 'lucide-react'
-import { INITIAL_EMPLOYEES } from '../data/employeeData'
-import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
 import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import PaymentSlip, { formatSlipAmount } from '../../components/PaymentSlip'
+import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
+import { attendanceTotals } from '../lib/attendanceUtils'
+import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
 
 export default function Payslips() {
+  const [employees, setEmployees] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [loading, setLoading] = useState(true)
+  const me = resolveEmployee(employees, getCurrentUser())
+
   const [viewType, setViewType] = useState('grid') // 'grid' (2-up), 'table' (summary list), 'single' (focused)
-  const [month, setMonth] = useState(8)
-  const [year, setYear] = useState(2026)
+  const [month, setMonth] = useState(new Date().getMonth() + 1)
+  const [year, setYear] = useState(new Date().getFullYear())
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDept, setSelectedDept] = useState('All')
-  const [selectedEmpId, setSelectedEmpId] = useState('EMP-0001')
+  const [selectedEmpId, setSelectedEmpId] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchEmployees(), fetchAttendance()])
+      .then(([emps, att]) => {
+        if (!cancelled) {
+          setEmployees(emps)
+          setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ]
-  const periodLabel = `${monthNames[month - 1] || 'August'} ${year}`
+  const periodLabel = `${monthNames[month - 1] || ''} ${year}`
 
   // Calculate computed payroll slip data for all employees
   const slipsData = useMemo(() => {
-    const attTotals = attendanceTotals(ATTENDANCE)
-    return INITIAL_EMPLOYEES.map((emp) => {
-      // For EMP-0001, ensure matching overtime and statutory figures
-      const att = attTotals[emp.employeeId] || (emp.employeeId === 'EMP-0001' ? { totalOtHours: 10.5 } : { totalOtHours: 0 })
+    const attTotals = attendanceTotals(attendance)
+    return employees.map((emp) => {
+      const att = attTotals[emp.employeeId] || { totalOtHours: 0 }
       const row = calcPayroll(emp, att)
 
       const earnings = {
@@ -69,7 +92,7 @@ export default function Payslips() {
         deductions,
       }
     })
-  }, [])
+  }, [employees, attendance])
 
   // Filtered employees list
   const filteredSlips = useMemo(() => {
@@ -90,14 +113,16 @@ export default function Payslips() {
     return ['All', ...new Set(slipsData.map((s) => s.employee.department))]
   }, [slipsData])
 
+  // Default the focused slip to the logged-in employee once data arrives
   const currentFocusedSlip = useMemo(() => {
+    const id = selectedEmpId || me.employeeId
     return (
-      filteredSlips.find((s) => s.employee.employeeId === selectedEmpId) ||
-      slipsData.find((s) => s.employee.employeeId === selectedEmpId) ||
+      filteredSlips.find((s) => s.employee.employeeId === id) ||
+      slipsData.find((s) => s.employee.employeeId === id) ||
       filteredSlips[0] ||
       slipsData[0]
     )
-  }, [filteredSlips, slipsData, selectedEmpId])
+  }, [filteredSlips, slipsData, selectedEmpId, me.employeeId])
 
   const handlePrev = () => {
     const idx = filteredSlips.findIndex((s) => s.employee.employeeId === currentFocusedSlip?.employee.employeeId)

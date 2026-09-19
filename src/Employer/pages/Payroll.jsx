@@ -1,27 +1,45 @@
-import { useState, useMemo } from 'react'
-import { Play, CheckCircle2, RefreshCw } from 'lucide-react'
-import { INITIAL_EMPLOYEES } from '../data/employeeData'
-import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
+import { useState, useMemo, useEffect } from 'react'
 import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import { SETTINGS } from '../data/settingsData'
 import LuxuryDataTable from '../components/LuxuryDataTable'
-import { getCurrentEmployee } from '../lib/currentUser'
+import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
+import { attendanceTotals } from '../lib/attendanceUtils'
+import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
 
 function Payroll() {
-  const currentEmployee = getCurrentEmployee()
-  const currentEmployeeId = currentEmployee.employeeId
+  const [employees, setEmployees] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [loading, setLoading] = useState(true)
+  const currentEmployeeId = resolveEmployee(employees, getCurrentUser()).employeeId
 
   const [month, setMonth] = useState(new Date().getMonth() + 1)
   const [year, setYear] = useState(new Date().getFullYear())
-  const [finalized, setFinalized] = useState(false)
   const [overrides, setOverrides] = useState({})
 
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchEmployees(), fetchAttendance()])
+      .then(([emps, att]) => {
+        if (!cancelled) {
+          setEmployees(emps)
+          setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const filteredEmployees = useMemo(() => {
-    return INITIAL_EMPLOYEES.filter((emp) => emp.employeeId === currentEmployeeId)
-  }, [currentEmployeeId])
+    return employees.filter((emp) => emp.employeeId === currentEmployeeId)
+  }, [employees, currentEmployeeId])
 
   const rows = useMemo(() => {
-    const attTotals = attendanceTotals(ATTENDANCE)
+    const attTotals = attendanceTotals(attendance)
     return filteredEmployees.map((emp) => {
       const base = calcPayroll(emp, attTotals[emp.employeeId] || { totalOtHours: 0 })
       const ov = overrides[emp.employeeId]
@@ -36,7 +54,7 @@ function Payroll() {
         netSalary: roundMoney(base.gross - totalDeductions),
       }
     })
-  }, [overrides])
+  }, [filteredEmployees, attendance, overrides])
 
   const totals = useMemo(() => {
     const active = rows.filter((r) => r.active)
@@ -59,7 +77,7 @@ function Payroll() {
     <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-950 dark:text-gray-100">Payroll Run</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-950 dark:text-gray-100">Payroll</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             Tax brackets per Proclamation No. 1395/2025 · Pension {SETTINGS.pension.employeeRate * 100}% / {SETTINGS.pension.employerRate * 100}% · OT {SETTINGS.overtimeMultiplier}x · {SETTINGS.standardMonthlyHours}h std
           </p>
@@ -78,30 +96,6 @@ function Payroll() {
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="px-3 py-2 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-white dark:bg-[#15181d] font-semibold text-gray-800 dark:text-gray-200">
             {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
-
-          {!finalized ? (
-            <button
-              onClick={() => setFinalized(true)}
-              className="px-4 py-2 rounded-lg bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 text-xs font-semibold flex items-center gap-1.5 hover:bg-gray-800 transition-colors"
-            >
-              <Play size={14} />
-              Finalize Run
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                <CheckCircle2 size={15} />
-                Finalized
-              </span>
-              <button
-                onClick={() => { setFinalized(false); setOverrides({}) }}
-                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-[#33383f] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] flex items-center gap-1.5"
-              >
-                <RefreshCw size={13} />
-                Reopen
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -221,7 +215,7 @@ function Payroll() {
             render: (r) => (
               <input
                 type="number"
-                disabled={finalized}
+
                 value={r.otherDeductions}
                 onChange={(e) => handleOverride(r.employeeId, 'otherDeductions', e.target.value)}
                 className="w-18 text-right px-2 py-0.5 text-xs rounded-lg border border-amber-200 bg-amber-50/40 focus:outline-none focus:ring-1 focus:ring-amber-300 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:border-gray-100 dark:disabled:border-gray-800 text-gray-800 dark:text-gray-200"
@@ -236,7 +230,7 @@ function Payroll() {
             render: (r) => (
               <input
                 type="number"
-                disabled={finalized}
+
                 value={r.loanDeductions}
                 onChange={(e) => handleOverride(r.employeeId, 'loanDeductions', e.target.value)}
                 className="w-18 text-right px-2 py-0.5 text-xs rounded-lg border border-amber-200 bg-amber-50/40 focus:outline-none focus:ring-1 focus:ring-amber-300 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:border-gray-100 dark:disabled:border-gray-800 text-gray-800 dark:text-gray-200"

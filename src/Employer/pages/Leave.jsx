@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus, TriangleAlert } from 'lucide-react'
-import { ALL_LEAVE } from '../data/leaveData'
 import { leaveBalance, findOverlaps, formatDate } from '../lib/leave'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 import ApplyLeaveModal from '../components/ApplyLeaveModal'
-import { getCurrentEmployee } from '../lib/currentUser'
+import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
+import { createLeaveRequest } from '../lib/employerApi'
+import { fetchEmployees, fetchLeaveRequests } from '../lib/employerApi'
 
 const STATUS_STYLES = {
   Approved: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60',
@@ -22,12 +23,37 @@ const LEAVE_COLORS = {
 }
 
 function Leave() {
-  const currentEmployee = getCurrentEmployee()
-  const [requests, setRequests] = useState(() =>
-    ALL_LEAVE.filter((r) => r.employeeId === currentEmployee.employeeId)
-  )
+  const user = getCurrentUser()
+  const currentEmployee = resolveEmployee([], user)
+  const [employees, setEmployees] = useState([])
+  const [leaveRequests, setLeaveRequests] = useState([])
+  const [requests, setRequests] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [toast, setToast] = useState(null)
+  const [pendingReload, setPendingReload] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchEmployees(), fetchLeaveRequests()])
+      .then(([emps, leaves]) => {
+        if (!cancelled) {
+          setEmployees(emps)
+          setLeaveRequests(Array.isArray(leaves) ? leaves : leaves?.requests || [])
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setPendingReload(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pendingReload])
+
+  // Sync local table from the backend list
+  useEffect(() => {
+    setRequests(leaveRequests.filter((r) => r.employeeId === currentEmployee.employeeId))
+  }, [leaveRequests, currentEmployee.employeeId])
 
   const showToast = (msg) => {
     setToast(msg)
@@ -42,10 +68,20 @@ function Leave() {
     [currentEmployee.joinDate, requests]
   )
 
-  const handleApply = (newReq) => {
-    setRequests((prev) => [newReq, ...prev])
+  const handleApply = async (newReq) => {
+    try {
+      await createLeaveRequest({
+        leaveType: newReq.leaveType,
+        startDate: newReq.startDate,
+        endDate: newReq.endDate,
+        remarks: newReq.remarks,
+      })
+      setPendingReload(true)
+      showToast('Leave request submitted successfully for approval')
+    } catch (err) {
+      showToast(err.message || 'Failed to submit leave request')
+    }
     setShowForm(false)
-    showToast('Leave request submitted successfully for approval')
   }
 
   return (

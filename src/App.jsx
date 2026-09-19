@@ -101,6 +101,9 @@ function ProtectedRoute({ children, allowedRole, allowedRoles }) {
 
   const validRoles = allowedRoles || (allowedRole ? [allowedRole] : null)
   if (validRoles && user.role && !validRoles.includes(user.role)) {
+    if (user.role === 'EMPLOYEE') {
+      return <Navigate to="/employer/dashboard" replace />
+    }
     return <Navigate to={user.role === 'HR_MANAGER' ? '/hr-manager/dashboard' : '/employer/dashboard'} replace />
   }
 
@@ -117,7 +120,7 @@ function App() {
         <Route
           path="/employer/*"
           element={
-            <ProtectedRoute allowedRoles={['EMPLOYER']}>
+            <ProtectedRoute allowedRoles={['EMPLOYER', 'EMPLOYEE']}>
               <EmployerApp />
             </ProtectedRoute>
           }

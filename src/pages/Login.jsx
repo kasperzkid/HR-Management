@@ -699,7 +699,11 @@ function Login() {
         const { user, token } = data
         localStorage.setItem('user', JSON.stringify({ ...user, company: 'Wishbone', token }))
         setLoading(false)
-        navigate(user.role === 'HR_MANAGER' ? '/hr-manager/dashboard' : '/employer/dashboard')
+        if (user.role === 'HR_MANAGER') {
+          navigate('/hr-manager/dashboard')
+        } else {
+          navigate('/employer/dashboard')
+        }
         return
       }
       // Server responded with an error — show it, never silently demo-login
@@ -719,7 +723,11 @@ function Login() {
       JSON.stringify({ name, email, role, company: 'Wishbone', token })
     )
     setLoading(false)
-    navigate(role === 'HR_MANAGER' ? '/hr-manager/dashboard' : '/employer/dashboard')
+    if (role === 'HR_MANAGER') {
+      navigate('/hr-manager/dashboard')
+    } else {
+      navigate('/employer/dashboard')
+    }
   }
 
   const activeIdx = currentSlide % SLIDES.length

@@ -1,69 +1,50 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  LogIn,
-  LogOut,
-  Clock,
-  CalendarDays,
   Siren,
   X,
   AlertCircle,
-  CheckCircle2,
   Loader2,
+  Clock,
+  Timer,
+  TrendingUp,
+  TrendingDown,
+  LogOut,
+  Hourglass,
   ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react'
 import { getCurrentUser } from '../lib/currentUser'
-import { getToken } from '../../lib/auth'
-import {
-  sendMessageApi,
-  startConversationApi,
-} from '../../lib/messagesApi'
 import {
   getAddisNow,
-  isWorkDay,
-  isWithinCheckInWindow,
-  isCheckOutTime,
+  remainingLabel,
   getPunchState,
-  setPunchState,
-  recordPunch,
   subscribePunch,
+  applyPunchStatus,
+  WORK_END_MINUTES,
 } from '../lib/workTime'
-import {
-  broadcastPunchFeedback,
-  PUNCH_FEEDBACK_EVENT,
-} from '../lib/punchActions'
+import { emergencyCheckOutApi, fetchPunchStatusApi } from '../lib/punchApi'
+import { PUNCH_FEEDBACK_EVENT, broadcastPunchFeedback } from './PunchWidget'
 
 // ─────────────────────────────────────────────────────────────
-// WORK TIME RULES (UTC+3 — Addis Ababa) — see lib/workTime.js
-// Work day:    Mon–Fri, 08:00 → 17:30
-// Check-in:    08:00 → 14:00 (disabled after 14:00)
-// Check-out:   available at 17:30
-// Emergency:   check-out with mandatory remark, notifies HR
-//              (Attendance section only)
-// Punch state is shared with the header widget via lib/workTime.js
+// Attendance page — punch status + emergency check-out.
+// The Punch Card was removed: check-in / check-out live in the
+// header (PunchWidget). This page shows status cards (average
+// late, early departures, overtime, pending check-out) and the
+// Emergency Check-Out button (backend-notified to HR).
 // ─────────────────────────────────────────────────────────────
 
-// Find the HR_MANAGER user id so emergency check-outs land in HR's inbox
-async function findHrManagerUserId() {
-  const res = await fetch('/api/messages/users', {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  })
-  if (!res.ok) throw new Error('Unable to load directory')
-  const { users = [] } = await res.json()
-  const hr = users.find((u) => u.kind === 'user' && u.subtitle === 'HR Manager')
-  return hr ? hr.id : null
-}
-
-function StatusPill({ active, tone, children }) {
+function StatusCard({ icon: Icon, label, value, hint, tone }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-        active
-          ? tone
-          : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-[#1c2026] dark:text-slate-500 dark:border-[#262b31]'
-      }`}
-    >
-      {children}
-    </span>
+    <div className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs dark:bg-[#15181d] dark:border-[#262b31]">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{label}</p>
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${tone}`}>
+          <Icon size={14} />
+        </div>
+      </div>
+      <p className="text-xl font-bold text-gray-950 dark:text-gray-100 mt-1 tabular-nums">{value}</p>
+      {hint && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{hint}</p>}
+    </div>
   )
 }
 
@@ -73,85 +54,50 @@ export default function PunchCard({ onEvent }) {
   const employeeId = user?.employeeId || user?.email || 'EMP-0000'
 
   const [tick, setTick] = useState(0)
-  const [punch, setPunch] = useState(getPunchState()) // shared state (in/out + times)
-  const [busy, setBusy] = useState(null) // 'in' | 'out' | 'emergency'
-  const [feedback, setFeedback] = useState(null) // { tone: 'ok'|'err', text }
+  const [punch, setPunch] = useState(getPunchState())
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [remark, setRemark] = useState('')
   const [emergencyError, setEmergencyError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState(null)
+  const [checkOutUnlocked, setCheckOutUnlocked] = useState(false)
 
-  // Re-evaluate the time rules every 30s
+  // Clock tick every 30s — re-evaluates windows + countdown
   useEffect(() => {
     const timer = setInterval(() => setTick((t) => t + 1), 30000)
     return () => clearInterval(timer)
   }, [])
 
-  // Mirror punches made anywhere (header widget or this card)
+  // Mirror punches made anywhere (header widget or this page)
   useEffect(() => subscribePunch(setPunch), [])
 
-  // Show feedback for any punch, including ones made from the header
+  // Load today's punch state from the backend on mount
+  useEffect(() => {
+    fetchPunchStatusApi()
+      .then(applyPunchStatus)
+      .catch(() => {})
+  }, [])
+
+  // Show feedback for punches made anywhere
   useEffect(() => {
     const onFeedback = (e) => setFeedback(e.detail)
     window.addEventListener(PUNCH_FEEDBACK_EVENT, onFeedback)
     return () => window.removeEventListener(PUNCH_FEEDBACK_EVENT, onFeedback)
   }, [])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps — `tick` intentionally refreshes the clock every 30s
-  const { day, minutes, dateKey, timeLabel } = useMemo(() => getAddisNow(), [tick])
+  // eslint-disable-next-line react-hooks/exhaustive-deps — `tick` refreshes the clock
+  const { minutes, day, dateKey, timeLabel } = useMemo(() => getAddisNow(), [tick])
 
-  const isWeekend = !isWorkDay(day)
-  const inWindow = isWithinCheckInWindow(minutes)
-  const atCheckOut = isCheckOutTime(minutes)
+  // 17:30 unlock check for the check-out hint (mirrors backend rule)
+  useEffect(() => {
+    setCheckOutUnlocked(minutes >= WORK_END_MINUTES && day >= 1 && day <= 5)
+  }, [minutes, day])
 
-  const checkedIn = punch.checkedIn
-  const checkedOut = punch.checkedOut
-  const checkInAt = punch.checkInAt
-  const checkOutAt = punch.checkOutAt
+  const { checkedIn, checkedOut, checkInAt, checkOutAt } = punch
 
-  const canCheckIn = !isWeekend && inWindow && !checkedIn && !checkedOut
-  const canCheckOut = !isWeekend && atCheckOut && checkedIn && !checkedOut
   const canEmergencyCheckOut = checkedIn && !checkedOut
 
-  const showCheckInBlocked = isWeekend || (!inWindow && !checkedIn && !checkedOut)
-
-  function punchIn() {
-    setBusy('in')
-    try {
-      recordPunch({ type: 'check-in', date: dateKey, time: timeLabel })
-      broadcastPunchFeedback({
-        tone: 'ok',
-        text: `Checked in at ${timeLabel} (UTC+3). Have a productive day!`,
-      })
-      onEvent?.({ type: 'check-in', date: dateKey, time: timeLabel })
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  function punchOut(isEmergency = false) {
-    setBusy(isEmergency ? 'emergency' : 'out')
-    try {
-      recordPunch({
-        type: isEmergency ? 'emergency-check-out' : 'check-out',
-        date: dateKey,
-        time: timeLabel,
-      })
-      broadcastPunchFeedback({
-        tone: 'ok',
-        text: isEmergency
-          ? `Emergency check-out recorded at ${timeLabel} (UTC+3). HR has been notified with your remark.`
-          : `Checked out at ${timeLabel} (UTC+3). See you tomorrow!`,
-      })
-      onEvent?.({
-        type: isEmergency ? 'emergency-check-out' : 'check-out',
-        date: dateKey,
-        time: timeLabel,
-      })
-    } finally {
-      setBusy(null)
-    }
-  }
-
+  // ── Emergency check-out submit (backend notifies HR) ────────
   async function submitEmergency(e) {
     e.preventDefault()
     const reason = remark.trim()
@@ -162,77 +108,157 @@ export default function PunchCard({ onEvent }) {
     setEmergencyError('')
 
     try {
-      setBusy('emergency')
-      const hrId = await findHrManagerUserId()
-      if (hrId) {
-        // Ensure a conversation with HR exists, then notify
-        await startConversationApi({ userId: hrId }).catch(() => {})
-        await sendMessageApi(
-          hrId,
-          `🚨 EMERGENCY CHECK-OUT\n${employeeName} (${employeeId}) checked out at ${timeLabel} (UTC+3) on ${dateKey}.\nReason: ${reason}`
-        )
-      }
-      punchOut(true)
+      setBusy(true)
+      const res = await emergencyCheckOutApi(reason)
+      applyPunchStatus({
+        checkedIn: true,
+        checkedOut: true,
+        checkOut: res.record?.checkOut,
+      })
+      broadcastPunchFeedback({
+        tone: 'ok',
+        text: res.message || 'Emergency check-out recorded. HR has been notified.',
+      })
+      onEvent?.({ type: 'emergency-check-out', date: dateKey, time: timeLabel })
       setEmergencyOpen(false)
       setRemark('')
     } catch (err) {
-      console.error('Emergency check-out error:', err)
       setEmergencyError(
-        'Could not reach HR. Your check-out was NOT recorded — try again or contact HR directly.'
+        err.message ||
+          'Could not reach HR. Your check-out was NOT recorded — try again or contact HR directly.'
       )
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
+  // ── Punch stats (zeroed until /api/employer/punch/stats is wired) ──
+  const stats = {
+    avgLateMin: 0,
+    avgEarlyMin: 0,
+    overtimeHours: 0,
+    pendingCheckOut: checkedIn && !checkedOut,
+  }
+
+  const showCheckInBlocked = !checkedIn && !checkedOut
+
   return (
-    <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-[#262b31] bg-gradient-to-r from-slate-50/80 dark:from-[#1c2026] to-transparent">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gray-950 dark:bg-[#3a4149] text-white flex items-center justify-center shrink-0">
-            <Clock size={18} />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-gray-950 dark:text-gray-100">
-              Punch Card
-            </h2>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              Work time: 8:00 AM – 5:30 PM (UTC+3) • Monday to Friday
-            </p>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500">
-            Local time (UTC+3)
-          </p>
-          <p className="font-mono text-lg font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-            {timeLabel}
-          </p>
-        </div>
+    <div className="space-y-4">
+      {/* Status cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatusCard
+          icon={TrendingUp}
+          label="Avg Late Time"
+          value={`${stats.avgLateMin}m`}
+          hint="Average minutes past 8:00 AM"
+          tone="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+        />
+        <StatusCard
+          icon={TrendingDown}
+          label="Avg Early Departure"
+          value={`${stats.avgEarlyMin}m`}
+          hint="Average minutes before 5:30 PM"
+          tone="bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+        />
+        <StatusCard
+          icon={Clock}
+          label="Overtime"
+          value={`${stats.overtimeHours}h`}
+          hint="This month"
+          tone="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300"
+        />
+        <StatusCard
+          icon={Hourglass}
+          label="Check-out"
+          value={stats.pendingCheckOut ? 'Pending' : checkedOut ? 'Done' : 'Not in'}
+          hint={
+            stats.pendingCheckOut
+              ? checkOutUnlocked
+                ? 'Unlocked now — 5:30 PM passed'
+                : `${remainingLabel(minutes)} until 5:30 PM`
+              : checkedOut
+              ? `Out at ${checkOutAt}`
+              : 'Check in from the header'
+          }
+          tone={
+            stats.pendingCheckOut
+              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+          }
+        />
       </div>
 
-      <div className="p-5 space-y-4">
-        {/* Status pills */}
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill active={isWeekend} tone="bg-amber-50 text-amber-700 border-amber-200">
-            <CalendarDays size={11} />
-            {isWeekend ? 'Weekend — punches disabled' : 'Work day'}
-          </StatusPill>
-          <StatusPill active={checkedIn} tone="bg-emerald-50 text-emerald-700 border-emerald-200">
-            <LogIn size={11} />
-            {checkedIn ? `In at ${checkInAt}` : 'Not checked in'}
-          </StatusPill>
-          <StatusPill active={checkedOut} tone="bg-slate-900 text-white border-slate-900 dark:bg-[#3a4149] dark:border-[#3a4149]">
-            <LogOut size={11} />
-            {checkedOut ? `Out at ${checkOutAt}` : 'Not checked out'}
-          </StatusPill>
+      {/* Punch status strip + Emergency button */}
+      <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gray-950 dark:bg-[#3a4149] text-white flex items-center justify-center shrink-0">
+              <Timer size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-950 dark:text-gray-100">
+                Today's Punch Status
+              </h2>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                Work time: 8:00 AM – 5:30 PM (UTC+3) • Monday to Friday
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Status pills */}
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                checkedIn
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-[#1c2026] dark:text-slate-500 dark:border-[#262b31]'
+              }`}
+            >
+              <CheckCircle2 size={11} />
+              {checkedIn ? `In at ${checkInAt}` : 'Not checked in'}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                checkedOut
+                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-[#3a4149] dark:border-[#3a4149]'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-[#1c2026] dark:text-slate-500 dark:border-[#262b31]'
+              }`}
+            >
+              <LogOut size={11} />
+              {checkedOut ? `Out at ${checkOutAt}` : 'Not checked out'}
+            </span>
+
+            {/* EMERGENCY CHECK OUT — Attendance section only */}
+            <button
+              type="button"
+              onClick={() => {
+                setEmergencyError('')
+                setEmergencyOpen(true)
+              }}
+              disabled={!canEmergencyCheckOut}
+              title={
+                !checkedIn
+                  ? 'Check in first (from the header)'
+                  : checkedOut
+                  ? 'Day already closed'
+                  : 'Leave early with a reason — HR is notified'
+              }
+              className={`h-10 px-4 rounded-xl border-2 flex items-center gap-2 text-xs font-bold transition-all ${
+                canEmergencyCheckOut
+                  ? 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 cursor-pointer shadow-sm dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300'
+                  : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-[#1c2026] dark:border-[#262b31] dark:text-slate-500'
+              }`}
+            >
+              <Siren size={16} />
+              Emergency Check Out
+            </button>
+          </div>
         </div>
 
         {/* Feedback */}
         {feedback && (
           <div
-            className={`flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-medium ${
+            className={`mt-4 flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-medium ${
               feedback.tone === 'ok'
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
                 : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300'
@@ -247,119 +273,11 @@ export default function PunchCard({ onEvent }) {
           </div>
         )}
 
-        {/* Punch buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* CHECK IN */}
-          <button
-            type="button"
-            onClick={punchIn}
-            disabled={!canCheckIn || busy === 'in'}
-            title={
-              isWeekend
-                ? 'Check-in is disabled on weekends (Sat/Sun)'
-                : !inWindow && !checkedIn
-                ? 'Check-in opens at 8:00 AM and closes at 2:00 PM (UTC+3)'
-                : checkedIn
-                ? 'Already checked in'
-                : 'Check in'
-            }
-            className={`h-24 rounded-2xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${
-              canCheckIn
-                ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 cursor-pointer shadow-sm dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300'
-                : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-[#1c2026] dark:border-[#262b31] dark:text-slate-500'
-            }`}
-          >
-            {busy === 'in' ? (
-              <Loader2 size={20} className="animate-spin" />
-            ) : (
-              <LogIn size={20} />
-            )}
-            <span className="text-sm font-bold">Check In</span>
-            <span className="text-[10px] font-medium">
-              {isWeekend
-                ? 'Weekend'
-                : checkedIn
-                ? 'Done ✓'
-                : inWindow
-                ? 'Open now'
-                : '8:00 AM–2:00 PM only'}
-            </span>
-          </button>
-
-          {/* CHECK OUT */}
-          <button
-            type="button"
-            onClick={() => punchOut(false)}
-            disabled={!canCheckOut || busy === 'out'}
-            title={
-              isWeekend
-                ? 'Check-out is disabled on weekends (Sat/Sun)'
-                : !checkedIn
-                ? 'Check in first'
-                : !atCheckOut
-                ? 'Check-out is available only at 5:30 PM (UTC+3)'
-                : checkedOut
-                ? 'Already checked out'
-                : 'Check out'
-            }
-            className={`h-24 rounded-2xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${
-              canCheckOut
-                ? 'border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 cursor-pointer shadow-sm dark:bg-indigo-950/30 dark:border-indigo-800 dark:text-indigo-300'
-                : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-[#1c2026] dark:border-[#262b31] dark:text-slate-500'
-            }`}
-          >
-            {busy === 'out' ? (
-              <Loader2 size={20} className="animate-spin" />
-            ) : (
-              <LogOut size={20} />
-            )}
-            <span className="text-sm font-bold">Check Out</span>
-            <span className="text-[10px] font-medium">
-              {isWeekend
-                ? 'Weekend'
-                : checkedOut
-                ? 'Done ✓'
-                : !checkedIn
-                ? 'Check in first'
-                : atCheckOut
-                ? 'Open now (5:30 PM)'
-                : 'Available at 5:30 PM'}
-            </span>
-          </button>
-
-          {/* EMERGENCY CHECK OUT */}
-          <button
-            type="button"
-            onClick={() => {
-              setEmergencyError('')
-              setEmergencyOpen(true)
-            }}
-            disabled={!canEmergencyCheckOut}
-            title={
-              !checkedIn
-                ? 'Check in first before an emergency check-out'
-                : 'Leave early with a reason — HR is notified'
-            }
-            className={`h-24 rounded-2xl border-2 flex flex-col items-center justify-center gap-1.5 transition-all ${
-              canEmergencyCheckOut
-                ? 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 cursor-pointer shadow-sm dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300'
-                : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-[#1c2026] dark:border-[#262b31] dark:text-slate-500'
-            }`}
-          >
-            <Siren size={20} />
-            <span className="text-sm font-bold">Emergency</span>
-            <span className="text-[10px] font-medium">
-              {checkedIn ? 'Leave early + notify HR' : 'Check in first'}
-            </span>
-          </button>
-        </div>
-
         {showCheckInBlocked && (
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+          <p className="mt-4 text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
             <ShieldCheck size={13} className="text-slate-400" />
-            {isWeekend
-              ? 'Today is a weekend — check-in and check-out are disabled.'
-              : 'Check-in is accepted between 8:00 AM and 2:00 PM (UTC+3), Monday to Friday only. Check-out opens at 5:30 PM.'}
+            Check-in is accepted between 8:00 AM and 2:00 PM (UTC+3), Monday to Friday only. Check-out
+            unlocks at 5:30 PM and is enforced by the server.
           </p>
         )}
       </div>
@@ -447,10 +365,10 @@ export default function PunchCard({ onEvent }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={busy === 'emergency'}
+                  disabled={busy}
                   className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
                 >
-                  {busy === 'emergency' ? (
+                  {busy ? (
                     <>
                       <Loader2 size={13} className="animate-spin" /> Sending…
                     </>

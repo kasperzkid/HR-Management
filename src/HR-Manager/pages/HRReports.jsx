@@ -7,7 +7,7 @@ import {
   Users,
 } from 'lucide-react'
 
-import { INITIAL_EMPLOYEES } from '../../Employer/data/employeeData'
+import { useEmployees } from '../../Employer/hooks/useEmployees'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 
 const DEPARTMENTS = [
@@ -151,9 +151,7 @@ function HRReports() {
   )
   const [status, setStatus] = useState('All Statuses')
 
-  const employees = Array.isArray(INITIAL_EMPLOYEES)
-    ? INITIAL_EMPLOYEES
-    : []
+  const { employees } = useEmployees()
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((employee) => {

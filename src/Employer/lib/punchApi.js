@@ -23,14 +23,20 @@ async function punchFetch(path, options = {}) {
 
 export const fetchPunchStatusApi = () => punchFetch('/punch')
 
-export const punchCheckInApi = () =>
-  punchFetch('/punch/check-in', { method: 'POST', body: JSON.stringify({}) })
+export const punchCheckInApi = (coords = {}) =>
+  punchFetch('/punch/check-in', {
+    method: 'POST',
+    body: JSON.stringify(coords),
+  })
 
-export const punchCheckOutApi = () =>
-  punchFetch('/punch/check-out', { method: 'POST', body: JSON.stringify({}) })
-
-export const emergencyCheckOutApi = (remark) =>
+export const punchCheckOutApi = (coords = {}) =>
   punchFetch('/punch/check-out', {
     method: 'POST',
-    body: JSON.stringify({ emergency: true, remark }),
+    body: JSON.stringify(coords),
+  })
+
+export const emergencyCheckOutApi = (remark, coords = {}) =>
+  punchFetch('/punch/check-out', {
+    method: 'POST',
+    body: JSON.stringify({ emergency: true, remark, ...coords }),
   })

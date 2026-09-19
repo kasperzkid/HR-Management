@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ChevronDown,
   ChevronLeft,
@@ -190,18 +191,43 @@ const toneOf = (action) =>
 
 function RowActionsDropdown({ primaryAction, dropdownActions = [], row }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState(null)
+  const triggerRef = useRef(null)
   const menuRef = useRef(null)
+
+  const placeMenu = () => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const menuWidth = 192
+    const menuHeight = 56 + dropdownActions.length * 34 + (primaryAction ? 34 : 0)
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    const openUp = spaceBelow < menuHeight + 8
+    let top = openUp ? rect.top - menuHeight - 6 : rect.bottom + 6
+    if (top < 8) top = 8
+    let left = rect.right - menuWidth
+    if (left < 8) left = 8
+    setPos({ top, left, openUp })
+  }
 
   useEffect(() => {
     const handleOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+      if (menuRef.current && !menuRef.current.contains(e.target) && !triggerRef.current.contains(e.target)) {
         setOpen(false)
       }
     }
+    const handleScroll = () => setOpen(false)
     if (open) {
+      placeMenu()
       document.addEventListener('click', handleOutside)
+      window.addEventListener('scroll', handleScroll, true)
+      window.addEventListener('resize', handleScroll)
     }
-    return () => document.removeEventListener('click', handleOutside)
+    return () => {
+      document.removeEventListener('click', handleOutside)
+      window.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('resize', handleScroll)
+    }
   }, [open])
 
   const visibleDropdown = dropdownActions.filter((a) => !a.hidden || !a.hidden(row))
@@ -210,8 +236,9 @@ function RowActionsDropdown({ primaryAction, dropdownActions = [], row }) {
   const primaryTone = toneOf(primaryAction || {})
 
   return (
-    <div className="relative inline-block text-left" ref={menuRef}>
+    <div className="relative inline-block text-left">
       <button
+        ref={triggerRef}
         type="button"
         onClick={(e) => {
           e.stopPropagation()
@@ -232,49 +259,54 @@ function RowActionsDropdown({ primaryAction, dropdownActions = [], row }) {
         />
       </button>
 
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 mt-1.5 w-44 p-1.5 rounded-xl text-xs z-50 bg-white dark:bg-[#1c2026] shadow-xl border border-slate-200/80 dark:border-[#262b31] ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100 origin-top-right"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {primaryAction && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false)
-                primaryAction.onClick(row)
-              }}
-              className={`w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-semibold cursor-pointer transition-colors ${primaryTone.item}`}
-            >
-              {primaryAction.icon && (
-                <primaryAction.icon className={`w-3.5 h-3.5 shrink-0 ${primaryTone.icon}`} />
-              )}
-              <span>{primaryAction.label}</span>
-            </button>
-          )}
-
-          {visibleDropdown.map((action, idx) => {
-            const tone = toneOf(action)
-            return (
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: 'fixed', top: pos.top, left: pos.left, width: '11rem' }}
+            className="p-1.5 rounded-xl text-xs z-[100] bg-white dark:bg-[#1c2026] shadow-xl border border-slate-200/80 dark:border-[#262b31] ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100 origin-top-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {primaryAction && (
               <button
-                key={idx}
                 type="button"
                 role="menuitem"
                 onClick={() => {
                   setOpen(false)
-                  action.onClick(row)
+                  primaryAction.onClick(row)
                 }}
-                className={`w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-medium cursor-pointer transition-colors ${tone.item}`}
+                className={`w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-semibold cursor-pointer transition-colors ${primaryTone.item}`}
               >
-                {action.icon && <action.icon className={`w-3.5 h-3.5 shrink-0 ${tone.icon}`} />}
-                <span>{action.label}</span>
+                {primaryAction.icon && (
+                  <primaryAction.icon className={`w-3.5 h-3.5 shrink-0 ${primaryTone.icon}`} />
+                )}
+                <span>{primaryAction.label}</span>
               </button>
-            )
-          })}
-        </div>
-      )}
+            )}
+
+            {visibleDropdown.map((action, idx) => {
+              const tone = toneOf(action)
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false)
+                    action.onClick(row)
+                  }}
+                  className={`w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-medium cursor-pointer transition-colors ${tone.item}`}
+                >
+                  {action.icon && <action.icon className={`w-3.5 h-3.5 shrink-0 ${tone.icon}`} />}
+                  <span>{action.label}</span>
+                </button>
+              )
+            })}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
@@ -286,7 +318,6 @@ function RowActionsDropdown({ primaryAction, dropdownActions = [], row }) {
 export default function LuxuryDataTable({
   title,
   subtitle,
-  countBadge,
   columns = [],
   data = [],
   // Search
@@ -471,8 +502,6 @@ export default function LuxuryDataTable({
 
   const hasActiveFilters = Boolean(searchTerm || (filterControls && onResetFilters))
 
-  const badgeText = countBadge !== undefined ? countBadge : `${totalItems} total`
-
   return (
     <div
       className={`bg-white dark:bg-[#15181d] rounded-2xl border border-slate-200 dark:border-[#262b31] shadow-2xs overflow-hidden text-slate-800 dark:text-gray-200 ${className}`}
@@ -486,13 +515,8 @@ export default function LuxuryDataTable({
             {title && (
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
-                  <span>{title}</span>
-                  {badgeText && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60">
-                      {badgeText}
-                    </span>
-                  )}
-                </h2>
+                      <span>{title}</span>
+                        </h2>
                 {subtitle && (
                   <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">{subtitle}</p>
                 )}

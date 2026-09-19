@@ -1,30 +1,30 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { BadgeInfo, Building2, CheckCircle2, CreditCard, Download, FileText, Hash, Landmark, Printer, RotateCcw, Save, ShieldCheck, Wallet, X } from 'lucide-react'
-import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
 import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import { SETTINGS } from '../data/settingsData'
 import LuxuryDataTable from '../components/LuxuryDataTable'
-import { getCurrentEmployee } from '../lib/currentUser'
+import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
+import { attendanceTotals } from '../lib/attendanceUtils'
+import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
 
 const STORAGE_KEY = 'yanol-payment-info'
-const EMPLOYEE = getCurrentEmployee()
 
-function loadPayment() {
+function loadPayment(employee) {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY))
-    if (saved) return { ...defaultPayment(), ...saved }
+    if (saved) return { ...defaultPayment(employee), ...saved }
   } catch {
     // ignore corrupted storage
   }
-  return defaultPayment()
+  return defaultPayment(employee)
 }
 
-function defaultPayment() {
+function defaultPayment(employee) {
   return {
-    bankName: EMPLOYEE.bankName,
-    bankAccount: EMPLOYEE.bankAccount,
-    tin: EMPLOYEE.tin,
-    pensionId: EMPLOYEE.pensionId,
+    bankName: employee.bankName || '',
+    bankAccount: employee.bankAccount || '',
+    tin: employee.tin || '',
+    pensionId: employee.pensionId || '',
   }
 }
 
@@ -42,9 +42,41 @@ function Field({ label, value, onChange }) {
 }
 
 function PaymentInfo() {
-  const [payment, setPayment] = useState(loadPayment)
+  const user = getCurrentUser()
+  const [employees, setEmployees] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [loading, setLoading] = useState(true)
+  const EMPLOYEE = resolveEmployee(employees, user)
+
+  const [payment, setPayment] = useState(() => loadPayment(EMPLOYEE))
   const [toast, setToast] = useState(null)
   const [statement, setStatement] = useState(null)
+  const dirtyRef = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchEmployees(), fetchAttendance()])
+      .then(([emps, att]) => {
+        if (!cancelled) {
+          setEmployees(emps)
+          setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Hydrate saved/default payment info once the real employee record is available
+  useEffect(() => {
+    if (employees.length > 0 && !dirtyRef.current) {
+      setPayment(loadPayment(EMPLOYEE))
+    }
+  }, [employees, EMPLOYEE])
 
   const showToast = (msg) => {
     setToast(msg)
@@ -52,11 +84,12 @@ function PaymentInfo() {
   }
 
   const payrollRow = useMemo(() => {
-    const attTotals = attendanceTotals(ATTENDANCE)
+    const attTotals = attendanceTotals(attendance)
     return calcPayroll(EMPLOYEE, attTotals[EMPLOYEE.employeeId] || { totalOtHours: 0 })
-  }, [])
+  }, [EMPLOYEE, attendance])
 
   const transfers = useMemo(() => {
+    if (!payrollRow.netSalary) return []
     const months = []
     for (let i = 5; i >= 0; i -= 1) {
       const d = new Date()
@@ -72,7 +105,10 @@ function PaymentInfo() {
     return months
   }, [payrollRow])
 
-  const set = (field, value) => setPayment((prev) => ({ ...prev, [field]: value }))
+  const set = (field, value) => {
+    dirtyRef.current = true
+    setPayment((prev) => ({ ...prev, [field]: value }))
+  }
 
   const save = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payment))
@@ -81,7 +117,7 @@ function PaymentInfo() {
 
   const reset = () => {
     localStorage.removeItem(STORAGE_KEY)
-    setPayment(defaultPayment())
+    setPayment(defaultPayment(EMPLOYEE))
     showToast('Payment information reset to employee record')
   }
 
@@ -261,12 +297,6 @@ function PaymentInfo() {
               <span className="font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{masked}</span>
             </div>
           </div>
-          <div className="mt-5 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-start gap-2.5">
-            <ShieldCheck size={15} className="text-emerald-600 shrink-0 mt-0.5" />
-            <p className="text-[11px] font-medium text-emerald-800">
-              Verified for payroll transfer — updated details apply from the next pay run.
-            </p>
-          </div>
         </div>
 
         {/* Editable payment details */}
@@ -323,6 +353,7 @@ function PaymentInfo() {
         searchPlaceholder="Search transfers..."
         searchKeys={['period', 'paidOn', 'status']}
         exportable={true}
+        emptyMessage="No salary transfers yet."
         exportFilename={`Salary_Transfers_${payment.bankName.replace(/\s+/g, '_')}`}
         columns={[
           {

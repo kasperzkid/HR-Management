@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { X, User, Mail, Briefcase, Building, Calendar, Hash, Check } from 'lucide-react'
-import { DEPARTMENTS } from '../data/employeeData'
+import LuxuryDatePicker from '../components/LuxuryDatePicker'
+import { SETTINGS } from '../data/settingsData'
+const DEPARTMENTS = ['All Departments', ...(SETTINGS.departments || [])]
 
 function AddEmployeeModal({ isOpen, onClose, onAdd, editingEmployee = null, onEdit = null }) {
   const [formData, setFormData] = useState(() => {
@@ -176,13 +178,11 @@ function AddEmployeeModal({ isOpen, onClose, onAdd, editingEmployee = null, onEd
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Join Date</label>
               <div className="relative">
-                <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-                <input
-                  type="text"
-                  value={formData.joinDate}
-                  onChange={(e) => setFormData({ ...formData, joinDate: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200"
-                />
+                <LuxuryDatePicker
+              value={formData.joinDate}
+              onChange={(date) => setFormData({ ...formData, joinDate: date })}
+              placeholder="Select date"
+            />
               </div>
             </div>
           </div>

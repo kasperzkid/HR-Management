@@ -38,6 +38,15 @@ export const createEmployeeApi = (payload) =>
     body: JSON.stringify(payload),
   })
 
+export const importEmployeesApi = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return hrFetch('/employees/import', {
+    method: 'POST',
+    body: form,
+  })
+}
+
 export async function uploadEmployeeFile(file) {
   const form = new FormData()
   form.append('file', file)

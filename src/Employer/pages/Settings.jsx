@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Building2,
   Calculator,
@@ -10,7 +10,7 @@ import {
   Settings as SettingsIcon,
 } from 'lucide-react'
 import { getDefaultSettings } from '../data/settingsData'
-import { INITIAL_EMPLOYEES } from '../data/employeeData'
+import { fetchEmployees } from '../lib/employerApi'
 
 const STORAGE_KEY = 'yanol-settings'
 
@@ -63,6 +63,23 @@ function NumberInput({ value, onChange }) {
 function SettingsPage() {
   const [config, setConfig] = useState(loadSettings)
   const [toast, setToast] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [employees, setEmployees] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchEmployees()
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) setEmployees(data)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const showToast = (msg) => {
     setToast(msg)
@@ -116,7 +133,10 @@ function SettingsPage() {
     showToast('Settings reset to defaults')
   }
 
-  const jobTitles = useMemo(() => [...new Set(INITIAL_EMPLOYEES.map((e) => e.jobTitle))].sort(), [])
+  const jobTitles = useMemo(
+    () => [...new Set(employees.map((e) => e.jobTitle).filter(Boolean))].sort(),
+    [employees]
+  )
 
   const compInputs = [
     ['name', 'Company Name'],

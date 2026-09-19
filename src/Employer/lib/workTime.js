@@ -2,14 +2,17 @@
 // WORK TIME RULES (UTC+3 — Addis Ababa)
 // Work day:          Mon–Fri, 08:00 → 17:30
 // Check-in window:   08:00 → 14:00 (disabled after 14:00)
-// Check-out:         becomes available exactly at 17:30
+// Check-out:         ONLY accepted at/after 17:30 — enforced by
+//                    the backend (server/controllers/punch.controller.js)
 // Weekend:           Sat/Sun — check-in & check-out disabled
 // Emergency:         check-out with mandatory remark, notifies HR
-//                    (available from the Attendance section)
+//                    (Attendance section only)
 // ─────────────────────────────────────────────────────────────
 export const WORK_START_MINUTES = 8 * 60 // 08:00
 export const CHECK_IN_CUTOFF_MINUTES = 14 * 60 // 14:00 — last moment to check in
 export const WORK_END_MINUTES = 17 * 60 + 30 // 17:30
+export const WORK_END_LABEL = '17:30'
+export const WORK_END_DISPLAY = '5:30 PM'
 
 function getAddisNow() {
   // Build a Date representing "now" in UTC+3 regardless of the browser TZ
@@ -37,24 +40,32 @@ export function isWithinCheckInWindow(minutes) {
 }
 
 export function isCheckOutTime(minutes) {
-  // Check-out becomes available AT 17:30 (and remains afterwards so a
-  // missed exact-time punch can still be closed out the same day)
   return minutes >= WORK_END_MINUTES
+}
+
+// "2h 45m" style label for time until check-out unlocks
+export function remainingLabel(minutes) {
+  const remaining = Math.max(0, WORK_END_MINUTES - minutes)
+  const h = Math.floor(remaining / 60)
+  const m = remaining % 60
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
 }
 
 export { getAddisNow }
 
 // ─────────────────────────────────────────────────────────────
-// Shared punch state — one store consumed by the header widget
-// and the Attendance page punch card so they never disagree.
+// Shared punch status — one store consumed by the header widget
+// and the Attendance page (emergency button + status cards) so
+// they never disagree. Backend is the source of truth.
 // ─────────────────────────────────────────────────────────────
 const listeners = new Set()
 let state = {
+  loaded: false,
   checkedIn: false,
   checkInAt: null,
   checkedOut: false,
   checkOutAt: null,
-  lastEvent: null, // { type, date, time, isEmergency }
 }
 
 export function getPunchState() {
@@ -66,15 +77,14 @@ export function setPunchState(patch) {
   listeners.forEach((fn) => fn(state))
 }
 
-export function recordPunch(event) {
-  const { type, time } = event
-  if (type === 'check-in') {
-    setPunchState({ checkedIn: true, checkInAt: time, checkedOut: false, checkOutAt: null })
-  } else if (type === 'check-out' || type === 'emergency-check-out') {
-    setPunchState({ checkedOut: true, checkOutAt: time })
-  }
-  state = { ...state, lastEvent: event }
-  listeners.forEach((fn) => fn(state))
+export function applyPunchStatus(status) {
+  setPunchState({
+    loaded: true,
+    checkedIn: Boolean(status.checkedIn),
+    checkInAt: status.checkIn || null,
+    checkedOut: Boolean(status.checkedOut),
+    checkOutAt: status.checkOut || null,
+  })
 }
 
 export function subscribePunch(fn) {

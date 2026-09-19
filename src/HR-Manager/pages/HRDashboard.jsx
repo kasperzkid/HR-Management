@@ -8,14 +8,12 @@ import {
 
 import { useNavigate } from 'react-router-dom'
 
-import { INITIAL_EMPLOYEES } from '../../Employer/data/employeeData'
+import { useEmployees } from '../../Employer/hooks/useEmployees'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 
 function HRDashboard() {
   const navigate = useNavigate()
-  const employees = Array.isArray(INITIAL_EMPLOYEES)
-    ? INITIAL_EMPLOYEES
-    : []
+  const { employees, loading } = useEmployees()
 
   const totalEmployees = employees.length
 

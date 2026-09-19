@@ -1,5 +1,4 @@
-import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Users,
   UserCheck,
@@ -28,25 +27,51 @@ import {
   Tooltip,
 } from 'recharts'
 import ApplyLeaveModal from '../components/ApplyLeaveModal'
-import { INITIAL_EMPLOYEES } from '../data/employeeData'
-import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
-import { ALL_LEAVE, LEAVE_REQUESTS } from '../data/leaveData'
+import { Link } from 'react-router-dom'
 import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import { leaveBalance } from '../lib/leave'
 import { SETTINGS } from '../data/settingsData'
 import AddEmployeeModal from '../../HR-Manager/components/AddEmployeeModal'
 import LuxuryDataTable from '../components/LuxuryDataTable'
-import { getCurrentEmployee, getCurrentUser } from '../lib/currentUser'
+import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
+import { attendanceTotals } from '../lib/attendanceUtils'
+import { fetchEmployees, fetchAttendance, fetchLeaveRequests } from '../lib/employerApi'
 
 function Dashboard() {
   const user = getCurrentUser()
-  const currentEmployee = getCurrentEmployee()
+  const [employees, setEmployees] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [leaveRequests, setLeaveRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const currentEmployee = resolveEmployee(employees, user)
   const isEmployeeRole = !user?.role || user?.role === 'EMPLOYEE'
 
-  const [employees, setEmployees] = useState(INITIAL_EMPLOYEES)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      fetchEmployees(),
+      fetchAttendance(),
+      fetchLeaveRequests(),
+    ])
+      .then(([emps, att, leaves]) => {
+        if (!cancelled) {
+          setEmployees(emps)
+          setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
+          setLeaveRequests(Array.isArray(leaves) ? leaves : (leaves?.requests || []))
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const today = new Date().toLocaleDateString('en-ET', {
     weekday: 'long',
@@ -62,15 +87,16 @@ function Dashboard() {
 
   // 1. Employee-specific metrics
   const myPayroll = useMemo(() => {
-    const attTotals = attendanceTotals(ATTENDANCE)
+    const attTotals = attendanceTotals(attendance)
     return calcPayroll(
       currentEmployee,
       attTotals[currentEmployee.employeeId] || { totalOtHours: 0 }
     )
-  }, [currentEmployee])
+  }, [currentEmployee, attendance])
 
-  const [myLeaveRequests, setMyLeaveRequests] = useState(() =>
-    ALL_LEAVE.filter((r) => r.employeeId === currentEmployee.employeeId)
+  const myLeaveRequests = useMemo(
+    () => leaveRequests.filter((r) => r.employeeId === currentEmployee.employeeId),
+    [leaveRequests, currentEmployee.employeeId]
   )
 
   const myLeave = useMemo(() => {
@@ -78,7 +104,7 @@ function Dashboard() {
   }, [currentEmployee.joinDate, myLeaveRequests])
 
   const myAttendance = useMemo(() => {
-    const records = ATTENDANCE.filter((a) => a.employeeId === currentEmployee.employeeId)
+    const records = attendance.filter((a) => a.employeeId === currentEmployee.employeeId)
     let regular = 0
     let overtime = 0
     let present = 0
@@ -88,11 +114,11 @@ function Dashboard() {
       if (a.status === 'Present') present += 1
     })
     return { records, regular, overtime, present }
-  }, [currentEmployee.employeeId])
+  }, [attendance, currentEmployee.employeeId])
 
   // 2. Company-wide metrics for Employer Admin role
   const companyData = useMemo(() => {
-    const attTotals = attendanceTotals(ATTENDANCE)
+    const attTotals = attendanceTotals(attendance)
     const payrollRows = employees.map((emp) =>
       calcPayroll(emp, attTotals[emp.employeeId] || { totalOtHours: 0 })
     )
@@ -105,7 +131,7 @@ function Dashboard() {
       activeRows.reduce((s, r) => s + r.pensionEmployee + r.pensionEmployer, 0)
     )
     const totalOvertime = roundMoney(activeRows.reduce((s, r) => s + r.otHours, 0))
-    const pendingLeaves = LEAVE_REQUESTS.filter((r) => r.approvalStatus === 'Pending').length
+    const pendingLeaves = leaveRequests.filter((r) => r.approvalStatus === 'Pending').length
 
     // Headcount by employment type
     const byType = {}
@@ -155,7 +181,7 @@ function Dashboard() {
       trend,
       monthlyStatutory: roundMoney(totalTax + totalPension),
     }
-  }, [employees])
+  }, [employees, attendance, leaveRequests])
 
   const workforceShare = companyData.headcount
     ? Math.round((companyData.activeCount / companyData.headcount) * 100)
@@ -603,7 +629,6 @@ function Dashboard() {
         isOpen={isLeaveModalOpen}
         onClose={() => setIsLeaveModalOpen(false)}
         onApply={(newReq) => {
-          setMyLeaveRequests((prev) => [newReq, ...prev])
           setIsLeaveModalOpen(false)
           showToast('Leave request submitted successfully for approval')
         }}

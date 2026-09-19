@@ -37,7 +37,9 @@ export function getSocket() {
 
 export function disconnectSocket() {
   if (socket) {
-    socket.disconnect()
+    try {
+      socket.close()
+    } catch {}
     socket = null
   }
 }

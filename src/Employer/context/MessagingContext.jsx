@@ -493,6 +493,10 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
     setContacts((prev) =>
       prev.map((c) => (String(c.id) === cId ? { ...c, unread: 0, lastMessage: null } : c))
     )
+    // Clear from the local shared store so it doesn't resurface on reload
+    const store = getLocalSharedStore()
+    store.threads[cId] = []
+    saveLocalSharedStore(store)
     try {
       await clearChatApi(cId)
     } catch {
@@ -510,6 +514,10 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
     setContacts((prev) =>
       prev.map((c) => (String(c.id) === cId ? { ...c, unread: 0, lastMessage: null } : c))
     )
+    // Remove from the local shared store so it doesn't resurface on reload
+    const store = getLocalSharedStore()
+    delete store.threads[cId]
+    saveLocalSharedStore(store)
     try {
       await deleteChatApi(cId)
     } catch {

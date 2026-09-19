@@ -1,54 +1,82 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  Search,
-  SlidersHorizontal,
-  ArrowUpDown,
   Plus,
-  ChevronLeft,
-  ChevronRight,
-  MoreVertical,
-  Download,
-  Trash2,
   X,
+  Download,
   AlertCircle,
   Pencil,
+  Upload,
+  FileSpreadsheet,
+  Eye,
+  Power,
+  Trash2,
+  Mail,
+  MapPin,
+  CalendarDays,
 } from 'lucide-react'
-import { INITIAL_EMPLOYEES, DEPARTMENTS, STATUSES } from '../../Employer/data/employeeData'
+import * as XLSX from 'xlsx'
 import { SETTINGS } from '../../Employer/data/settingsData'
 import { formatETB } from '../../Employer/lib/payroll'
-import AddEmployeeModal from '../../Employer/components/AddEmployeeModal'
+import AddEmployeeModal from '../components/AddEmployeeModal'
 import EmployeeDetailsModal from '../../Employer/components/EmployeeDetailsModal'
-import DirectoryView from '../../Employer/components/DirectoryView'
 import OrgChartView from '../../Employer/components/OrgChartView'
-import { getCurrentEmployee } from '../../Employer/lib/currentUser'
-import { fetchEmployeesApi, createEmployeeApi, authHeaders } from '../../lib/hrApi'
+import LuxuryDataTable from '../components/LuxuryDataTable'
+import { fetchEmployeesApi, createEmployeeApi, authHeaders, importEmployeesApi } from '../../lib/hrApi'
+
+const REQUIRED_COLUMNS = [
+  'Employee ID',
+  'Full Name',
+  'Gender',
+  'Date of Birth',
+  'Join Date',
+  'Job Title',
+  'Department',
+  'Employment Type',
+  'Basic Salary',
+  'Transport Allow.',
+  'Housing Allow.',
+  'Meal Allow.',
+  'Other Allow.',
+  'Bank Name',
+  'Bank Account No.',
+  'TIN',
+  'Pension ID',
+  'Phone',
+  'Email',
+  'Address',
+  'Emergency Contact',
+  'Employment Status',
+  'Exit Date',
+  'Notes',
+  'Data Check',
+]
 
 function Employees() {
-  const currentEmployee = getCurrentEmployee()
-  const [employees, setEmployees] = useState(() => [currentEmployee])
+  const [employees, setEmployees] = useState([])
   const [dbError, setDbError] = useState('')
+
+  // Department/status filter options now come from SETTINGS (no sample data)
+  const DEPARTMENTS = ['All Departments', ...(SETTINGS.departments || [])]
+  const STATUSES = ['All Statuses', ...(SETTINGS.employmentStatuses || [])]
   const [activeTab, setActiveTab] = useState('list')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedDept, setSelectedDept] = useState('All Departments')
   const [selectedStatus, setSelectedStatus] = useState('All Statuses')
-  const [sortField, setSortField] = useState('name')
-  const [sortDirection, setSortDirection] = useState('asc')
 
-  const [selectedIds, setSelectedIds] = useState([])
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importFile, setImportFile] = useState(null)
+  const [importPreview, setImportPreview] = useState(null)
+  const [importProgress, setImportProgress] = useState(null)
+  const fileInputRef = useRef(null)
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false)
-  const [activeMenuId, setActiveMenuId] = useState(null)
-  const [showFilterPopover, setShowFilterPopover] = useState(false)
-  const [showSortPopover, setShowSortPopover] = useState(false)
-  const [recordsPerPage, setRecordsPerPage] = useState(10)
-  const [currentPage, setCurrentPage] = useState(1)
   const [toastMessage, setToastMessage] = useState(null)
 
-  const showToast = (msg) => {
-    setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 3500)
+  const showToast = (title, detail) => {
+    setToastMessage({ title, detail })
+    setTimeout(() => setToastMessage(null), 4500)
   }
 
   useEffect(() => {
@@ -112,61 +140,46 @@ function Employees() {
 
         return matchesSearch && matchesDept && matchesStatus
       })
-      .sort((a, b) => {
-        let fieldA = a[sortField] || ''
-        let fieldB = b[sortField] || ''
-        if (typeof fieldA === 'string') fieldA = fieldA.toLowerCase()
-        if (typeof fieldB === 'string') fieldB = fieldB.toLowerCase()
-        if (fieldA < fieldB) return sortDirection === 'asc' ? -1 : 1
-        if (fieldA > fieldB) return sortDirection === 'asc' ? 1 : -1
-        return 0
-      })
-  }, [employees, searchTerm, selectedDept, selectedStatus, sortField, sortDirection])
-
-  const handleSort = (field) => {
-    if (sortField === field) setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-    else {
-      setSortField(field)
-      setSortDirection('asc')
-    }
-  }
-
-  const handleSelectAll = (e) => {
-    setSelectedIds(e.target.checked ? filteredEmployees.map((emp) => emp.id) : [])
-  }
-
-  const handleSelectRow = (id) =>
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
+  }, [employees, searchTerm, selectedDept, selectedStatus])
 
   const handleAddEmployee = async (newEmp) => {
     try {
       const created = await createEmployeeApi(toApiPayload(newEmp))
       setEmployees((prev) => [created, ...prev])
-      showToast(`Added ${created.name || newEmp.name} to the team`)
+
+      const creds = created.credentialsEmail
+      const emailSentTo = (created.email || newEmp.email || '').trim()
+      if (creds?.emailed) {
+        showToast(`Added ${created.name || newEmp.name}`, emailSentTo ? `Portal login sent to ${emailSentTo}` : 'Portal login sent to their email')
+      } else if (creds?.reason || creds?.emailError) {
+        showToast(`Added ${created.name || newEmp.name}`, creds.reason || creds.emailError)
+      } else {
+        showToast(`Added ${created.name || newEmp.name} to the team`)
+      }
     } catch (err) {
       console.error('Create employee error:', err)
       // Keep the UI responsive: add locally and surface the reason
       setEmployees((prev) => [newEmp, ...prev])
-      showToast(err.message || 'Employee added locally — database write failed')
+      showToast('Could not save to database', err.message || 'Added locally — a database write failed')
     }
   }
 
   const handleUpdateStatus = (id, newStatus) => {
     setEmployees(employees.map((e) => (e.id === id ? { ...e, status: newStatus, employmentStatus: newStatus } : e)))
     if (selectedEmployee?.id === id) setSelectedEmployee((prev) => ({ ...prev, status: newStatus }))
-    showToast(`Updated status to ${newStatus}`)
+    const label = newStatus.toUpperCase()
+    showToast('Status updated', label === 'ACTIVE' ? 'Employee is now active' : `Employee is now ${newStatus.toLowerCase()}`)
   }
 
   const handleUpdateEmployee = (updated) => {
     setEmployees((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)))
     if (selectedEmployee?.id === updated.id) setSelectedEmployee(updated)
-    showToast(`Updated ${updated.name}`)
+    showToast('Employee updated', `${updated.name}'s record was saved`)
   }
 
   const handleDeleteEmployee = (id) => {
     setEmployees(employees.filter((e) => e.id !== id))
-    setSelectedIds(selectedIds.filter((i) => i !== id))
-    showToast('Employee deleted successfully')
+    showToast('Employee deleted', 'The record was removed from the registry')
     // Best-effort delete from the database (id may be a local-only record)
     fetch(`/api/hr-manager/employees/${id}`, {
       method: 'DELETE',
@@ -174,16 +187,8 @@ function Employees() {
     }).catch(() => {})
   }
 
-  const handleBulkDelete = () => {
-    if (confirm(`Are you sure you want to delete ${selectedIds.length} employee(s)?`)) {
-      setEmployees(employees.filter((e) => !selectedIds.includes(e.id)))
-      setSelectedIds([])
-      showToast('Selected employees removed')
-    }
-  }
-
   const handleExportCSV = () => {
-    const list = selectedIds.length > 0 ? employees.filter((e) => selectedIds.includes(e.id)) : filteredEmployees
+    const list = filteredEmployees
     const headers = ['Employee ID', 'Name', 'Gender', 'Job Title', 'Department', 'Employment Type', 'Basic Salary', 'TIN', 'Status']
     const rows = list.map((e) => [
       `"${e.employeeId}"`,
@@ -203,15 +208,99 @@ function Employees() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    showToast(`Exported ${list.length} employees to CSV`)
+    showToast('Export complete', `${list.length} employees written to CSV`)
+  }
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' &&
+        !file.name.toLowerCase().endsWith('.xlsx')) {
+      showToast('Unsupported file', 'Only .xlsx files are accepted')
+      setImportFile(null)
+      setImportPreview(null)
+      return
+    }
+    setImportFile(file)
+    setImportProgress({ step: 'reading', total: 0, done: 0 })
+    // Validate structure client-side and build preview
+    try {
+      const data = new Uint8Array(await file.arrayBuffer())
+      const workbook = XLSX.read(data, { type: 'array' })
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+      const raw = XLSX.utils.sheet_to_json(firstSheet, { defval: '' })
+      if (!raw || raw.length < 2) {
+        showToast('Empty spreadsheet', 'The file has no data rows')
+        setImportFile(null)
+        setImportPreview(null)
+        return
+      }
+      const headerKeys = Object.keys(raw[0])
+      const headerLabels = headerKeys.map((k) => raw[0][k])
+      const missing = REQUIRED_COLUMNS.filter(
+        (c) => !headerLabels.includes(c)
+      )
+      if (missing.length > 0) {
+        showToast('Missing columns', `Expected columns not found: ${missing.join(', ')}`)
+        setImportFile(null)
+        setImportPreview(null)
+        return
+      }
+      // Build preview of first five data rows
+      const previewRows = raw.slice(1, 6).map((r, idx) => {
+        const vals = headerKeys.map((k) => r[k])
+        return { row: idx + 2, values: vals, raw }
+      })
+      setImportPreview({ headerLabels, previewRows, totalRows: raw.length - 1, raw, headerKeys })
+      setImportProgress({ step: 'ready', total: raw.length - 1, done: 0 })
+    } catch (err) {
+      showToast('Could not read file', err.message)
+      setImportFile(null)
+      setImportPreview(null)
+    }
+  }
+
+  const handleImportSubmit = async () => {
+    if (!importFile) return
+    setImportProgress({ step: 'uploading', total: 0, done: 0 })
+    try {
+      await importEmployeesApi(importFile)
+      setImportProgress({ step: 'importing', total: importPreview?.totalRows || 0, done: 0 })
+      // Reload employee list
+      const data = await fetchEmployeesApi()
+      if (Array.isArray(data) && data.length > 0) {
+        setEmployees(data)
+      }
+      showToast('Import complete', `${importPreview?.totalRows || 0} employees processed`)
+      setImportModalOpen(false)
+      setImportFile(null)
+      setImportPreview(null)
+      setImportProgress(null)
+      fileInputRef.current && (fileInputRef.current.value = '')
+    } catch (err) {
+      showToast('Import failed', err.message || 'Could not import the spreadsheet')
+    }
+  }
+
+  const handleCloseImport = () => {
+    setImportModalOpen(false)
+    setImportFile(null)
+    setImportPreview(null)
+    setImportProgress(null)
+    fileInputRef.current && (fileInputRef.current.value = '')
   }
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto">
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2.5 text-xs font-medium animate-in fade-in duration-200">
-          <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span>{toastMessage}</span>
+        <div className="fixed top-5 right-5 z-[100] bg-gray-950 text-white dark:bg-[#3a4149] px-4 py-3 rounded-xl shadow-xl flex items-start gap-3 text-xs font-medium animate-in fade-in duration-200 max-w-sm">
+          <span className="mt-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
+          <div className="min-w-0">
+            <p className="font-semibold text-[13px] leading-tight">{toastMessage.title}</p>
+            {toastMessage.detail && (
+              <p className="text-gray-400 dark:text-gray-300 mt-0.5 leading-snug break-words">{toastMessage.detail}</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -223,6 +312,13 @@ function Employees() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setImportModalOpen(true)}
+            className="px-3 py-2 rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d] hover:bg-gray-50 dark:hover:bg-[#1c2026] text-gray-800 dark:text-gray-200 text-xs font-semibold transition-colors flex items-center gap-1.5"
+          >
+            <Upload size={14} />
+            Import XLSX
+          </button>
           <button
             onClick={handleExportCSV}
             className="px-4 py-2 rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d] hover:bg-gray-50 dark:hover:bg-[#1c2026] text-gray-800 dark:text-gray-200 text-xs font-semibold transition-colors flex items-center gap-2"
@@ -248,8 +344,8 @@ function Employees() {
         </div>
       )}
 
-      {/* View switcher + controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      {/* View switcher */}
+      <div className="flex items-center justify-between gap-3">
         <div className="inline-flex p-1 bg-[#eceef1] dark:bg-[#1a1d21] rounded-xl border border-gray-200/70 dark:border-[#262b31] w-fit">
           {[
             { id: 'list', label: 'Table' },
@@ -259,7 +355,7 @@ function Employees() {
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === t.id ? 'bg-white dark:bg-[#15181d] text-gray-950 dark:text-gray-100 shadow-2xs' : 'text-gray-600 dark:text-gray-400 hover:text-gray-950 dark:hover:text-gray-100'
               }`}
             >
@@ -267,318 +363,412 @@ function Employees() {
             </button>
           ))}
         </div>
-
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 pr-3 py-1.5 w-48 sm:w-56 text-xs bg-white dark:bg-[#15181d] border border-gray-200 dark:border-[#33383f] rounded-lg focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 dark:text-gray-200 shadow-2xs"
-            />
-            {searchTerm && (
-              <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400">
-                <X size={12} />
-              </button>
-            )}
-          </div>
-
-          <div className="relative">
-            <button
-              onClick={() => { setShowFilterPopover(!showFilterPopover); setShowSortPopover(false) }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border flex items-center gap-1.5 transition-colors shadow-2xs ${
-                selectedDept !== 'All Departments' || selectedStatus !== 'All Statuses'
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold'
-                  : 'bg-white dark:bg-[#15181d] border-gray-200 dark:border-[#262b31] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-              }`}
-            >
-              <SlidersHorizontal size={13} />
-              <span>Filter</span>
-            </button>
-            {showFilterPopover && (
-              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] p-4 z-50">
-                <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-100 dark:border-[#262b31]">
-                  <span className="text-xs font-bold text-gray-900 dark:text-gray-100">Filters</span>
-                  <button onClick={() => { setSelectedDept('All Departments'); setSelectedStatus('All Statuses') }} className="text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline">
-                    Reset
-                  </button>
-                </div>
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Department</label>
-                    <select value={selectedDept} onChange={(e) => setSelectedDept(e.target.value)} className="w-full p-1.5 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-gray-50 dark:bg-[#1c2026] focus:bg-white dark:focus:bg-gray-900 dark:text-gray-200">
-                      {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Status</label>
-                    <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="w-full p-1.5 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-gray-50 dark:bg-[#1c2026] focus:bg-white dark:focus:bg-gray-900 dark:text-gray-200">
-                      {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="relative">
-            <button
-              onClick={() => { setShowSortPopover(!showSortPopover); setShowFilterPopover(false) }}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-[#262b31] bg-white dark:bg-[#15181d] hover:bg-gray-50 dark:hover:bg-[#1c2026] text-gray-700 dark:text-gray-300 flex items-center gap-1.5 shadow-2xs"
-            >
-              <ArrowUpDown size={13} />
-              <span>Sort</span>
-            </button>
-            {showSortPopover && (
-              <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] p-2 z-50">
-                <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-2 py-1">Sort By</p>
-                {[
-                  { label: 'Name', field: 'name' },
-                  { label: 'Employee ID', field: 'employeeId' },
-                  { label: 'Job Title', field: 'jobTitle' },
-                  { label: 'Department', field: 'department' },
-                  { label: 'Join Date', field: 'joinDate' },
-                ].map((opt) => (
-                  <button
-                    key={opt.field}
-                    onClick={() => { handleSort(opt.field); setShowSortPopover(false) }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition-colors ${
-                      sortField === opt.field ? 'bg-gray-100 text-gray-950 font-semibold dark:bg-[#1c2026] dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-                    }`}
-                  >
-                    <span>{opt.label}</span>
-                    {sortField === opt.field && (
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">{sortDirection === 'asc' ? '↑ ASC' : '↓ DESC'}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Main view */}
-      {activeTab === 'directory' ? (
-        <DirectoryView
-          employees={filteredEmployees}
-          onSelectEmployee={(emp) => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
-          onUpdateStatus={handleUpdateStatus}
-        />
-      ) : activeTab === 'org' ? (
+      {activeTab === 'org' ? (
         <OrgChartView
           employees={filteredEmployees}
           onSelectEmployee={(emp) => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
         />
-      ) : (
-        <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-[#262b31] text-[11px] font-medium text-gray-500 dark:text-gray-400 select-none">
-                  <th className="py-3.5 pl-5 pr-2 w-10">
-                    <input
-                      type="checkbox"
-                      checked={filteredEmployees.length > 0 && selectedIds.length === filteredEmployees.length}
-                      onChange={handleSelectAll}
-                      className="w-4 h-4 rounded border-gray-300 dark:border-[#33383f] text-gray-900 dark:text-gray-100 focus:ring-gray-900 cursor-pointer"
-                    />
-                  </th>
-                  <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('name')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
-                      <span>Name of employee</span>
-                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('employeeId')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
-                      <span>Employee ID</span>
-                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('jobTitle')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
-                      <span>Job title</span>
-                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('department')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
-                      <span>Department</span>
-                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('basicSalary')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
-                      <span>Basic</span>
-                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-3">
-                    <button onClick={() => handleSort('joinDate')} className="flex items-center gap-1.5 hover:text-gray-900 dark:hover:text-gray-100">
-                      <span>Join date</span>
-                      <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
-                    </button>
-                  </th>
-                  <th className="py-3.5 px-3 text-center">Status</th>
-                  <th className="py-3.5 pr-5 pl-2 text-right w-12"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-[#262b31] text-xs">
-                {filteredEmployees.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="text-center py-12 text-gray-400 dark:text-gray-500">No employees match your search or filter criteria.</td>
-                  </tr>
-                ) : (
-                  filteredEmployees.map((emp) => {
-                    const isSelected = selectedIds.includes(emp.id)
-                    const badgeColor =
-                      emp.employmentStatus === 'Active' || emp.status === 'Active'
-                        ? 'border-emerald-400 text-emerald-600'
-                        : emp.employmentStatus === 'On Leave' || emp.status === 'Onboarding'
-                          ? 'border-amber-300 text-amber-600'
-                          : 'border-rose-300 text-rose-500'
-                    return (
-                      <tr key={emp.id} className={`hover:bg-gray-50/70 dark:hover:bg-[#1c2026] transition-colors ${isSelected ? 'bg-gray-50/90 dark:bg-[#1c2026]' : ''}`}>
-                        <td className="py-3.5 pl-5 pr-2">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleSelectRow(emp.id)}
-                            className="w-4 h-4 rounded border-gray-300 dark:border-[#33383f] text-gray-900 dark:text-gray-100 focus:ring-gray-900 cursor-pointer"
-                          />
-                        </td>
-                        <td className="py-3.5 px-3">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={emp.avatar}
-                              alt={emp.name}
-                              className="w-8 h-8 rounded-full object-cover bg-gray-100 dark:bg-[#1c2026] shrink-0"
-                              onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' }}
-                            />
-                            <div className="min-w-0">
-                              <p
-                                onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
-                                className="font-semibold text-gray-950 dark:text-gray-100 hover:text-indigo-600 cursor-pointer truncate"
-                              >
-                                {emp.name}
-                              </p>
-                              <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{emp.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-3">
-                          <span
-                            onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
-                            className="font-medium text-gray-900 dark:text-gray-100 underline underline-offset-2 decoration-gray-400 dark:decoration-gray-600 cursor-pointer hover:text-indigo-600 transition-colors"
-                          >
-                            {emp.employeeId}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300">{emp.jobTitle}</td>
-                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300">{emp.department}</td>
-                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatETB(emp.basicSalary)}</td>
-                        <td className="py-3.5 px-3 text-gray-700 dark:text-gray-300 whitespace-nowrap">{emp.joinDate}</td>
-                        <td className="py-3.5 px-3 text-center">
-                          <span className={`border rounded-full px-3 py-0.5 text-[11px] font-medium inline-block text-center w-24 bg-white dark:bg-[#15181d] ${badgeColor}`}>
-                            {emp.employmentStatus === 'On Leave' && emp.status === 'Inactive' ? 'Inactive' : emp.employmentStatus}
-                          </span>
-                        </td>
-                        <td className="py-3.5 pr-5 pl-2 text-right relative">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              onClick={() => { setEditingEmployee(emp); setActiveMenuId(null) }}
-                              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors"
-                              title="Edit employee"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button onClick={() => setActiveMenuId(activeMenuId === emp.id ? null : emp.id)} className="p-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors">
-                              <MoreVertical size={16} />
-                            </button>
-                          </div>
-                          {activeMenuId === emp.id && (
-                            <div className="absolute right-6 top-8 w-40 bg-white dark:bg-[#15181d] rounded-xl shadow-xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] py-1.5 z-40 text-left">
-                              <button onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true); setActiveMenuId(null) }} className="w-full px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] text-left">
-                                View details
-                              </button>
-                              <button
-                                onClick={() => { setEditingEmployee(emp); setActiveMenuId(null) }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] text-left"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => { handleUpdateStatus(emp.id, emp.status === 'Active' ? 'Inactive' : 'Active'); setActiveMenuId(null) }}
-                                className="w-full px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] text-left"
-                              >
-                                Toggle Active/Inactive
-                              </button>
-                              <div className="my-1 border-t border-gray-100 dark:border-[#262b31]" />
-                              <button onClick={() => { handleDeleteEmployee(emp.id); setActiveMenuId(null) }} className="w-full px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 text-left">
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="px-5 py-4 border-t border-gray-100 dark:border-[#262b31] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+      ) : activeTab === 'directory' ? (
+        <LuxuryDataTable
+          title="Employee Directory"
+          subtitle={`${filteredEmployees.length} employees across ${new Set(filteredEmployees.map((e) => e.department)).size} departments`}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name of Employee',
+              sortable: true,
+              render: (emp) => (
+                <div className="flex items-center gap-3 min-w-[220px]">
+                  <img
+                    src={emp.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+                    alt={emp.name}
+                    className="w-9 h-9 rounded-full object-cover bg-gray-100 dark:bg-[#1c2026] shrink-0 border border-gray-100 dark:border-[#262b31]"
+                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' }}
+                  />
+                  <div className="min-w-0">
+                    <p
+                      onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                      className="font-semibold text-gray-950 dark:text-gray-100 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer truncate"
+                    >
+                      {emp.name}
+                    </p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{emp.email}</p>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'employeeId',
+              header: 'Employee ID',
+              sortable: true,
+              render: (emp) => (
+                <span
+                  onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                  className="font-medium text-gray-900 dark:text-gray-100 underline underline-offset-2 decoration-gray-400 dark:decoration-gray-600 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap"
+                >
+                  {emp.employeeId}
+                </span>
+              ),
+            },
+            { key: 'jobTitle', header: 'Job Title', sortable: true, render: (emp) => emp.jobTitle || '—' },
+            { key: 'department', header: 'Department', sortable: true, render: (emp) => emp.department || '—' },
+            { key: 'basicSalary', header: 'Basic', sortable: true, align: 'right', render: (emp) => <span className="whitespace-nowrap font-medium">{formatETB(emp.basicSalary)}</span> },
+            { key: 'joinDate', header: 'Join Date', sortable: true, render: (emp) => <span className="whitespace-nowrap text-gray-500 dark:text-gray-400">{emp.joinDate}</span> },
+            {
+              key: 'status',
+              header: 'Status',
+              align: 'center',
+              render: (emp) => {
+                const rawStatus = emp.employmentStatus || emp.status || ''
+                const status = rawStatus === 'Active' ? 'Active'
+                  : rawStatus === 'On Leave' || rawStatus === 'Onboarding' ? 'On Board'
+                  : rawStatus === 'Inactive' || rawStatus === 'Resigned' || rawStatus === 'Terminated' ? 'Inactive'
+                  : rawStatus || '—'
+                const badgeColor =
+                  status === 'Active'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60'
+                    : status === 'On Board'
+                      ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60'
+                      : 'bg-rose-50 text-rose-600 border-rose-300 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60'
+                return (
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold inline-block border ${badgeColor}`}>
+                    {status}
+                  </span>
+                )
+              },
+            },
+          ]}
+          data={filteredEmployees}
+          searchable
+          searchKeys={['name', 'email', 'employeeId', 'jobTitle', 'department']}
+          searchPlaceholder="Search name, ID, email, department..."
+          exportable
+          exportFilename="Employee_Directory"
+          paginated
+          defaultPageSize={10}
+          loading={false}
+          emptyMessage="No employees match your search or filter criteria."
+          allowViewModeToggle
+          defaultViewMode="grid"
+          renderGridCard={(emp) => {
+            const rawStatus = emp.employmentStatus || emp.status || ''
+            const status = rawStatus === 'Active' ? 'Active'
+              : rawStatus === 'On Leave' || rawStatus === 'Onboarding' ? 'On Board'
+              : rawStatus === 'Inactive' || rawStatus === 'Resigned' || rawStatus === 'Terminated' ? 'Inactive'
+              : rawStatus || '—'
+            const dotColor =
+              status === 'Active' ? 'bg-emerald-500'
+                : status === 'On Board' ? 'bg-amber-500'
+                  : 'bg-rose-500'
+            return (
+              <div key={emp.id} className="bg-white dark:bg-[#15181d] rounded-2xl p-4 border border-gray-200/90 dark:border-[#262b31] shadow-2xs hover:shadow-md hover:border-gray-300 dark:hover:border-gray-700 transition-all flex flex-col justify-between group">
+                <div>
+                  <div className="flex items-start justify-between">
+                    <div className="relative">
+                      <img
+                        src={emp.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+                        alt={emp.name}
+                        className="w-12 h-12 rounded-xl object-cover bg-gray-100 dark:bg-[#1c2026] border border-gray-100 dark:border-[#262b31]"
+                        onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' }}
+                      />
+                      <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${dotColor}`} />
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
+                      status === 'Active'
+                        ? 'border-emerald-300 text-emerald-700 dark:border-emerald-800/60 dark:text-emerald-400'
+                        : status === 'On Board'
+                          ? 'border-amber-300 text-amber-700 dark:border-amber-800/60 dark:text-amber-400'
+                          : 'border-rose-300 text-rose-600 dark:border-rose-800/60 dark:text-rose-400'
+                    }`}>
+                      {status}
+                    </span>
+                  </div>
+                  <div className="mt-3.5">
+                    <h4
+                      onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                      className="font-bold text-gray-900 dark:text-gray-100 text-sm hover:text-emerald-600 cursor-pointer transition-colors truncate"
+                    >
+                      {emp.name}
+                    </h4>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5 truncate">{emp.jobTitle}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{emp.department}</p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-[#262b31] space-y-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-2 truncate">
+                      <Mail size={13} className="text-gray-400 shrink-0 dark:text-gray-500" />
+                      <span className="truncate">{emp.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2 truncate">
+                      <MapPin size={13} className="text-gray-400 shrink-0 dark:text-gray-500" />
+                      <span className="truncate">{emp.location || emp.address || 'Remote'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-[#262b31] flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 underline decoration-gray-300 dark:decoration-gray-700">
+                    {emp.employeeId}
+                  </span>
+                  <button
+                    onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                    className="text-xs font-semibold text-gray-700 dark:text-gray-300 hover:text-gray-950 dark:hover:text-white px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors cursor-pointer"
+                  >
+                    View Profile
+                  </button>
+                </div>
+              </div>
+            )
+          }}
+          primaryAction={{
+            label: 'View Details',
+            icon: Eye,
+            onClick: (emp) => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) },
+          }}
+          dropdownActions={[
+            {
+              label: 'Edit Employee',
+              icon: Pencil,
+              onClick: (emp) => { setEditingEmployee(emp); },
+            },
+            {
+              label: 'Toggle Active/Inactive',
+              icon: Power,
+              onClick: (emp) => handleUpdateStatus(emp.id, emp.status === 'Active' ? 'Inactive' : 'Active'),
+            },
+            {
+              label: 'Delete Employee',
+              icon: Trash2,
+              destructive: true,
+              onClick: (emp) => handleDeleteEmployee(emp.id),
+            },
+          ]}
+          filterControls={[
+            {
+              label: 'Department',
+              value: selectedDept,
+              options: DEPARTMENTS,
+              onChange: (v) => { setSelectedDept(v); },
+            },
+            {
+              label: 'Status',
+              value: selectedStatus,
+              options: STATUSES,
+              onChange: (v) => { setSelectedStatus(v); },
+            },
+          ].map((f) => (
+            <div key={f.label} className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">{f.label}:</span>
               <select
-                value={recordsPerPage}
-                onChange={(e) => setRecordsPerPage(Number(e.target.value))}
-                className="bg-transparent text-gray-700 dark:text-gray-300 font-medium py-1 px-2 rounded-lg border border-gray-200 dark:border-[#262b31] hover:border-gray-300 dark:hover:border-gray-700 focus:outline-none"
+                value={f.value}
+                onChange={(e) => f.onChange(e.target.value)}
+                className="h-9 pl-2.5 pr-7 text-xs border border-gray-200 dark:border-[#262b31] rounded-xl bg-white dark:bg-[#1c2026] text-gray-800 dark:text-gray-200 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
               >
-                <option value={10}>10 records</option>
-                <option value={20}>20 records</option>
-                <option value={50}>50 records</option>
+                {f.options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
               </select>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} className="w-7 h-7 rounded-lg border border-gray-200 dark:border-[#262b31] flex items-center justify-center text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026] disabled:opacity-40">
-                <ChevronLeft size={14} />
-              </button>
-              <button onClick={() => setCurrentPage(1)} className={`w-7 h-7 rounded-lg text-xs font-semibold ${currentPage === 1 ? 'bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c2026]'}`}>
-                1
-              </button>
-              <button onClick={() => setCurrentPage(2)} className={`w-7 h-7 rounded-lg text-xs font-semibold ${currentPage === 2 ? 'bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1c2026]'}`}>
-                2
-              </button>
-              <button disabled={currentPage === 2} onClick={() => setCurrentPage((p) => Math.min(2, p + 1))} className="w-7 h-7 rounded-lg border border-gray-200 dark:border-[#262b31] flex items-center justify-center text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-[#1c2026] disabled:opacity-40">
-                <ChevronRight size={14} />
-              </button>
+          ))}
+        />
+      ) : (
+        <LuxuryDataTable
+          title="Employee Registry"
+          subtitle={`${filteredEmployees.length} employees · ${SETTINGS.standardMonthlyHours} standard hours/mo`}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name of Employee',
+              sortable: true,
+              render: (emp) => (
+                <div className="flex items-center gap-3 min-w-[220px]">
+                  <img
+                    src={emp.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+                    alt={emp.name}
+                    className="w-9 h-9 rounded-full object-cover bg-gray-100 dark:bg-[#1c2026] shrink-0 border border-gray-100 dark:border-[#262b31]"
+                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' }}
+                  />
+                  <div className="min-w-0">
+                    <p
+                      onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                      className="font-semibold text-gray-950 dark:text-gray-100 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer truncate"
+                    >
+                      {emp.name}
+                    </p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{emp.email}</p>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'employeeId',
+              header: 'Employee ID',
+              sortable: true,
+              render: (emp) => (
+                <span
+                  onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                  className="font-medium text-gray-900 dark:text-gray-100 underline underline-offset-2 decoration-gray-400 dark:decoration-gray-600 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap"
+                >
+                  {emp.employeeId}
+                </span>
+              ),
+            },
+            { key: 'jobTitle', header: 'Job Title', sortable: true, render: (emp) => emp.jobTitle || '—' },
+            { key: 'department', header: 'Department', sortable: true, render: (emp) => emp.department || '—' },
+            { key: 'basicSalary', header: 'Basic', sortable: true, align: 'right', render: (emp) => <span className="whitespace-nowrap font-medium">{formatETB(emp.basicSalary)}</span> },
+            { key: 'joinDate', header: 'Join Date', sortable: true, render: (emp) => <span className="whitespace-nowrap text-gray-500 dark:text-gray-400">{emp.joinDate}</span> },
+            {
+              key: 'status',
+              header: 'Status',
+              align: 'center',
+              render: (emp) => {
+                const rawStatus = emp.employmentStatus || emp.status || ''
+                const status = rawStatus === 'Active' ? 'Active'
+                  : rawStatus === 'On Leave' || rawStatus === 'Onboarding' ? 'On Board'
+                  : rawStatus === 'Inactive' || rawStatus === 'Resigned' || rawStatus === 'Terminated' ? 'Inactive'
+                  : rawStatus || '—'
+                const badgeColor =
+                  status === 'Active'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60'
+                    : status === 'On Board'
+                      ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60'
+                      : 'bg-rose-50 text-rose-600 border-rose-300 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60'
+                return (
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold inline-block border ${badgeColor}`}>
+                    {status}
+                  </span>
+                )
+              },
+            },
+          ]}
+          data={filteredEmployees}
+          searchable
+          searchKeys={['name', 'email', 'employeeId', 'jobTitle', 'department']}
+          searchPlaceholder="Search name, ID, email, department..."
+          exportable
+          exportFilename="Employee_Registry"
+          paginated
+          defaultPageSize={10}
+          loading={false}
+          emptyMessage="No employees match your search or filter criteria."
+          allowViewModeToggle
+          defaultViewMode="list"
+          renderGridCard={(emp) => {
+            const rawStatus = emp.employmentStatus || emp.status || ''
+            const status = rawStatus === 'Active' ? 'Active'
+              : rawStatus === 'On Leave' || rawStatus === 'Onboarding' ? 'On Board'
+              : rawStatus === 'Inactive' || rawStatus === 'Resigned' || rawStatus === 'Terminated' ? 'Inactive'
+              : rawStatus || '—'
+            const dotColor =
+              status === 'Active' ? 'bg-emerald-500'
+                : status === 'On Board' ? 'bg-amber-500'
+                  : 'bg-rose-500'
+            return (
+              <div key={emp.id} className="bg-white dark:bg-[#15181d] rounded-2xl p-4 border border-gray-200/90 dark:border-[#262b31] shadow-2xs hover:shadow-md hover:border-gray-300 dark:hover:border-gray-700 transition-all flex flex-col justify-between group">
+                <div>
+                  <div className="flex items-start justify-between">
+                    <div className="relative">
+                      <img
+                        src={emp.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+                        alt={emp.name}
+                        className="w-12 h-12 rounded-xl object-cover bg-gray-100 dark:bg-[#1c2026] border border-gray-100 dark:border-[#262b31]"
+                        onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' }}
+                      />
+                      <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${dotColor}`} />
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
+                      status === 'Active'
+                        ? 'border-emerald-300 text-emerald-700 dark:border-emerald-800/60 dark:text-emerald-400'
+                        : status === 'On Board'
+                          ? 'border-amber-300 text-amber-700 dark:border-amber-800/60 dark:text-amber-400'
+                          : 'border-rose-300 text-rose-600 dark:border-rose-800/60 dark:text-rose-400'
+                    }`}>
+                      {status}
+                    </span>
+                  </div>
+                  <div className="mt-3.5">
+                    <h4
+                      onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                      className="font-bold text-gray-900 dark:text-gray-100 text-sm hover:text-emerald-600 cursor-pointer transition-colors truncate"
+                    >
+                      {emp.name}
+                    </h4>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5 truncate">{emp.jobTitle}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{emp.department}</p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-[#262b31] space-y-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-2 truncate">
+                      <Mail size={13} className="text-gray-400 shrink-0 dark:text-gray-500" />
+                      <span className="truncate">{emp.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2 truncate">
+                      <MapPin size={13} className="text-gray-400 shrink-0 dark:text-gray-500" />
+                      <span className="truncate">{emp.location || emp.address || 'Remote'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-[#262b31] flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500 underline decoration-gray-300 dark:decoration-gray-700">
+                    {emp.employeeId}
+                  </span>
+                  <button
+                    onClick={() => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) }}
+                    className="text-xs font-semibold text-gray-700 dark:text-gray-300 hover:text-gray-950 dark:hover:text-white px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors cursor-pointer"
+                  >
+                    View Profile
+                  </button>
+                </div>
+              </div>
+            )
+          }}
+          primaryAction={{
+            label: 'View Details',
+            icon: Eye,
+            onClick: (emp) => { setSelectedEmployee(emp); setIsDetailsModalOpen(true) },
+          }}
+          dropdownActions={[
+            {
+              label: 'Edit Employee',
+              icon: Pencil,
+              onClick: (emp) => { setEditingEmployee(emp); },
+            },
+            {
+              label: 'Toggle Active/Inactive',
+              icon: Power,
+              onClick: (emp) => handleUpdateStatus(emp.id, emp.status === 'Active' ? 'Inactive' : 'Active'),
+            },
+            {
+              label: 'Delete Employee',
+              icon: Trash2,
+              destructive: true,
+              onClick: (emp) => handleDeleteEmployee(emp.id),
+            },
+          ]}
+          filterControls={[
+            {
+              label: 'Department',
+              value: selectedDept,
+              options: DEPARTMENTS,
+              onChange: (v) => { setSelectedDept(v); },
+            },
+            {
+              label: 'Status',
+              value: selectedStatus,
+              options: STATUSES,
+              onChange: (v) => { setSelectedStatus(v); },
+            },
+          ].map((f) => (
+            <div key={f.label} className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">{f.label}:</span>
+              <select
+                value={f.value}
+                onChange={(e) => f.onChange(e.target.value)}
+                className="h-9 pl-2.5 pr-7 text-xs border border-gray-200 dark:border-[#262b31] rounded-xl bg-white dark:bg-[#1c2026] text-gray-800 dark:text-gray-200 appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+              >
+                {f.options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
             </div>
-            <div className="text-gray-500 dark:text-gray-400 font-medium">1 - {employees.length} of {employees.length}</div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk action bar */}
-      {selectedIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <span className="text-xs font-medium text-gray-300">{selectedIds.length} employee(s) selected</span>
-          <div className="h-4 w-px bg-gray-800" />
-          <button onClick={handleExportCSV} className="flex items-center gap-1.5 text-xs font-semibold text-white hover:text-gray-300">
-            <Download size={14} />
-            <span>Export CSV</span>
-          </button>
-          <button onClick={handleBulkDelete} className="flex items-center gap-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300">
-            <Trash2 size={14} />
-            <span>Delete</span>
-          </button>
-          <button onClick={() => setSelectedIds([])} className="p-1 text-gray-400 hover:text-white rounded-lg">
-            <X size={14} />
-          </button>
-        </div>
+          ))}
+        />
       )}
 
       <AddEmployeeModal
@@ -586,8 +776,9 @@ function Employees() {
         isOpen={isAddModalOpen || Boolean(editingEmployee)}
         editingEmployee={editingEmployee}
         onClose={() => { setIsAddModalOpen(false); setEditingEmployee(null) }}
-        onAdd={handleAddEmployee}
+        onSave={handleAddEmployee}
         onEdit={handleUpdateEmployee}
+        existingEmployees={employees}
       />
       <EmployeeDetailsModal
         isOpen={isDetailsModalOpen}
@@ -601,6 +792,144 @@ function Employees() {
           setEditingEmployee(emp)
         }}
       />
+
+      {/* ── Import XLSX Modal ── */}
+      {importModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-6 animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="import-title"
+        >
+          <div className="bg-white dark:bg-[#15181d] rounded-2xl shadow-2xl dark:shadow-black/40 border border-gray-200 dark:border-[#262b31] w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-[#262b31] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center">
+                  <FileSpreadsheet size={20} />
+                </div>
+                <div>
+                  <h3 id="import-title" className="text-base font-black text-gray-950 dark:text-gray-100">
+                    Import Employees from XLSX
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Upload a spreadsheet with the exact columns shown below
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseImport}
+                className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1c2026] rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
+              {/* Drop zone / file picker */}
+              {!importPreview && (
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed border-gray-300 dark:border-[#2a3139] rounded-xl p-8 text-center hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors cursor-pointer"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload size={32} className="mx-auto text-gray-400 dark:text-gray-500 mb-3" />
+                    <p className="text-gray-700 dark:text-gray-300 font-medium">
+                      Drop your .xlsx file here or click to browse
+                    </p>
+                    <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">
+                      Only .xlsx files are accepted
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                  </div>
+
+                  {/* Required column list */}
+                  <div className="bg-gray-50 dark:bg-[#1c2026] rounded-xl border border-gray-200 dark:border-[#262b31] p-4">
+                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200 mb-2">Required columns (exact headers):</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {REQUIRED_COLUMNS.map((col) => (
+                        <span key={col} className="px-2 py-0.5 rounded-md bg-white dark:bg-[#15181d] border border-gray-200 dark:border-[#262b31] text-[10px] font-mono text-gray-600 dark:text-gray-400">
+                          {col}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview / import progress */}
+              {importPreview && (
+                <div className="space-y-4">
+                  {/* File info */}
+                  <div className="flex items-center justify-between bg-gray-50 dark:bg-[#1c2026] rounded-xl border border-gray-200 dark:border-[#262b31] px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet size={16} className="text-indigo-600 dark:text-indigo-400" />
+                      <div>
+                        <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{importFile?.name}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                          {importPreview.totalRows} rows · {REQUIRED_COLUMNS.length} columns verified
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { setImportPreview(null); setImportFile(null) }}
+                      className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-xs"
+                    >
+                      Change file
+                    </button>
+                  </div>
+
+                  {/* Preview table */}
+                  <div>
+                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200 mb-2">Preview (first 5 rows):</p>
+                    <div className="overflow-x-auto border border-gray-200 dark:border-[#262b31] rounded-xl">
+                      <table className="w-full text-left text-[11px]">
+                        <thead>
+                          <tr className="bg-gray-100 dark:bg-[#1c2026] border-b border-gray-200 dark:border-[#262b31]">
+                            {importPreview.headerLabels.map((h, i) => (
+                              <th key={i} className="px-2.5 py-2 font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.previewRows.map((pr) => (
+                            <tr key={pr.row} className="border-b border-gray-100 dark:border-[#262b31] hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors">
+                              {pr.values.map((v, i) => (
+                                <td key={i} className="px-2.5 py-1.5 text-gray-600 dark:text-gray-400 whitespace-nowrap max-w-[120px] truncate">
+                                  {String(v ?? '')}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Import button */}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleImportSubmit}
+                      className="px-5 py-2.5 bg-gray-950 hover:bg-black text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-2 shadow-sm"
+                    >
+                      <Upload size={14} />
+                      Import {importPreview.totalRows} Employees
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
