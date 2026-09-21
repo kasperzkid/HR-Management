@@ -16,6 +16,7 @@ import {
 import {
   getEmployees,
   getAttendance,
+  getCurrentUserEmployee,
 } from '../controllers/hr-manager.controller.js'
 
 const router = Router()
@@ -32,5 +33,8 @@ router.post('/leave', createLeave)
 // Employees & attendance (shared with HR-Manager queries)
 router.get('/employees', getEmployees)
 router.get('/attendance', getAttendance)
+
+// Current user's employee record
+router.get('/me/employee', getCurrentUserEmployee)
 
 export default router

@@ -30,9 +30,29 @@ function Attendance() {
   }, [])
 
   const myAttendance = useMemo(
-    () => attendance.filter((a) => a.employeeId === currentEmployee.employeeId),
+    () => {
+      // If the current user resolved to a real employee, filter to their records.
+      // Fall back to all attendance when no matching employee record exists
+      // (e.g. employer accounts that have no Employee row).
+      if (currentEmployee.employeeId !== '—') {
+        return attendance.filter((a) => a.employeeId === currentEmployee.employeeId)
+      }
+      return attendance
+    },
     [attendance, currentEmployee.employeeId],
   )
+
+  const normalizeStatus = (raw) => {
+    const s = String(raw || '').trim().toUpperCase()
+    if (s === 'P' || s === 'PRESENT') return 'present'
+    if (s === 'PH') return 'present' // half-day counts as present
+    if (s === 'A' || s === 'ABSENT') return 'absent'
+    if (s === 'SL' || s === 'SICK' || s === 'SICK_LEAVE' || s === 'SICKLEAVE') return 'sick'
+    if (s === 'AL' || s === 'ANNUAL_LEAVE' || s === 'ANNUALLEAVE' || s === 'ON_LEAVE') return 'on_leave'
+    if (s === 'ML' || s === 'MEDICAL_LEAVE' || s === 'MEDICALLEAVE') return 'on_leave'
+    if (s === 'OL' || s === 'OTHER_LEAVE' || s === 'OTHERLEAVE') return 'on_leave'
+    return 'unknown'
+  }
 
   const totals = useMemo(() => {
     const agg = { regular: 0, overtime: 0, late: 0, present: 0, absent: 0, sick: 0 }
@@ -40,9 +60,10 @@ function Attendance() {
       agg.regular += a.regular || 0
       agg.overtime += a.overtime || 0
       agg.late += a.late || 0
-      if (a.status === 'Present') agg.present += 1
-      else if (a.status === 'Absent') agg.absent += 1
-      else if (a.status === 'Sick Leave') agg.sick += 1
+      const st = normalizeStatus(a.status)
+      if (st === 'present') agg.present += 1
+      else if (st === 'absent') agg.absent += 1
+      else if (st === 'sick') agg.sick += 1
     })
     return agg
   }, [myAttendance])
@@ -50,7 +71,8 @@ function Attendance() {
   const myTotal = useMemo(() => {
     return myAttendance.reduce(
       (acc, a) => {
-        if (a.status === 'Present' || a.status === 'On Leave') {
+        const st = normalizeStatus(a.status)
+        if (st === 'present' || st === 'on_leave') {
           acc.days += 1
           acc.totalHours += a.regular || 0
           acc.totalOtHours += a.overtime || 0
@@ -64,7 +86,7 @@ function Attendance() {
   }, [myAttendance])
 
   const punchStats = useMemo(() => {
-    const presentDays = myAttendance.filter((a) => a.status === 'Present')
+    const presentDays = myAttendance.filter((a) => normalizeStatus(a.status) === 'present')
     const lateSum = presentDays.reduce((s, a) => s + (a.late || 0), 0)
     const earlySum = presentDays.reduce((s, a) => s + (a.earlyDeparture || 0), 0)
     const overtimeHours = Math.round(

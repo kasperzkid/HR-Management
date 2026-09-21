@@ -81,6 +81,15 @@ const METRIC_LABELS = {
 const FALLBACK_CHIP =
   'bg-gray-100 text-gray-600 border-gray-200 dark:bg-[#1c2026] dark:text-gray-400 dark:border-[#33383f]'
 
+const STATUS_CHIP = {
+  Present: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60',
+  Absent: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60',
+  'Sick Leave': 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/60',
+  Approved: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60',
+  Pending: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60',
+  Rejected: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60',
+}
+
 const CHART_TOOLTIP_STYLE = {
   backgroundColor: '#ffffff',
   borderRadius: '12px',
@@ -271,7 +280,7 @@ function PayrollTab({ employees, month, backendMetrics }) {
   }, [grossPayroll, netPayroll, totalTax, totalPension, active])
 
   return (
-    <>
+    <div className="flex flex-col gap-6">
       {/* KPI Cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
@@ -482,7 +491,7 @@ function PayrollTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'payroll',
+            key: 'payroll_gross',
             header: 'Gross',
             sortable: true,
             align: 'right',
@@ -493,7 +502,7 @@ function PayrollTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'payroll',
+            key: 'payroll_net',
             header: 'Net Salary',
             sortable: true,
             align: 'right',
@@ -505,7 +514,7 @@ function PayrollTab({ employees, month, backendMetrics }) {
           },
         ]}
       />
-    </>
+    </div>
   )
 }
 
@@ -533,7 +542,7 @@ function AttendanceTab({ employees, month, backendMetrics }) {
   }, [employees])
 
   return (
-    <>
+    <div className="flex flex-col gap-6">
       {/* KPI Cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
@@ -650,7 +659,7 @@ function AttendanceTab({ employees, month, backendMetrics }) {
             render: (e) => <span className="text-slate-600 dark:text-gray-300">{getDepartment(e)}</span>,
           },
           {
-            key: 'attendance',
+            key: 'att_present',
             header: 'Present',
             sortable: true,
             align: 'center',
@@ -661,7 +670,7 @@ function AttendanceTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'attendance',
+            key: 'att_absent',
             header: 'Absent',
             sortable: true,
             align: 'center',
@@ -672,7 +681,7 @@ function AttendanceTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'attendance',
+            key: 'att_leave',
             header: 'Leave',
             sortable: true,
             align: 'center',
@@ -683,7 +692,7 @@ function AttendanceTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'attendance',
+            key: 'att_overtime',
             header: 'OT Hours',
             sortable: true,
             align: 'right',
@@ -694,7 +703,7 @@ function AttendanceTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'attendance',
+            key: 'att_late',
             header: 'Late (min)',
             sortable: true,
             align: 'right',
@@ -706,7 +715,7 @@ function AttendanceTab({ employees, month, backendMetrics }) {
           },
         ]}
       />
-    </>
+    </div>
   )
 }
 
@@ -756,7 +765,7 @@ function LeaveTab({ employees, month, backendMetrics, leaves }) {
   }, [allLeaveRequests])
 
   return (
-    <>
+    <div className="flex flex-col gap-6">
       {/* KPI Cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
@@ -910,7 +919,7 @@ function LeaveTab({ employees, month, backendMetrics, leaves }) {
           },
         ]}
       />
-    </>
+    </div>
   )
 }
 
@@ -940,7 +949,7 @@ function PaymentTaxTab({ employees, month, backendMetrics }) {
   }, [employees])
 
   return (
-    <>
+    <div className="flex flex-col gap-6">
       {/* KPI Cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
@@ -1126,7 +1135,7 @@ function PaymentTaxTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'payroll',
+            key: 'pt_gross',
             header: 'Gross Pay',
             sortable: true,
             align: 'right',
@@ -1137,7 +1146,7 @@ function PaymentTaxTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'payroll',
+            key: 'pt_tax',
             header: 'PAYE Tax',
             sortable: true,
             align: 'right',
@@ -1148,7 +1157,7 @@ function PaymentTaxTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'payroll',
+            key: 'pt_pensionEmp',
             header: 'Pension 7%',
             sortable: true,
             align: 'right',
@@ -1159,7 +1168,7 @@ function PaymentTaxTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'payroll',
+            key: 'pt_pensionEr',
             header: 'Pension 11%',
             sortable: true,
             align: 'right',
@@ -1170,7 +1179,7 @@ function PaymentTaxTab({ employees, month, backendMetrics }) {
             ),
           },
           {
-            key: 'payroll',
+            key: 'pt_net',
             header: 'Net Transfer',
             sortable: true,
             align: 'right',
@@ -1182,7 +1191,7 @@ function PaymentTaxTab({ employees, month, backendMetrics }) {
           },
         ]}
       />
-    </>
+    </div>
   )
 }
 
@@ -1206,8 +1215,6 @@ function HRReports() {
   const [loading, setLoading] = useState(true)
   const [apiError, setApiError] = useState('')
 
-  // Qirb-Alga-style view switcher & export menu state
-  const [viewMode, setViewMode] = useState('all')
   const [showExportMenu, setShowExportMenu] = useState(false)
 
   useEffect(() => {
@@ -1521,12 +1528,6 @@ function HRReports() {
 
   /* ---- Qirb-Alga-style helpers & sub-components ---- */
 
-  const VIEW_MODES = [
-    { value: 'all', label: 'All' },
-    { value: 'ledger', label: 'Ledger' },
-    { value: 'charts', label: 'Charts' },
-  ]
-
   const EXPORT_FORMATS = [
     { value: 'csv', label: 'CSV', icon: <Download className="h-4 w-4" /> },
     { value: 'excel', label: 'Excel', icon: <FileSpreadsheet className="h-4 w-4" /> },
@@ -1571,16 +1572,12 @@ function HRReports() {
   /* ---- Report header (Qirb-Alga AdminReportsTab header) ---- */
 
   const ReportHeader = ({
-    month,
-    onMonthChange,
     onExport,
     onResetFilters,
-    viewMode,
-    onViewModeChange,
     activeReportTab,
     onTabChange,
   }) => (
-    <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+    <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
       {/* Brand + title */}
       <div>
         <p className="text-sm font-medium text-slate-500 dark:text-gray-400">Human Resources</p>
@@ -1592,37 +1589,8 @@ function HRReports() {
         </p>
       </div>
 
-      {/* Right rail: view switcher + month + export */}
+      {/* Right rail: export */}
       <div className="flex flex-wrap items-center gap-3">
-        {/* View mode switcher (All / Ledger / Charts) */}
-        <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-[#1c2026]">
-          {VIEW_MODES.map((vm) => (
-            <button
-              key={vm.value}
-              type="button"
-              onClick={() => onViewModeChange(vm.value)}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                viewMode === vm.value
-                  ? 'bg-white shadow-sm text-slate-900 dark:bg-slate-800 dark:text-slate-100'
-                  : 'text-slate-500 hover:text-slate-700 dark:text-gray-400 dark:hover:text-gray-200'
-              }`}
-            >
-              {vm.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Month picker */}
-        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm text-sm dark:border-[#262b31] dark:bg-[#14181e]">
-          <CalendarDays className="h-4 w-4 text-slate-400 shrink-0" />
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => onMonthChange(e.target.value)}
-            className="bg-transparent font-medium text-slate-700 focus:outline-none dark:text-gray-200"
-          />
-        </label>
-
         {/* Export dropdown */}
         <div className="relative">
           <button
@@ -1683,7 +1651,7 @@ function HRReports() {
     useEffect(() => setLocalSearch(search), [search])
 
     return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-3 shadow-sm border border-slate-200 dark:border-[#262b31] dark:bg-[#14181e]">
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-sm border border-slate-200 dark:border-[#262b31] dark:bg-[#14181e]">
       <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-gray-400">
         <Filter className="h-4 w-4" />
         <span className="font-medium">Filters</span>
@@ -1759,15 +1727,11 @@ function HRReports() {
   )
 
   return (
-    <div className="min-h-full bg-[#f4f5f7] p-4 sm:p-6 dark:bg-[#0a0d10]">
+    <div className="min-h-full bg-[#f4f5f7] p-4 sm:p-6 lg:p-8 dark:bg-[#0a0d10] flex flex-col gap-8">
       {/* ---------- Report header (Qirb-Alga pattern) ---------- */}
       <ReportHeader
-        month={month}
-        onMonthChange={setMonth}
         onExport={handleExport}
         onResetFilters={handleResetFilters}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
         activeReportTab={activeReportTab}
         onTabChange={setActiveReportTab}
       />
@@ -1785,7 +1749,7 @@ function HRReports() {
       />
 
       {/* Tab bar */}
-      <div className="mt-6 flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-4">
         {REPORT_TABS.map((tab) => {
           const isActive = activeReportTab === tab.id
           return (
@@ -1807,7 +1771,7 @@ function HRReports() {
       </div>
 
       {/* Content */}
-      <div className="mt-6">
+      <div>
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-16 text-center shadow-sm dark:border-[#262b31] dark:bg-[#14181e]">
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900 dark:border-[#33383f] dark:border-t-slate-100" />
@@ -1823,8 +1787,9 @@ function HRReports() {
           </div>
         ) : (
           <>
-            {/* Dashboard KPI strip */}
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="flex flex-col gap-6">
+              {/* Dashboard KPI strip */}
+              <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard
                 icon={Users}
                 label="Total Employees"
@@ -1884,67 +1849,6 @@ function HRReports() {
                 backendMetrics={backendMetrics}
               />
             )}
-
-            {/* Data Quality & Validation */}
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#262b31] dark:bg-[#14181e]">
-              <div className="mb-4">
-                <div className="flex items-center gap-2.5">
-                  <span className="rounded-lg bg-slate-100 p-2 dark:bg-[#1c2026]">
-                    <ShieldCheck className="h-4 w-4 text-slate-700 dark:text-gray-300" />
-                  </span>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-950 dark:text-gray-100">Data Quality &amp; Validation</h2>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-gray-400">
-                      Validation checks generated by the HR Reports backend.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              {alertTotal === 0 ? (
-                <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/40">
-                  <div className="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/50">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-emerald-800 dark:text-emerald-300">
-                      No validation alerts
-                    </p>
-                    <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                      The current reporting checks did not find any flagged records.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {Object.entries(alerts)
-                    .filter(([, value]) => Number(value || 0) > 0)
-                    .map(([key, value]) => (
-                      <div
-                        key={`alert-${key}`}
-                        className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/60 dark:bg-amber-950/40"
-                      >
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-                          <div>
-                            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">{key}</p>
-                            <p className="mt-1 text-2xl font-bold text-amber-800 dark:text-amber-300">
-                              {value}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </div>
-
-            {/* Architecture note */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500 shadow-sm dark:border-[#262b31] dark:bg-[#14181e] dark:text-gray-400">
-              <strong className="text-slate-700 dark:text-gray-200">Reporting architecture:</strong>{' '}
-              this page uses one consolidated{' '}
-              <code className="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-[#1c2026]">/api/hr-manager/reports</code>{' '}
-              request. The backend combines Employees, Attendance, Leave and Payroll data according to the HR workbook
-              reporting logic.
             </div>
           </>
         )}

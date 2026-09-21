@@ -830,16 +830,6 @@ function Login() {
                 />
                 <span className="text-xs text-gray-600">Remember for 30 days</span>
               </label>
-              <a
-                href="#forgot"
-                onClick={(e) => {
-                  e.preventDefault()
-                  alert('Use the pre-filled credentials to sign in!')
-                }}
-                className="text-xs font-medium text-gray-900 hover:underline"
-              >
-                Forgot password
-              </a>
             </div>
 
             <button

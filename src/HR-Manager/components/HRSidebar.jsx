@@ -103,18 +103,19 @@ function HRSidebar({ mobileOpen = false, onClose, onOpenSearch }) {
         {/* Logo / Brand */}
         <div className="flex h-16 items-center justify-between border-b border-slate-200 px-4 dark:border-[#262b31]">
           <div
-            className={`flex items-center gap-3 overflow-hidden transition-all duration-200 ${
+            className={`flex items-center gap-2.5 overflow-hidden transition-all duration-200 ${
               collapsed ? 'w-full justify-center' : ''
             }`}
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 dark:bg-[#3a4149] text-sm font-bold text-white">
-              YT
+            <div className="w-8 h-8 rounded-lg bg-black dark:bg-[#3a4149] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 3.2L18 9l-6 3.8L6 9l6-3.8zm-6.5 5.5l5.5 3.5v7.2L5.5 18v-7.3zm13 0v7.3l-5.5 3.5v-7.2l5.5-3.6z" />
+              </svg>
             </div>
             {!collapsed && (
-              <div className="whitespace-nowrap">
-                <p className="text-sm font-bold text-slate-950 dark:text-gray-100">Yanol Tech</p>
-                <p className="text-xs text-slate-500 dark:text-gray-400">HR Management</p>
-              </div>
+              <span className="font-extrabold tracking-tight text-gray-950 dark:text-gray-100 text-sm font-sans whitespace-nowrap">
+                Yanol-HR
+              </span>
             )}
           </div>
         </div>
@@ -247,33 +248,34 @@ function HRSidebar({ mobileOpen = false, onClose, onOpenSearch }) {
             })}
           </div>
 
-          {/* Bottom utility navigation */}
-          {bottomLinks.length > 0 && (
-            <div className="space-y-1 border-t border-slate-200 px-3 py-4 dark:border-[#262b31]">
-              {bottomLinks.map((item) => {
-                const Icon = item.icon
-                const active = isRouteActive(item.path)
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={onClose}
-                    title={collapsed ? item.label : undefined}
-                    className={sidebarClass(active, collapsed)}
-                  >
-                    <Icon
-                      size={19}
-                      strokeWidth={2}
-                      className="shrink-0 text-slate-500"
-                    />
-                    {!collapsed && <span>{item.label}</span>}
-                  </Link>
-                )
-              })}
-            </div>
-          )}
-        </nav>
-      </aside>
+      </nav>
+
+      {/* Bottom utility navigation */}
+      {bottomLinks.length > 0 && (
+        <div className="flex-shrink-0 border-t border-slate-200 px-3 py-4 dark:border-[#262b31]">
+          {bottomLinks.map((item) => {
+            const Icon = item.icon
+            const active = isRouteActive(item.path)
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={onClose}
+                title={collapsed ? item.label : undefined}
+                className={sidebarClass(active, collapsed)}
+              >
+                <Icon
+                  size={19}
+                  strokeWidth={2}
+                  className="shrink-0 text-slate-500"
+                />
+                {!collapsed && <span>{item.label}</span>}
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </aside>
     </>
   )
 }

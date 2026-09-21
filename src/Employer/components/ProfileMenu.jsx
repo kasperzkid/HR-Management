@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { LifeBuoy, LogOut, ChevronDown, Settings as SettingsIcon, Sun, Moon, CircleUserRound } from 'lucide-react'
+import { LogOut, ChevronDown, Settings as SettingsIcon, Sun, Moon, CircleUserRound } from 'lucide-react'
 import { logout } from '../../lib/auth'
 import { useTheme } from '../../lib/theme'
 
@@ -155,14 +155,6 @@ function ProfileMenu({ compact = false, basePath = '/employer', profilePath }) {
           <div className="p-3">
             <span className={`${sectionLabelClass} mb-1.5`}>Appearance</span>
             <ThemeToggle />
-          </div>
-
-          {/* Support */}
-          <div className="px-3 pb-1">
-            <span className={`${sectionLabelClass} mb-1`}>Support</span>
-            <Link to={`${basePath}/inbox`} onClick={close} className={menuItemClass}>
-              <LifeBuoy size={14} className="text-gray-400 shrink-0" /> Help & Support
-            </Link>
           </div>
 
           {/* Log out */}

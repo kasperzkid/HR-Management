@@ -921,11 +921,7 @@ function HRSettings() {
           </div>
         </div>
 
-        {isSettingsSection && (
-          <PrimaryButton onClick={handleSaveSettings} disabled={saving}>
-            {saving ? 'Saving...' : saved ? 'Saved' : 'Save Settings'}
-          </PrimaryButton>
-        )}
+        
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -1372,18 +1368,7 @@ function HRSettings() {
         )}
 
         {isSettingsSection && (
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200/90 bg-white px-6 py-4 shadow-2xs dark:border-[#262b31] dark:bg-[#15181d]">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-[#1c2026] dark:text-gray-400">
-                <Settings size={15} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-950 dark:text-gray-100">Configuration</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Save your changes to apply them across the HR workspace.
-                </p>
-              </div>
-            </div>
+          <div className="flex items-center justify-end gap-3 rounded-2xl border border-gray-200/90 bg-white px-6 py-4 shadow-2xs dark:border-[#262b31] dark:bg-[#15181d]">
             <PrimaryButton onClick={handleSaveSettings} disabled={saving}>
               {saving ? 'Saving...' : saved ? 'Saved' : 'Save Settings'}
             </PrimaryButton>
