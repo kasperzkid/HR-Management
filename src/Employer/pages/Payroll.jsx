@@ -11,6 +11,7 @@ function Payroll() {
   const [attendance, setAttendance] = useState([])
   const [loading, setLoading] = useState(true)
   const currentEmployeeId = resolveEmployee(employees, getCurrentUser()).employeeId
+  const showAllEmployees = currentEmployeeId === '—'
 
   const [month, setMonth] = useState(new Date().getMonth() + 1)
   const [year, setYear] = useState(new Date().getFullYear())
@@ -35,8 +36,9 @@ function Payroll() {
   }, [])
 
   const filteredEmployees = useMemo(() => {
+    if (showAllEmployees) return employees.filter((emp) => emp.employmentStatus !== 'Resigned' && emp.employmentStatus !== 'Terminated')
     return employees.filter((emp) => emp.employeeId === currentEmployeeId)
-  }, [employees, currentEmployeeId])
+  }, [employees, currentEmployeeId, showAllEmployees])
 
   const rows = useMemo(() => {
     const attTotals = attendanceTotals(attendance)

@@ -1367,13 +1367,6 @@ function HRSettings() {
           </Card>
         )}
 
-        {isSettingsSection && (
-          <div className="flex items-center justify-end gap-3 rounded-2xl border border-gray-200/90 bg-white px-6 py-4 shadow-2xs dark:border-[#262b31] dark:bg-[#15181d]">
-            <PrimaryButton onClick={handleSaveSettings} disabled={saving}>
-              {saving ? 'Saving...' : saved ? 'Saved' : 'Save Settings'}
-            </PrimaryButton>
-          </div>
-        )}
           </main>
         </div>
       </div>
