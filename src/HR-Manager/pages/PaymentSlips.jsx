@@ -8,6 +8,10 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  BarChart3,
+  Wallet,
+  Shredder,
+  CheckCircle2,
 } from 'lucide-react'
 import { useEmployees } from '../../Employer/hooks/useEmployees'
 import LuxuryDataTable from '../components/LuxuryDataTable'
@@ -227,6 +231,15 @@ export default function PaymentSlips() {
     })
   }, [payslips, search, department])
 
+  const totals = useMemo(() => {
+    const active = filteredPayslips
+    return {
+      gross: active.reduce((s, r) => s + r.gross, 0),
+      deductions: active.reduce((s, r) => s + r.totalDeductions, 0),
+      net: active.reduce((s, r) => s + r.netSalary, 0),
+    }
+  }, [filteredPayslips])
+
   const focusedIdx = selectedPayslip
     ? filteredPayslips.findIndex((p) => p.employeeId === selectedPayslip.employeeId)
     : -1
@@ -306,7 +319,7 @@ export default function PaymentSlips() {
   ]
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto print:p-0">
+    <div className="p-4 sm:p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto print:p-0">
       {/* Header (hidden in print) */}
       <div className="no-print flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
@@ -336,7 +349,268 @@ export default function PaymentSlips() {
         </div>
       </div>
 
-      {/* LuxuryDataTable with built-in search, export, pagination, list/grid toggle + horizontal scroll */}
+      {/* Status KPI Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Total Slips</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">{filteredPayslips.length}</p>
+              <p className="mt-1 text-xs text-slate-400">Payroll period: {formatMonth(payrollMonth)}</p>
+            </div>
+            <div className="rounded-lg bg-indigo-50 p-2.5 text-indigo-600">
+              <FileText size={20} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Gross Payroll</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">{formatCurrency(totals.gross)}</p>
+              <p className="mt-1 text-xs text-slate-400">Total earnings before deductions</p>
+            </div>
+            <div className="rounded-lg bg-emerald-50 p-2.5 text-emerald-600">
+              <Wallet size={20} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Total Deductions</p>
+              <p className="mt-2 text-2xl font-bold text-rose-600">{formatCurrency(totals.deductions)}</p>
+              <p className="mt-1 text-xs text-slate-400">Tax, pension & other deductions</p>
+            </div>
+            <div className="rounded-lg bg-rose-50 p-2.5 text-rose-600">
+              <Shredder size={20} />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">Net Disbursement</p>
+              <p className="mt-2 text-2xl font-bold text-emerald-600">{formatCurrency(totals.net)}</p>
+              <p className="mt-1 text-xs text-slate-400">Total payable to employees</p>
+            </div>
+            <div className="rounded-lg bg-blue-50 p-2.5 text-blue-600">
+              <CheckCircle2 size={20} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Payroll Breakdown */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Earnings composition */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 size={16} className="text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-700">Earnings Composition</h3>
+          </div>
+          <p className="text-xs text-slate-400 mb-4">How gross payroll is built up across all slips</p>
+          {totals.gross > 0 ? (
+            <div className="space-y-3">
+              {[
+                { label: 'Basic Salary', value: filteredPayslips.reduce((s, r) => s + r.basicSalary, 0), color: 'bg-indigo-500' },
+                { label: 'Allowances', value: filteredPayslips.reduce((s, r) => s + r.transportAllowance + r.housingAllowance + r.mealAllowance + r.otherAllowance, 0), color: 'bg-teal-500' },
+                { label: 'Overtime', value: filteredPayslips.reduce((s, r) => s + r.overtime, 0), color: 'bg-amber-500' },
+              ].map((item) => {
+                const pct = (item.value / totals.gross * 100).toFixed(1)
+                return (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-600">{item.label}</span>
+                      <span className="text-xs font-semibold text-slate-800">{formatCurrency(item.value)}</span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className={`h-full rounded-full ${item.color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="flex justify-between mt-0.5">
+                      <span className="text-[10px] text-slate-400">{pct}%</span>
+                      <span className="text-[10px] text-slate-400">{item.value > 0 ? ((item.value / filteredPayslips.length).toFixed(0)) : '0'} / slip</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 text-center py-4">No payroll data for this period</p>
+          )}
+        </div>
+
+        {/* Deductions composition */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Wallet size={16} className="text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-700">Deductions Breakdown</h3>
+          </div>
+          <p className="text-xs text-slate-400 mb-4">Where deductions come from across all slips</p>
+          {totals.deductions > 0 ? (
+            <div className="space-y-3">
+              {[
+                { label: 'Income Tax', value: filteredPayslips.reduce((s, r) => s + r.incomeTax, 0), color: 'bg-rose-500' },
+                { label: 'Pension (7%)', value: filteredPayslips.reduce((s, r) => s + r.pension, 0), color: 'bg-violet-500' },
+                { label: 'Other Deduction', value: filteredPayslips.reduce((s, r) => s + r.otherDeduction, 0), color: 'bg-orange-500' },
+                { label: 'Loan Advance', value: filteredPayslips.reduce((s, r) => s + r.loanAdvance, 0), color: 'bg-amber-600' },
+              ].map((item) => {
+                const pct = (item.value / totals.deductions * 100).toFixed(1)
+                return (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-600">{item.label}</span>
+                      <span className="text-xs font-semibold text-slate-800">{formatCurrency(item.value)}</span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className={`h-full rounded-full ${item.color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="flex justify-between mt-0.5">
+                      <span className="text-[10px] text-slate-400">{pct}%</span>
+                      <span className="text-[10px] text-slate-400">{item.value > 0 ? ((item.value / filteredPayslips.length).toFixed(0)) : '0'} / slip</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 text-center py-4">No deductions for this period</p>
+          )}
+        </div>
+      </div>
+
+      {/* Selected slip detail panel */}
+      {selectedPayslip && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-5">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-indigo-50 p-2 text-indigo-600">
+                <FileText size={18} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-slate-900">Slip Details</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Selected payment slip — {selectedPayslip.employeeName}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+            {/* Earnings & deductions breakdown */}
+            <div className="p-5 space-y-4">
+              <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white text-sm font-bold">
+                  {cardInitials(selectedPayslip.employeeName)}
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">{selectedPayslip.employeeName}</p>
+                  <p className="text-xs text-slate-500">
+                    {selectedPayslip.employeeId} · {selectedPayslip.department} · {selectedPayslip.jobTitle}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Earnings</p>
+                {[
+                  ['Basic Salary', selectedPayslip.basicSalary],
+                  ['Transport Allowance', selectedPayslip.transportAllowance],
+                  ['Housing Allowance', selectedPayslip.housingAllowance],
+                  ['Meal & Other Allowance', selectedPayslip.mealAllowance + selectedPayslip.otherAllowance],
+                  ['Overtime Pay', selectedPayslip.overtime],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
+                    <span className="text-sm text-slate-600">{label}</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(value)}</span>
+                  </div>
+                ))}
+
+                <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3">
+                  <span className="text-sm font-semibold text-emerald-700">Gross Salary</span>
+                  <span className="font-bold text-emerald-700">{formatCurrency(selectedPayslip.gross)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Deductions</p>
+                {[
+                  ['Income Tax', selectedPayslip.incomeTax],
+                  ['Pension (7%)', selectedPayslip.pension],
+                  ['Other Deduction', selectedPayslip.otherDeduction],
+                  ['Loan Advance', selectedPayslip.loanAdvance],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
+                    <span className="text-sm text-slate-600">{label}</span>
+                    <span className="font-semibold text-rose-600">{formatCurrency(value)}</span>
+                  </div>
+                ))}
+
+                <div className="flex items-center justify-between rounded-lg bg-rose-50 p-3">
+                  <span className="text-sm font-semibold text-rose-700">Total Deductions</span>
+                  <span className="font-bold text-rose-700">{formatCurrency(selectedPayslip.totalDeductions)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl bg-emerald-50 p-4">
+                <span className="text-sm font-bold text-emerald-700">Net Salary</span>
+                <span className="text-xl font-black text-emerald-700">{formatCurrency(selectedPayslip.netSalary)}</span>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-xs">
+                <span className="text-slate-500">Employment Status</span>
+                <span className="font-semibold text-slate-900">{selectedPayslip.employmentStatus}</span>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-xs">
+                <span className="text-slate-500">TIN</span>
+                <span className="font-mono font-semibold text-slate-900">{selectedPayslip.tin || '—'}</span>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-xs">
+                <span className="text-slate-500">Bank Account</span>
+                <span className="font-mono font-semibold text-slate-900">{selectedPayslip.bankAccount || '—'}</span>
+              </div>
+
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-700">
+                <p className="font-semibold">Payroll Period</p>
+                <p className="mt-1">{formatMonth(payrollMonth)}</p>
+              </div>
+            </div>
+
+            {/* Mini summary card */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Summary</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">Earnings</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(selectedPayslip.gross)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">Deductions</span>
+                  <span className="font-semibold text-rose-600">{formatCurrency(selectedPayslip.totalDeductions)}</span>
+                </div>
+                <div className="border-t border-slate-200 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-emerald-700">Net</span>
+                    <span className="text-lg font-bold text-emerald-700">{formatCurrency(selectedPayslip.netSalary)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-lg bg-slate-900 text-white p-3 text-xs leading-5">
+                <p className="font-semibold">Payroll Period</p>
+                <p>{formatMonth(payrollMonth)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LuxuryDataTable with responsive table layout */}
       <div className="no-print">
         <LuxuryDataTable
           title="Payment Slips"
@@ -454,8 +728,6 @@ export default function PaymentSlips() {
             setSearch('')
             setDepartment('All Departments')
           }}
-          scrollable
-          minWidth="1250px"
           paginated
           emptyMessage="No payment slips found for the selected filters."
         />
@@ -500,21 +772,6 @@ export default function PaymentSlips() {
             }}
           />
         ))}
-      </div>
-
-      {/* Phase 1 info banner */}
-      <div className="no-print rounded-2xl border border-blue-100 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/20 p-4">
-        <div className="flex gap-3">
-          <FileText className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
-          <div>
-            <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Payment Slips — Phase 1</p>
-            <p className="mt-1 text-sm leading-6 text-blue-800 dark:text-blue-300">
-              Payment slips are generated from the existing employee salary information and attendance records
-              (pension 7% of basic salary, income tax, loan advance and other deductions). Finalized statutory tax
-              calculations, bank/payment information and PDF generation will be connected in the later phases.
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Slip preview modal (our YANOLTECH design) */}

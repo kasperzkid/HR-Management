@@ -7,6 +7,7 @@
 // Employee row by email (SQLite — normalised in JS).
 // ------------------------------------------------------------------
 
+import crypto from 'node:crypto'
 import prisma from '../db.js'
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -48,7 +49,7 @@ export async function getMyLeave(req, res) {
     }
 
     const requests = await prisma.leaveRequest.findMany({
-      where: { employeeId: employee.id },
+      where: { businessId: employee.employeeId },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -63,7 +64,24 @@ export async function getMyLeave(req, res) {
 
 export async function createLeave(req, res) {
   try {
-    const employee = await ensureEmployee(req.user.id)
+    // ── Resolve employee ───────────────────────────────────────
+    // Priority 1: employeeId sent from the employee portal (UUID or business ID).
+    // Priority 2: authenticated user → match by email (existing behaviour).
+    // Priority 3: first employee in DB (demo fallback).
+    let employee = null
+
+    const bodyEmployeeId = req.body?.employeeId
+    if (bodyEmployeeId) {
+      employee = await prisma.employee.findUnique({ where: { id: bodyEmployeeId } })
+      if (!employee) {
+        employee = await prisma.employee.findUnique({ where: { employeeId: bodyEmployeeId } })
+      }
+    }
+
+    if (!employee && req.user?.id) {
+      employee = await ensureEmployee(req.user.id)
+    }
+
     if (!employee) {
       return res.status(404).json({ message: 'No employee profile linked to this account' })
     }
@@ -101,6 +119,7 @@ export async function createLeave(req, res) {
         approvedDate: null,
         remarks: remarks || null,
         balance: null,
+        businessId: employee.employeeId,
       },
     })
 

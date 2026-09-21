@@ -5,12 +5,9 @@ import {
   AlertCircle,
   Loader2,
   Clock,
-  Timer,
   TrendingUp,
   TrendingDown,
-  LogOut,
   Hourglass,
-  ShieldCheck,
   CheckCircle2,
 } from 'lucide-react'
 import { getCurrentUser } from '../lib/currentUser'
@@ -21,9 +18,13 @@ import {
   subscribePunch,
   applyPunchStatus,
   WORK_END_MINUTES,
+  WORK_START_MINUTES,
+  isWorkDay,
 } from '../lib/workTime'
 import { emergencyCheckOutApi, fetchPunchStatusApi } from '../lib/punchApi'
-import { PUNCH_FEEDBACK_EVENT, broadcastPunchFeedback } from './PunchWidget'
+import { broadcastPunchFeedback } from './PunchWidget'
+import { getPunchLocation, PUNCH_RADIUS_METERS, formatDistance } from '../lib/geo'
+import GeoBlockModal from './GeoBlockModal'
 
 // ─────────────────────────────────────────────────────────────
 // Attendance page — punch status + emergency check-out.
@@ -48,7 +49,7 @@ function StatusCard({ icon: Icon, label, value, hint, tone }) {
   )
 }
 
-export default function PunchCard({ onEvent }) {
+export function EmergencyCheckOutButton({ onEvent }) {
   const user = getCurrentUser()
   const employeeName = user?.name || 'Employee'
   const employeeId = user?.employeeId || user?.email || 'EMP-0000'
@@ -59,47 +60,31 @@ export default function PunchCard({ onEvent }) {
   const [remark, setRemark] = useState('')
   const [emergencyError, setEmergencyError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [feedback, setFeedback] = useState(null)
-  const [checkOutUnlocked, setCheckOutUnlocked] = useState(false)
+  const [geoBlock, setGeoBlock] = useState(null)
 
-  // Clock tick every 30s — re-evaluates windows + countdown
   useEffect(() => {
     const timer = setInterval(() => setTick((t) => t + 1), 30000)
     return () => clearInterval(timer)
   }, [])
 
-  // Mirror punches made anywhere (header widget or this page)
   useEffect(() => subscribePunch(setPunch), [])
 
-  // Load today's punch state from the backend on mount
   useEffect(() => {
     fetchPunchStatusApi()
       .then(applyPunchStatus)
       .catch(() => {})
   }, [])
 
-  // Show feedback for punches made anywhere
-  useEffect(() => {
-    const onFeedback = (e) => setFeedback(e.detail)
-    window.addEventListener(PUNCH_FEEDBACK_EVENT, onFeedback)
-    return () => window.removeEventListener(PUNCH_FEEDBACK_EVENT, onFeedback)
-  }, [])
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps — `tick` refreshes the clock
   const { minutes, day, dateKey, timeLabel } = useMemo(() => getAddisNow(), [tick])
+  const { checkedIn, checkedOut, checkInAt } = punch
 
-  // 17:30 unlock check for the check-out hint (mirrors backend rule)
-  useEffect(() => {
-    setCheckOutUnlocked(minutes >= WORK_END_MINUTES && day >= 1 && day <= 5)
-  }, [minutes, day])
+  const canEmergencyCheckOut =
+    checkedIn && !checkedOut && isWorkDay(day) && minutes >= WORK_START_MINUTES && minutes < WORK_END_MINUTES
 
-  const { checkedIn, checkedOut, checkInAt, checkOutAt } = punch
-
-  const canEmergencyCheckOut = checkedIn && !checkedOut
-
-  // ── Emergency check-out submit (backend notifies HR) ────────
   async function submitEmergency(e) {
     e.preventDefault()
+    if (!canEmergencyCheckOut || busy) return
+
     const reason = remark.trim()
     if (reason.length < 5) {
       setEmergencyError('Please describe the reason (at least 5 characters).')
@@ -109,7 +94,16 @@ export default function PunchCard({ onEvent }) {
 
     try {
       setBusy(true)
-      const res = await emergencyCheckOutApi(reason)
+      const coords = await getPunchLocation()
+      if (coords.distanceMeters > PUNCH_RADIUS_METERS) {
+        setGeoBlock(
+          `You are ${formatDistance(coords.distanceMeters)} from the office. Emergency check-out is blocked outside the ${PUNCH_RADIUS_METERS}m radius.`
+        )
+        setEmergencyOpen(false)
+        setRemark('')
+        return
+      }
+      const res = await emergencyCheckOutApi(reason, coords)
       applyPunchStatus({
         checkedIn: true,
         checkedOut: true,
@@ -123,166 +117,53 @@ export default function PunchCard({ onEvent }) {
       setEmergencyOpen(false)
       setRemark('')
     } catch (err) {
-      setEmergencyError(
-        err.message ||
-          'Could not reach HR. Your check-out was NOT recorded — try again or contact HR directly.'
-      )
+      if (err.code === 'OUTSIDE_PUNCH_RADIUS' || err.code === 'LOCATION_REQUIRED') {
+        setGeoBlock(String(err.message || 'You must be inside the office for an emergency check-out.'))
+        setEmergencyOpen(false)
+        setRemark('')
+      } else {
+        setEmergencyError(
+          err.message ||
+            'Could not reach HR. Your check-out was NOT recorded — try again or contact HR directly.'
+        )
+      }
     } finally {
       setBusy(false)
     }
   }
 
-  // ── Punch stats (zeroed until /api/employer/punch/stats is wired) ──
-  const stats = {
-    avgLateMin: 0,
-    avgEarlyMin: 0,
-    overtimeHours: 0,
-    pendingCheckOut: checkedIn && !checkedOut,
-  }
-
-  const showCheckInBlocked = !checkedIn && !checkedOut
-
   return (
-    <div className="space-y-4">
-      {/* Status cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatusCard
-          icon={TrendingUp}
-          label="Avg Late Time"
-          value={`${stats.avgLateMin}m`}
-          hint="Average minutes past 8:00 AM"
-          tone="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-        />
-        <StatusCard
-          icon={TrendingDown}
-          label="Avg Early Departure"
-          value={`${stats.avgEarlyMin}m`}
-          hint="Average minutes before 5:30 PM"
-          tone="bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-        />
-        <StatusCard
-          icon={Clock}
-          label="Overtime"
-          value={`${stats.overtimeHours}h`}
-          hint="This month"
-          tone="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300"
-        />
-        <StatusCard
-          icon={Hourglass}
-          label="Check-out"
-          value={stats.pendingCheckOut ? 'Pending' : checkedOut ? 'Done' : 'Not in'}
-          hint={
-            stats.pendingCheckOut
-              ? checkOutUnlocked
-                ? 'Unlocked now — 5:30 PM passed'
-                : `${remainingLabel(minutes)} until 5:30 PM`
-              : checkedOut
-              ? `Out at ${checkOutAt}`
-              : 'Check in from the header'
-          }
-          tone={
-            stats.pendingCheckOut
-              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-          }
-        />
-      </div>
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          if (!canEmergencyCheckOut || busy) return
+          setEmergencyError('')
+          setEmergencyOpen(true)
+        }}
+        disabled={!canEmergencyCheckOut || busy}
+        title={
+          !checkedIn
+            ? 'Check in first (from the header)'
+            : checkedOut
+            ? 'Day already closed'
+            : !isWorkDay(day)
+            ? 'Emergency check-out is unavailable on weekends'
+            : minutes < WORK_START_MINUTES
+            ? 'Emergency check-out opens at 8:00 AM (UTC+3)'
+            : minutes >= WORK_END_MINUTES
+            ? 'Use Check Out after 5:30 PM (UTC+3)'
+            : 'Leave early with a reason — HR is notified'
+        }
+        className={`h-9 px-3 rounded-lg border-2 flex items-center gap-1.5 text-[11px] font-bold transition-all ${
+          canEmergencyCheckOut && !busy
+            ? 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 cursor-pointer shadow-xs dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300'
+            : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-[#1c2026] dark:border-[#262b31] dark:text-slate-500'
+        }`}
+      >
+        Emergency Check Out
+      </button>
 
-      {/* Punch status strip + Emergency button */}
-      <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gray-950 dark:bg-[#3a4149] text-white flex items-center justify-center shrink-0">
-              <Timer size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-gray-950 dark:text-gray-100">
-                Today's Punch Status
-              </h2>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                Work time: 8:00 AM – 5:30 PM (UTC+3) • Monday to Friday
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Status pills */}
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-                checkedIn
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-[#1c2026] dark:text-slate-500 dark:border-[#262b31]'
-              }`}
-            >
-              <CheckCircle2 size={11} />
-              {checkedIn ? `In at ${checkInAt}` : 'Not checked in'}
-            </span>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-                checkedOut
-                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-[#3a4149] dark:border-[#3a4149]'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-[#1c2026] dark:text-slate-500 dark:border-[#262b31]'
-              }`}
-            >
-              <LogOut size={11} />
-              {checkedOut ? `Out at ${checkOutAt}` : 'Not checked out'}
-            </span>
-
-            {/* EMERGENCY CHECK OUT — Attendance section only */}
-            <button
-              type="button"
-              onClick={() => {
-                setEmergencyError('')
-                setEmergencyOpen(true)
-              }}
-              disabled={!canEmergencyCheckOut}
-              title={
-                !checkedIn
-                  ? 'Check in first (from the header)'
-                  : checkedOut
-                  ? 'Day already closed'
-                  : 'Leave early with a reason — HR is notified'
-              }
-              className={`h-10 px-4 rounded-xl border-2 flex items-center gap-2 text-xs font-bold transition-all ${
-                canEmergencyCheckOut
-                  ? 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 cursor-pointer shadow-sm dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-300'
-                  : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-[#1c2026] dark:border-[#262b31] dark:text-slate-500'
-              }`}
-            >
-              <Siren size={16} />
-              Emergency Check Out
-            </button>
-          </div>
-        </div>
-
-        {/* Feedback */}
-        {feedback && (
-          <div
-            className={`mt-4 flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-medium ${
-              feedback.tone === 'ok'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
-                : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300'
-            }`}
-          >
-            {feedback.tone === 'ok' ? (
-              <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
-            ) : (
-              <AlertCircle size={14} className="mt-0.5 shrink-0" />
-            )}
-            <span>{feedback.text}</span>
-          </div>
-        )}
-
-        {showCheckInBlocked && (
-          <p className="mt-4 text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
-            <ShieldCheck size={13} className="text-slate-400" />
-            Check-in is accepted between 8:00 AM and 2:00 PM (UTC+3), Monday to Friday only. Check-out
-            unlocks at 5:30 PM and is enforced by the server.
-          </p>
-        )}
-      </div>
-
-      {/* Emergency remark modal */}
       {emergencyOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white dark:bg-[#15181d] rounded-2xl shadow-2xl border border-gray-200 dark:border-[#262b31] w-full max-w-md overflow-hidden">
@@ -383,6 +264,91 @@ export default function PunchCard({ onEvent }) {
           </div>
         </div>
       )}
+
+      <GeoBlockModal message={geoBlock} onClose={() => setGeoBlock(null)} />
+    </>
+  )
+}
+
+export default function PunchCard() {
+  const [tick, setTick] = useState(0)
+  const [punch, setPunch] = useState(getPunchState())
+  const [checkOutUnlocked, setCheckOutUnlocked] = useState(false)
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => subscribePunch(setPunch), [])
+
+  useEffect(() => {
+    fetchPunchStatusApi()
+      .then(applyPunchStatus)
+      .catch(() => {})
+  }, [])
+
+  const { minutes, day } = useMemo(() => getAddisNow(), [tick])
+  const { checkedIn, checkedOut, checkOutAt } = punch
+
+  useEffect(() => {
+    setCheckOutUnlocked(minutes >= WORK_END_MINUTES && isWorkDay(day))
+  }, [minutes, day])
+
+  const stats = {
+    avgLateMin: 0,
+    avgEarlyMin: 0,
+    overtimeHours: 0,
+    pendingCheckOut: checkedIn && !checkedOut,
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Status cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatusCard
+          icon={TrendingUp}
+          label="Avg Late Time"
+          value={`${stats.avgLateMin}m`}
+          hint="Average minutes past 8:00 AM"
+          tone="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+        />
+        <StatusCard
+          icon={TrendingDown}
+          label="Avg Early Departure"
+          value={`${stats.avgEarlyMin}m`}
+          hint="Average minutes before 5:30 PM"
+          tone="bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+        />
+        <StatusCard
+          icon={Clock}
+          label="Overtime"
+          value={`${stats.overtimeHours}h`}
+          hint="This month"
+          tone="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300"
+        />
+        <StatusCard
+          icon={Hourglass}
+          label="Check-out"
+          value={stats.pendingCheckOut ? 'Pending' : checkedOut ? 'Done' : 'Not in'}
+          hint={
+            stats.pendingCheckOut
+              ? checkOutUnlocked
+                ? 'Unlocked now — 5:30 PM passed'
+                : `${remainingLabel(minutes)} until 5:30 PM`
+              : checkedOut
+              ? `Out at ${checkOutAt}`
+              : 'Check in from the header'
+          }
+          tone={
+            stats.pendingCheckOut
+              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+          }
+        />
+      </div>
+
+
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { authHeaders } from '../../../lib/hrApi'
 import {
   API_BASE,
-  calculateOvertimePay,
+  calculateTieredOvertimePay,
   getAttendanceSummary,
   getCurrentMonth,
   getEmployeeId,
@@ -252,18 +252,16 @@ export function usePayrollData() {
       const results = []
 
       for (const employee of employeesWithoutPayroll) {
+        const summary = getAttendanceSummary(
+          attendanceByEmployee.get(String(getEmployeeId(employee))) || [],
+        )
         const response = await fetch(`${API_BASE}/payroll`, {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             employeeId: getEmployeeId(employee),
             payrollMonth,
-            overtimePay: calculateOvertimePay(
-              employee.basicSalary,
-              getAttendanceSummary(
-                attendanceByEmployee.get(String(getEmployeeId(employee))) || [],
-              ).overtimeHours,
-            ),
+            overtimePay: calculateTieredOvertimePay(employee.basicSalary, summary),
             loanDeduction: 0,
             otherDeduction: 0,
           }),

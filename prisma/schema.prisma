@@ -115,6 +115,11 @@ model Attendance {
   earlyDeparture   Int      @default(0)
   regular          Float    @default(0)
   overtime         Float    @default(0)
+  employeeRemark   String?
+  emergencyAt      DateTime?
+  hrStatus         String?
+  hrNote           String?
+  hrUpdatedAt      DateTime?
   createdAt        DateTime @default(now())
 
   employee         Employee @relation(fields: [employeeId], references: [id])
@@ -135,6 +140,7 @@ model LeaveRequest {
   approvedDate   String?
   remarks        String?
   balance        Float?
+  businessId     String?
   createdAt      DateTime @default(now())
 
   employee       Employee @relation(fields: [employeeId], references: [id])
@@ -200,6 +206,7 @@ model Message {
   attachmentName String?
   attachmentType String?
   read           Boolean      @default(false)
+  edited         Boolean      @default(false)
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

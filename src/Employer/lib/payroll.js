@@ -1,4 +1,5 @@
 import { SETTINGS } from '../data/settingsData'
+import { calculateTieredOvertimePay } from '../../lib/overtime'
 
 // ─────────────────────────────────────────────────────────────
 // TAX BRACKETS (Monthly, ETB) — Proclamation No. 1395/2025
@@ -45,13 +46,22 @@ export function calcPayroll(employee, attendance) {
   const otHours = attendance?.totalOtHours ?? 0
   const exempt = isExempt(employmentType)
 
+  // OT pay per Art. 68 tiers (see src/lib/overtime.js).
+  const otPay = calculateTieredOvertimePay(basicSalary, {
+    regular: attendance?.otRegular ?? 0,
+    night: attendance?.otNight ?? 0,
+    restDay: attendance?.otRestDay ?? 0,
+    holiday: attendance?.otHoliday ?? 0,
+    totalOtHours: otHours,
+  })
+
   const gross =
     basicSalary +
     transportAllowance +
     housingAllowance +
     mealAllowance +
     otherAllowance +
-    overtimePay(otHours, basicSalary)
+    otPay
 
   // Allowances treated as 100% taxable by default
   const taxableIncome = gross
@@ -82,7 +92,7 @@ export function calcPayroll(employee, attendance) {
     otherAllowance,
     otHours,
     otRate: hourlyRate(basicSalary),
-    otPay: overtimePay(otHours, basicSalary),
+    otPay,
     gross,
     taxableIncome,
     incomeTax,

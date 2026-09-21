@@ -34,6 +34,35 @@ export const CODE_LABELS = Object.fromEntries(
   ATTENDANCE_CODES.map((item) => [item.code, item.label]),
 )
 
+// Maps punch-clock / DB status strings to the short attendance-code grid
+// so real check-in records render as "P" (colored) instead of raw text.
+export const STATUS_TO_CODE = {
+  Present: 'P',
+  Absent: 'A',
+  'Sick Leave': 'SL',
+  'Annual Leave': 'AL',
+  'Maternity Leave': 'ML',
+  'Other Leave': 'OL',
+  'Public Holiday': 'PH',
+  'Weekend': 'WK',
+  'Half Day': 'HD',
+  'Emergency Departure': 'P',
+}
+
+// Map any leave type label to its attendance-grid code. Accepts full names
+// ("Annual Leave") and short forms ("Annual") stored by SQLite tooling.
+export function leaveTypeToCode(leaveType) {
+  if (!leaveType) return null
+  if (STATUS_TO_CODE[leaveType]) return STATUS_TO_CODE[leaveType]
+
+  const normalized = leaveType.trim().toLowerCase()
+  if (normalized.includes('sick')) return 'SL'
+  if (normalized.includes('annual')) return 'AL'
+  if (normalized.includes('matern')) return 'ML'
+  if (normalized.includes('other')) return 'OL'
+  return null
+}
+
 export const CODE_CLASSES = {
   P: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   A: 'bg-red-50 text-red-700 border-red-200',
@@ -275,7 +304,7 @@ export function createEmployeeRow(employee, index, year, monthIndex) {
   }
 }
 
-export function buildRowsFromDatabase(employees, databaseRecords, year, monthIndex) {
+export function buildRowsFromDatabase(employees, databaseRecords, year, monthIndex, leaves = []) {
   const rows = employees.map(
     (employee, index) => createEmployeeRow(employee, index, year, monthIndex),
   )
@@ -307,10 +336,51 @@ export function buildRowsFromDatabase(employees, databaseRecords, year, monthInd
     }
 
     row.attendance[record.date] = {
-      code: record.status || '',
+      code: STATUS_TO_CODE[record.status] || record.status || '',
       overtime: Number(record.overtime || 0),
       late: Number(record.late || 0),
       id: record.id || null,
+      checkIn: record.checkIn || null,
+      checkOut: record.checkOut || null,
+    }
+  }
+
+  // Overlay approved leave on the grid: every day inside an approved leave
+  // window (up to and including the leave end date) is shown with the leave-type
+  // code, unless an attendance record already covers that day.
+  for (const leave of leaves) {
+    if (leave?.approvalStatus !== 'Approved') continue
+    if (!leave.startDate || !leave.endDate) continue
+
+    const leaveCode = leaveTypeToCode(leave.leaveType)
+    if (!leaveCode) continue
+
+    const row = employeeMap.get(leave.employeeId) || employeeIdMap.get(leave.employeeId)
+    if (!row) continue
+
+    const start = new Date(`${leave.startDate}T00:00:00`)
+    const end = new Date(`${leave.endDate}T00:00:00`)
+
+    for (let day = 1; day <= getDaysInMonth(year, monthIndex); day += 1) {
+      const key = getDateKey(year, monthIndex, day)
+      const cursor = new Date(`${key}T00:00:00`)
+
+      if (cursor < start || cursor > end) continue
+
+      const existing = row.attendance[key]
+      // Only fill days without a recorded attendance so punches always win.
+      if (existing && (existing.code || existing.checkIn)) continue
+
+      row.attendance[key] = {
+        code: leaveCode,
+        overtime: 0,
+        late: 0,
+        id: null,
+        checkIn: null,
+        checkOut: null,
+        leaveId: leave.id || null,
+        leaveType: leave.leaveType,
+      }
     }
   }
 

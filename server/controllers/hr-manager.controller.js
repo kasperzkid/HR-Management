@@ -6,6 +6,11 @@ import XLSX from 'xlsx'
 import bcrypt from 'bcryptjs'
 import prisma from '../db.js'
 import { sendEmployeeCredentialsEmail } from '../lib/mailer.js'
+import {
+  serializeAttendance,
+  emitAttendanceToHr,
+  emitAttendanceToEmployee,
+} from '../lib/attendanceEvents.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -689,6 +694,10 @@ export async function createAttendance(req, res) {
       },
     })
 
+    // Live-update the employee portal with the new status.
+    emitAttendanceToEmployee(attendance)
+    emitAttendanceToHr(attendance)
+
     res.status(201).json(attendance)
   } catch (error) {
     console.error('Create attendance error:', error)
@@ -785,6 +794,10 @@ export async function updateAttendance(req, res) {
       },
     })
 
+    // Live-update the employee portal with the new status.
+    emitAttendanceToEmployee(attendance)
+    emitAttendanceToHr(attendance)
+
     res.json(attendance)
   } catch (error) {
     console.error('Update attendance error:', error)
@@ -837,9 +850,20 @@ const EMPLOYEE_PENSION_RATE = 0.07
 const EMPLOYER_PENSION_RATE = 0.11
 
 // Workbook overtime rule:
-// Overtime Hours × (Basic Salary ÷ 208) × 1.5
+// Weighted hours × (Basic Salary ÷ 208), where each tier's hours carry
+// its multiplier (Labour Proclamation No. 1156/2019, Art. 68):
+//   Daytime normal OT     1.25×  (6:00 AM – 10:00 PM)
+//   Night shift / rest day 1.5×
+//   Public holiday         2.0×
 const STANDARD_MONTHLY_HOURS = 208
-const OVERTIME_MULTIPLIER = 1.5
+const OVERTIME_OT_MULTIPLIERS = {
+  regular: 1.25,
+  night: 1.5,
+  restDay: 1.5,
+  holiday: 2.0,
+}
+const OVERTIME_NIGHT_START_MINUTES = 22 * 60 // 10:00 PM
+const OVERTIME_NIGHT_END_MINUTES = 6 * 60 // 6:00 AM
 
 const PAYE_BRACKETS = [
   { min: 0, max: 2000, rate: 0, subtraction: 0 },
@@ -897,17 +921,55 @@ function payrollIsExcludedFromStatutoryDeductions(employee) {
   return type === 'contractual' || type === 'intern'
 }
 
-function payrollCalculateOvertimePay(basicSalary, overtimeHours) {
-  const salary = Number(basicSalary || 0)
-  const hours = Number(overtimeHours || 0)
+function otTimeToMinutes(time) {
+  if (time == null || time === '') return null
+  const [h, m] = String(time).split(':').map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+  return h * 60 + m
+}
 
-  if (salary <= 0 || hours <= 0) {
-    return 0
+function overtimeTierOfRecord(record) {
+  const code = String(
+    record?.status || record?.attendanceStatus || record?.attendance_status || record?.code || '',
+  )
+    .trim()
+    .toUpperCase()
+
+  if (code === 'PH') return 'holiday'
+
+  const date = record?.date ? new Date(`${String(record.date).slice(0, 10)}T00:00:00`) : null
+  if (date && !Number.isNaN(date.getTime())) {
+    const day = date.getDay() // 0 Sun … 6 Sat
+    if (day === 0 || day === 6) return 'restDay'
   }
+
+  const checkIn = otTimeToMinutes(record?.checkIn)
+  const checkOut = otTimeToMinutes(record?.checkOut)
+  if (
+    (checkIn !== null && checkIn < OVERTIME_NIGHT_END_MINUTES) ||
+    (checkOut !== null && checkOut >= OVERTIME_NIGHT_START_MINUTES)
+  ) {
+    return 'night'
+  }
+
+  return 'regular'
+}
+
+function payrollCalculateOvertimePay(basicSalary, summary) {
+  const salary = Number(basicSalary || 0)
+  if (!(salary > 0)) return 0
+
+  const weightedHours =
+    (Number(summary?.regularOvertimeHours || 0) * OVERTIME_OT_MULTIPLIERS.regular) +
+    (Number(summary?.nightOvertimeHours || 0) * OVERTIME_OT_MULTIPLIERS.night) +
+    (Number(summary?.restDayOvertimeHours || 0) * OVERTIME_OT_MULTIPLIERS.restDay) +
+    (Number(summary?.holidayOvertimeHours || 0) * OVERTIME_OT_MULTIPLIERS.holiday)
+
+  const hoursValue = weightedHours > 0 ? weightedHours : Number(summary?.overtimeHours || 0)
 
   const hourlyRate = salary / STANDARD_MONTHLY_HOURS
 
-  return Number((hours * hourlyRate * OVERTIME_MULTIPLIER).toFixed(2))
+  return Number((hoursValue * hourlyRate).toFixed(2))
 }
 
 function payrollAttendanceSummary(records = []) {
@@ -917,6 +979,10 @@ function payrollAttendanceSummary(records = []) {
     absentDays: 0,
     leaveDays: 0,
     overtimeHours: 0,
+    regularOvertimeHours: 0,
+    nightOvertimeHours: 0,
+    restDayOvertimeHours: 0,
+    holidayOvertimeHours: 0,
     lateMinutes: 0,
   }
 
@@ -930,6 +996,20 @@ function payrollAttendanceSummary(records = []) {
         item.code ||
         '',
     ).toUpperCase()
+
+    const overtime = Number(
+      item.overtime ??
+        item.overtimeHours ??
+        item.overtime_hours ??
+        0,
+    )
+
+    // OT hours are counted even on weekends/public holidays — those rows
+    // are exactly where the higher rest-day / holiday tiers apply.
+    if (overtime > 0) {
+      summary.overtimeHours += overtime
+      summary[`${overtimeTierOfRecord(item)}OvertimeHours`] += overtime
+    }
 
     if (code === 'WK' || code === 'PH') {
       continue
@@ -948,13 +1028,6 @@ function payrollAttendanceSummary(records = []) {
     if (LEAVE_CODES.has(code)) {
       summary.leaveDays += 1
     }
-
-    summary.overtimeHours += Number(
-      item.overtime ??
-        item.overtimeHours ??
-        item.overtime_hours ??
-        0,
-    )
 
     summary.lateMinutes += Number(
       item.late ??
@@ -1065,7 +1138,6 @@ export async function createPayroll(req, res) {
     const {
       employeeId,
       payrollMonth,
-      overtimePay,
       loanDeduction,
       otherDeduction,
     } = req.body
@@ -1104,9 +1176,7 @@ export async function createPayroll(req, res) {
 
     // Overtime is always calculated from Attendance for the selected month.
     // A client-provided overtime value must never override fresh attendance data.
-    const computedOvertime = typeof overtimePay === 'number'
-      ? Number(overtimePay) || 0
-      : payrollCalculateOvertimePay(employee.basicSalary, summary.overtimeHours)
+    const computedOvertime = payrollCalculateOvertimePay(employee.basicSalary, summary)
 
     const figures = payrollCalculate(employee, {
       overtimePay: computedOvertime,
@@ -1156,7 +1226,6 @@ export async function updatePayroll(req, res) {
     const { id } = req.params
 
     const {
-      overtimePay,
       loanDeduction,
       otherDeduction,
     } = req.body
@@ -1199,10 +1268,9 @@ export async function updatePayroll(req, res) {
 
     const summary = payrollAttendanceSummary(attendance)
 
-    const computedOvertime =
-      typeof overtimePay === 'number'
-        ? Number(overtimePay) || 0
-        : payrollCalculateOvertimePay(employee.basicSalary, summary.overtimeHours)
+    // Overtime is always recalculated from the month's Attendance data.
+    // A client-provided overtime value must never override fresh attendance data.
+    const computedOvertime = payrollCalculateOvertimePay(employee.basicSalary, summary)
 
     const figures = payrollCalculate(employee, {
       overtimePay: computedOvertime,
@@ -1372,6 +1440,77 @@ function rowToEmployeeData(row, index) {
 }
 
 // ============================================================
+// ATTENDANCE HR STATUS (today's punch panel)
+// ============================================================
+
+// PATCH /api/hr-manager/attendance/:id/hr-status
+// HR adjusts an attendance record's status for the day (Acknowledged,
+// Absent, Approved, …). Persisted on the record and pushed to the
+// employee portal in real time.
+export async function updateAttendanceHrStatus(req, res) {
+  try {
+    const { id } = req.params
+    const { hrStatus, hrNote } = req.body || {}
+
+    const record = await prisma.attendance.findUnique({ where: { id } })
+    if (!record) {
+      return res.status(404).json({ message: 'Attendance record not found' })
+    }
+
+    const status = String(hrStatus || '').trim()
+    if (!status) {
+      return res.status(400).json({ message: 'hrStatus is required' })
+    }
+
+    const updated = await prisma.attendance.update({
+      where: { id },
+      data: {
+        hrStatus: status,
+        hrNote: hrNote ? String(hrNote).trim() : null,
+        hrUpdatedAt: new Date(),
+      },
+    })
+
+    // Push the fresh record to the affected employee (live status change).
+    emitAttendanceToEmployee(updated)
+
+    res.json({ record: serializeAttendance(updated) })
+  } catch (error) {
+    console.error('Update attendance HR status error:', error)
+    res.status(500).json({ message: 'Failed to update attendance status' })
+  }
+}
+
+// POST /api/hr-manager/attendance/:id/acknowledge
+// Marks an emergency check-out as reviewed so HR dashboards stop
+// flagging it as awaiting acknowledgement.
+export async function acknowledgeEmergencyDeparture(req, res) {
+  try {
+    const { id } = req.params
+
+    const record = await prisma.attendance.findUnique({ where: { id } })
+    if (!record) {
+      return res.status(404).json({ message: 'Attendance record not found' })
+    }
+
+    const updated = await prisma.attendance.update({
+      where: { id },
+      data: {
+        hrStatus: 'Acknowledged',
+        hrUpdatedAt: new Date(),
+      },
+    })
+
+    emitAttendanceToEmployee(updated)
+
+    res.json({ record: serializeAttendance(updated) })
+  } catch (error) {
+    console.error('Acknowledge emergency departure error:', error)
+    res.status(500).json({ message: 'Failed to acknowledge emergency departure' })
+  }
+}
+
+// ============================================================
 // LEAVE REQUESTS
 // ============================================================
 
@@ -1414,8 +1553,10 @@ export async function createLeaveRequest(req, res) {
 
     const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)))
 
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
+    const employee = await prisma.employee.findFirst({
+      where: {
+        OR: [{ id: employeeId }, { employeeId }],
+      },
     })
 
     if (!employee) {
@@ -1425,7 +1566,7 @@ export async function createLeaveRequest(req, res) {
     const created = await prisma.leaveRequest.create({
       data: {
         id: crypto.randomUUID(),
-        employeeId,
+        employeeId: employee.id,
         employeeName: employee.name,
         department: employee.department,
         leaveType,
@@ -1474,6 +1615,67 @@ export async function updateLeaveRequest(req, res) {
   } catch (error) {
     console.error('Update leave request error:', error)
     res.status(500).json({ message: 'Failed to update leave request' })
+  }
+}
+
+export async function getLeaveRequest(req, res) {
+  try {
+    const { id } = req.params
+
+    const request = await prisma.leaveRequest.findUnique({
+      where: { id },
+    })
+
+    if (!request) {
+      return res.status(404).json({ message: 'Leave request not found' })
+    }
+
+    res.json({ request })
+  } catch (error) {
+    console.error('Get leave request error:', error)
+    res.status(500).json({ message: 'Failed to load leave request' })
+  }
+}
+
+export async function deleteLeaveRequest(req, res) {
+  try {
+    const { id } = req.params
+
+    const existing = await prisma.leaveRequest.findUnique({
+      where: { id },
+    })
+
+    if (!existing) {
+      return res.status(404).json({ message: 'Leave request not found' })
+    }
+
+    await prisma.leaveRequest.delete({
+      where: { id },
+    })
+
+    res.json({ message: 'Leave request deleted successfully' })
+  } catch (error) {
+    console.error('Delete leave request error:', error)
+    res.status(500).json({ message: 'Failed to delete leave request' })
+  }
+}
+
+export async function getPayrollRecord(req, res) {
+  try {
+    const { id } = req.params
+
+    const record = await prisma.payrollRecord.findUnique({
+      where: { id },
+    })
+
+    if (!record) {
+      return res.status(404).json({ message: 'Payroll record not found' })
+    }
+
+    res.json({ record })
+  } catch (error) {
+    console.error('Get payroll record error:', error)
+    res.status(500).json({ message: 'Failed to load payroll record' })
   }
 }
 

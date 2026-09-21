@@ -74,13 +74,13 @@ function HRTopbar({ onMenuClick }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/90 px-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] backdrop-blur sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/90 px-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] backdrop-blur sm:px-6 dark:bg-[#15181d]/90 dark:border-[#262b31]">
       {/* Left: mobile menu + breadcrumb */}
       <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           onClick={onMenuClick}
-          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden dark:text-gray-300 dark:hover:bg-[#1c2026]"
           aria-label="Open navigation"
         >
           <Menu size={21} />
@@ -89,12 +89,12 @@ function HRTopbar({ onMenuClick }) {
         <div className="flex min-w-0 items-center gap-2">
           <Link
             to="/hr-manager/dashboard"
-            className="truncate text-sm font-semibold text-slate-400 transition-colors hover:text-slate-700"
+            className="truncate text-sm font-semibold text-slate-400 transition-colors hover:text-slate-700 dark:text-gray-400 dark:hover:text-gray-200"
           >
             HR Manager
           </Link>
-          <span className="text-xs text-slate-300">/</span>
-          <span className="truncate text-sm font-semibold text-slate-900">
+          <span className="text-xs text-slate-300 dark:text-gray-600">/</span>
+          <span className="truncate text-sm font-semibold text-slate-900 dark:text-gray-100">
             {section}
           </span>
         </div>
@@ -105,7 +105,7 @@ function HRTopbar({ onMenuClick }) {
         {/* Messages / Inbox */}
         <button
           onClick={() => navigate('/hr-manager/inbox')}
-          className="relative rounded-xl p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+          className="relative rounded-xl p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-gray-400 dark:hover:bg-[#1c2026] dark:hover:text-gray-200"
           title="Inbox"
         >
           <MessageSquare size={19} />
@@ -118,7 +118,7 @@ function HRTopbar({ onMenuClick }) {
         <div ref={notifRef} className="relative">
           <button
             onClick={() => setNotifOpen((v) => !v)}
-            className="relative rounded-xl p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+            className="relative rounded-xl p-2.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-gray-400 dark:hover:bg-[#1c2026] dark:hover:text-gray-200"
             title="Notifications"
           >
             <Bell size={19} />
@@ -128,22 +128,22 @@ function HRTopbar({ onMenuClick }) {
           </button>
 
           {notifOpen && (
-            <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl z-50">
-              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                <h3 className="text-sm font-bold text-slate-900">
+            <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl z-50 dark:border-[#262b31] dark:bg-[#15181d]">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-[#262b31]">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-gray-100">
                   Notifications
                 </h3>
                 <button
                   onClick={handleAllRead}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-slate-950 hover:text-slate-700"
+                  className="flex items-center gap-1 text-[11px] font-semibold text-slate-950 hover:text-slate-700 dark:text-gray-100 dark:hover:text-gray-300"
                 >
                   <Check size={13} /> Mark all read
                 </button>
               </div>
 
-              <div className="max-h-80 divide-y divide-slate-50 overflow-y-auto">
+              <div className="max-h-80 divide-y divide-slate-50 overflow-y-auto dark:divide-[#262b31]">
                 {notifications.length === 0 && (
-                  <p className="px-4 py-8 text-center text-xs text-slate-400">
+                  <p className="px-4 py-8 text-center text-xs text-slate-400 dark:text-gray-500">
                     You're all caught up.
                   </p>
                 )}
@@ -151,7 +151,7 @@ function HRTopbar({ onMenuClick }) {
                   const meta =
                     NOTIF_ICONS[n.type] || {
                       icon: Info,
-                      color: 'bg-slate-100 text-slate-500',
+                      color: 'bg-slate-100 text-slate-500 dark:bg-[#33383f] dark:text-gray-300',
                     }
                   const Icon = meta.icon
                   const goToMessage = () => {
@@ -167,9 +167,9 @@ function HRTopbar({ onMenuClick }) {
                       onClick={goToMessage}
                       className={`flex items-start gap-3 px-4 py-3 transition-colors ${
                         n.type === 'message'
-                          ? 'cursor-pointer hover:bg-slate-50'
+                          ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-[#1c2026]'
                           : ''
-                      } ${n.unread ? 'bg-slate-50/60' : ''}`}
+                      } ${n.unread ? 'bg-slate-50/60 dark:bg-[#1c2026]' : ''}`}
                     >
                       <div
                         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${meta.color}`}
@@ -178,17 +178,17 @@ function HRTopbar({ onMenuClick }) {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-xs font-semibold text-slate-800">
+                          <p className="truncate text-xs font-semibold text-slate-800 dark:text-gray-100">
                             {n.title}
                           </p>
                           {n.unread && (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-950" />
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-950 dark:bg-gray-100" />
                           )}
                         </div>
-                        <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                        <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-gray-400">
                           {n.message}
                         </p>
-                        <p className="mt-1 text-[10px] text-slate-400">
+                        <p className="mt-1 text-[10px] text-slate-400 dark:text-gray-500">
                           {n.time}
                         </p>
                       </div>
@@ -197,10 +197,10 @@ function HRTopbar({ onMenuClick }) {
                 })}
               </div>
 
-              <div className="border-t border-slate-100 p-2">
+              <div className="border-t border-slate-100 p-2 dark:border-[#262b31]">
                 <button
                   onClick={() => navigate('/hr-manager/inbox')}
-                  className="w-full rounded-xl py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                  className="w-full rounded-xl py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:text-gray-200 dark:hover:bg-[#1c2026]"
                 >
                   Open Inbox
                 </button>
@@ -210,7 +210,7 @@ function HRTopbar({ onMenuClick }) {
         </div>
 
         {/* Divider */}
-        <div className="hidden h-8 w-px bg-slate-200 sm:block" />
+        <div className="hidden h-8 w-px bg-slate-200 sm:block dark:bg-[#262b31]" />
 
         {/* Profile / account dropdown */}
         <ProfileMenu basePath="/hr-manager" />

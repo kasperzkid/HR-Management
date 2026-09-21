@@ -11,6 +11,7 @@
 
 import prisma from '../db.js'
 import { notifyHrOfEmergencyCheckOut } from '../lib/notifyHr.js'
+import { emitAttendanceToHr } from '../lib/attendanceEvents.js'
 
 const WORK_START_MINUTES = 8 * 60 // 08:00
 const CHECK_IN_CUTOFF_MINUTES = 14 * 60 // 14:00 — last moment to check in
@@ -20,8 +21,8 @@ const STANDARD_WORK_MINUTES = 8 * 60 + 30 // 08:00 → 17:30 including break
 // ── Geofencing ─────────────────────────────────────────────
 // Punches are only accepted while the employee is physically within
 // PUNCH_RADIUS_METERS of the office coordinates.
-const OFFICE_LATITUDE = 9.0245
-const OFFICE_LONGITUDE = 38.7485
+const OFFICE_LATITUDE = 8.9994852
+const OFFICE_LONGITUDE = 38.8206109
 const PUNCH_RADIUS_METERS = 50
 
 function haversineMeters(lat1, lng1, lat2, lng2) {
@@ -50,14 +51,18 @@ function geoDistanceMeters(req) {
 // sends none is treated as outside (can't prove it's at the office).
 function assertWithinPunchRadius(req) {
   const distance = geoDistanceMeters(req)
+  console.log(
+    `[PUNCH-GEO] ${req.route?.path || req.path || '?'} lat=${req.body?.latitude ?? 'none'} lng=${req.body?.longitude ?? 'none'} distanceMeters=${distance ?? 'none'}`
+  )
   if (distance === null) {
     const err = new Error('Location is required to punch. Allow location access in your browser.')
     err.code = 'LOCATION_REQUIRED'
     throw err
   }
   if (distance > PUNCH_RADIUS_METERS) {
+    const shown = distance >= 1000 ? `${(distance / 1000).toFixed(1)}km` : `${Math.round(distance)}m`
     const err = new Error(
-      `You are ${Math.round(distance)}m from the office — check-in/check-out is limited to a ${PUNCH_RADIUS_METERS}m radius. Move closer and try again.`
+      `You are ${shown} from the office — check-in/check-out is limited to a ${PUNCH_RADIUS_METERS}m radius. Move closer and try again.`
     )
     err.code = 'OUTSIDE_PUNCH_RADIUS'
     throw err
@@ -122,6 +127,29 @@ async function ensureEmployee(userId) {
   return prisma.employee.findFirst({ orderBy: { id: 'asc' } })
 }
 
+// Returns the employee's currently-active approved leave for the given date
+// (leave range includes the date and the request was approved), or null.
+async function getActiveLeave(employeeId, date) {
+  return prisma.leaveRequest.findFirst({
+    where: {
+      employeeId,
+      approvalStatus: 'Approved',
+      startDate: { lte: date },
+      endDate: { gte: date },
+    },
+  })
+}
+
+function buildLeaveBlock(leave) {
+  const err = new Error(
+    `You are on ${leave.leaveType} until ${leave.endDate}. Check-in/check-out is disabled while on leave.`
+  )
+  err.code = 'ON_LEAVE'
+  err.leaveType = leave.leaveType
+  err.leaveEnd = leave.endDate
+  return err
+}
+
 function buildStatus(attendance) {
   const punchClosed = Boolean(attendance.checkOut)
   return {
@@ -130,6 +158,25 @@ function buildStatus(attendance) {
     checkedOut: punchClosed,
   }
 }
+
+// HR-adjusted status on today's record (e.g. changed to Absent, or
+// emergency departure acknowledged). Consumed by the employee portal.
+function buildHrStatus(attendance) {
+  if (!attendance?.hrStatus) return null
+  return {
+    hrStatus: attendance.hrStatus,
+    hrNote: attendance.hrNote || null,
+    hrUpdatedAt: attendance.hrUpdatedAt || null,
+  }
+}
+
+// Fresh punch status for the employee portal (includes HR feedback).
+const punchStatus = (record) => ({
+  ...buildStatus(record),
+  employeeRemark: record.employeeRemark || null,
+  isEmergency: record.status === 'Emergency Departure',
+  ...buildHrStatus(record),
+})
 
 // ── GET /api/employer/punch — today's punch status ───────────
 
@@ -145,6 +192,8 @@ export async function getPunchStatus(req, res) {
       where: { employeeId: employee.id, date },
     })
 
+    const activeLeave = await getActiveLeave(employee.id, date)
+
     res.json({
       date,
       workEnd: '17:30',
@@ -153,6 +202,17 @@ export async function getPunchStatus(req, res) {
       checkedIn: Boolean(attendance?.checkIn),
       checkedOut: Boolean(attendance?.checkOut),
       isEmergency: attendance?.status === 'Emergency Departure',
+      employeeRemark: attendance?.employeeRemark || null,
+      hrStatus: attendance?.hrStatus || null,
+      hrNote: attendance?.hrNote || null,
+      hrUpdatedAt: attendance?.hrUpdatedAt || null,
+      onLeave: activeLeave
+        ? {
+            leaveType: activeLeave.leaveType,
+            startDate: activeLeave.startDate,
+            endDate: activeLeave.endDate,
+          }
+        : null,
     })
   } catch (error) {
     console.error('Get punch status error:', error)
@@ -170,6 +230,17 @@ export async function punchCheckIn(req, res) {
     }
 
     const { day, minutes, time, date } = getAddisNow()
+
+    const activeLeave = await getActiveLeave(employee.id, date)
+    if (activeLeave) {
+      const leaveBlock = buildLeaveBlock(activeLeave)
+      return res.status(403).json({
+        message: leaveBlock.message,
+        code: leaveBlock.code,
+        leaveType: activeLeave.leaveType,
+        leaveEnd: activeLeave.endDate,
+      })
+    }
 
     try {
       assertWithinPunchRadius(req)
@@ -221,9 +292,11 @@ export async function punchCheckIn(req, res) {
       })
     }
 
+    emitAttendanceToHr(attendance)
+
     res.status(201).json({
       message: `Checked in at ${time} (UTC+3).`,
-      ...buildStatus(attendance),
+      ...punchStatus(attendance),
       stats: { late },
     })
   } catch (error) {
@@ -244,6 +317,17 @@ export async function punchCheckOut(req, res) {
     }
 
     const { day, minutes, time, date } = getAddisNow()
+
+    const activeLeave = await getActiveLeave(employee.id, date)
+    if (activeLeave) {
+      const leaveBlock = buildLeaveBlock(activeLeave)
+      return res.status(403).json({
+        message: leaveBlock.message,
+        code: leaveBlock.code,
+        leaveType: activeLeave.leaveType,
+        leaveEnd: activeLeave.endDate,
+      })
+    }
 
     try {
       assertWithinPunchRadius(req)
@@ -317,14 +401,20 @@ export async function punchCheckOut(req, res) {
         regular: stats.regular,
         overtime: stats.overtime,
         status: req.body.emergency ? 'Emergency Departure' : attendance.status,
+        ...(req.body.emergency
+          ? { employeeRemark: reason, emergencyAt: new Date() }
+          : {}),
       },
     })
+
+    // Live-update HR dashboards (also covers the emergency case).
+    emitAttendanceToHr(updated)
 
     res.json({
       message: req.body.emergency
         ? `Emergency check-out recorded at ${time} (UTC+3).`
         : `Checked out at ${time} (UTC+3). See you tomorrow!`,
-      ...buildStatus(updated),
+      ...punchStatus(updated),
       stats,
     })
   } catch (error) {

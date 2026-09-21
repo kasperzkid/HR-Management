@@ -8,7 +8,6 @@ import {
   Clock,
   Calendar,
   FileText,
-  CreditCard,
   ArrowRight,
   ArrowUpRight,
   Building2,
@@ -29,7 +28,7 @@ import {
 import ApplyLeaveModal from '../components/ApplyLeaveModal'
 import { Link } from 'react-router-dom'
 import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
-import { leaveBalance } from '../lib/leave'
+import { leaveBalance, activeLeave, formatDate } from '../lib/leave'
 import { SETTINGS } from '../data/settingsData'
 import AddEmployeeModal from '../../HR-Manager/components/AddEmployeeModal'
 import LuxuryDataTable from '../components/LuxuryDataTable'
@@ -95,9 +94,16 @@ function Dashboard() {
   }, [currentEmployee, attendance])
 
   const myLeaveRequests = useMemo(
-    () => leaveRequests.filter((r) => r.employeeId === currentEmployee.employeeId),
-    [leaveRequests, currentEmployee.employeeId]
+    () =>
+      leaveRequests.filter(
+        (r) =>
+          r.employeeId === currentEmployee.id ||
+          r.businessId === currentEmployee.employeeId
+      ),
+    [leaveRequests, currentEmployee.id, currentEmployee.employeeId]
   )
+
+  const myActiveLeave = useMemo(() => activeLeave(myLeaveRequests), [myLeaveRequests])
 
   const myLeave = useMemo(() => {
     return leaveBalance(currentEmployee.joinDate, myLeaveRequests)
@@ -249,7 +255,8 @@ function Dashboard() {
             <CalendarCheck size={18} />
           </div>
           <p className="text-2xl font-black text-indigo-700 dark:text-indigo-400 mt-3 tracking-tight">
-            {myLeave.remaining} <span className="text-xs font-normal text-gray-400">days</span>
+            {myActiveLeave ? myActiveLeave.daysLeft : myLeave.remaining}{' '}
+            <span className="text-xs font-normal text-gray-400">days</span>
           </p>
           <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
             <span>Remaining Annual Leave</span>
@@ -532,21 +539,6 @@ function Dashboard() {
           <ArrowRight size={16} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
         </Link>
 
-        <Link
-          to="/employer/payment-info"
-          className="p-4 rounded-2xl bg-white dark:bg-[#15181d] border border-gray-200/90 dark:border-[#262b31] shadow-2xs hover:border-violet-300 dark:hover:border-violet-700 transition-all group flex items-center justify-between"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 flex items-center justify-center">
-              <CreditCard size={20} />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-gray-950 dark:text-gray-100">Payment &amp; Bank Info</p>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">Manage account &amp; TIN</p>
-            </div>
-          </div>
-          <ArrowRight size={16} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
-        </Link>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────

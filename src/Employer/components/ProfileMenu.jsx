@@ -147,7 +147,7 @@ function ProfileMenu({ compact = false, basePath = '/employer', profilePath }) {
               </Link>
             )}
             <Link to={`${basePath}/settings`} onClick={close} className={menuItemClass}>
-              <SettingsIcon size={14} className="text-gray-400 shrink-0" /> Settings
+              <SettingsIcon size={14} className="text-gray-400 shrink-0" /> My Settings
             </Link>
           </div>
 

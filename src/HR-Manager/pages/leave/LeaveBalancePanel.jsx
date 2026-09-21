@@ -19,7 +19,8 @@ export default function LeaveBalancePanel({
 
       const employeeRequests = requests.filter(
         (request) =>
-          request.employeeId === employeeId &&
+          (request.employeeId === employee.id ||
+            request.employeeId === employeeId) &&
           request.approvalStatus === 'Approved',
       )
 

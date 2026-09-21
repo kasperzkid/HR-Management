@@ -1,34 +1,93 @@
-import { useState } from 'react'
-import { Link, useLocation, Outlet } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Users,
   BadgeDollarSign,
-  Search,
-  ChevronDown,
-  Menu,
-  X,
-Check,
   BarChart3,
+  ChevronDown,
+  LayoutDashboard,
+  Menu,
   MessageSquare,
+  Search,
   Settings as SettingsIcon,
+  Users,
+  X,
 } from 'lucide-react'
+import GlobalSearchModal from '../../components/GlobalSearchModal'
 import Topbar from './Topbar'
 import ProfileMenu from './ProfileMenu'
 import PunchWidget from './PunchWidget'
 import { useMessaging } from '../context/messagingStore'
+
+const EMPLOYER_SEARCH_ENTRIES = [
+  {
+    id: 'dashboard',
+    section: 'Dashboard',
+    icon: LayoutDashboard,
+    items: [{ label: 'Dashboard', path: '/employer/dashboard' }],
+  },
+  {
+    id: 'teams',
+    section: 'Teams',
+    icon: Users,
+    items: [
+      { label: 'Attendance', path: '/employer/attendance' },
+      { label: 'Leave', path: '/employer/leave' },
+    ],
+  },
+  {
+    id: 'finance',
+    section: 'Finance',
+    icon: BadgeDollarSign,
+    items: [
+      { label: 'Payroll', path: '/employer/payroll' },
+      { label: 'Payment Slips', path: '/employer/payslips' },
+    ],
+  },
+  {
+    id: 'reports',
+    section: 'Reports',
+    icon: BarChart3,
+    items: [{ label: 'Reports', path: '/employer/reports' }],
+  },
+  {
+    id: 'messages',
+    section: 'Messages',
+    icon: MessageSquare,
+    items: [{ label: 'Inbox', path: '/employer/inbox' }],
+  },
+  {
+    id: 'system',
+    section: 'System',
+    icon: SettingsIcon,
+    items: [{ label: 'Settings', path: '/employer/settings' }],
+  },
+]
 
 function EmployerLayout() {
   const location = useLocation()
   const { totalUnread } = useMessaging()
   const [isHovered, setIsHovered] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef(null)
   // Expandable sections in the sidebar
   const [expandedSections, setExpandedSections] = useState({
     teams: true,
     finance: true,
   })
+
+  // ⌘F / ⌘K opens the global search modal, like the HR workspace
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'k')) {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const toggleSection = (section) => {
     setExpandedSections((prev) => ({
@@ -45,6 +104,22 @@ function EmployerLayout() {
   }
 
   const collapsed = !isHovered
+
+  // Live filter for sidebar navigation, same behavior as the HR sidebar
+  const query = searchQuery.trim().toLowerCase()
+  const isSearching = query.length > 0
+  const matches = (label) => label.toLowerCase().includes(query)
+
+  const teamsItems = [
+    { label: 'Attendance', path: '/employer/attendance' },
+    { label: 'Leave', path: '/employer/leave' },
+  ]
+  const financeItems = [
+    { label: 'Payroll', path: '/employer/payroll' },
+    { label: 'Payslips', path: '/employer/payslips' },
+  ]
+  const visibleTeams = isSearching ? teamsItems.filter((i) => matches(i.label)) : teamsItems
+  const visibleFinance = isSearching ? financeItems.filter((i) => matches(i.label)) : financeItems
 
   return (
     <div className="h-screen overflow-hidden bg-[#f4f5f7] dark:bg-[#0a0d10] text-gray-800 dark:text-gray-200 flex flex-col antialiased print:h-auto print:overflow-visible print:bg-white">
@@ -127,15 +202,13 @@ function EmployerLayout() {
               <div className="relative flex items-center">
                 <Search size={15} className="absolute left-3 text-gray-400 pointer-events-none" />
                 <input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-12 py-2 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white dark:bg-[#15181d] dark:hover:bg-[#1c2026] dark:focus:bg-gray-900 text-[13px] text-gray-800 dark:text-gray-200 rounded-lg border border-gray-200/70 dark:border-[#33383f] focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-400"
+                  className="w-full pl-9 pr-3 py-2 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white dark:bg-[#15181d] dark:hover:bg-[#1c2026] dark:focus:bg-gray-900 text-[13px] text-gray-800 dark:text-gray-200 rounded-lg border border-gray-200/70 dark:border-[#33383f] focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-400"
                 />
-                <span className="absolute right-2 text-[10px] font-medium text-gray-400 dark:text-gray-500 bg-white dark:bg-[#1c2026] px-1.5 py-0.5 rounded border border-gray-200 dark:border-[#33383f] shadow-2xs">
-                  ⌘ F
-                </span>
               </div>
             </div>
           ) : (
@@ -149,6 +222,7 @@ function EmployerLayout() {
           {/* Navigation Links */}
           <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 text-sm custom-scrollbar overflow-x-hidden">
             {/* Dashboard Item */}
+            {(!isSearching || matches('Dashboard')) && (
             <Link
               to="/employer/dashboard"
               className={`relative flex items-center gap-3 border-l-[3px] px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
@@ -161,8 +235,10 @@ function EmployerLayout() {
               <LayoutDashboard size={18} className="shrink-0 text-gray-500" />
               {!collapsed && <span>Dashboard</span>}
             </Link>
+            )}
 
             {/* Teams Section (Expandable) */}
+            {(!isSearching || visibleTeams.length > 0) && (
             <div className="pt-1">
               <button
                 onClick={() => !collapsed && toggleSection('teams')}
@@ -190,33 +266,28 @@ function EmployerLayout() {
               </button>
 
               {/* Sub items under Teams */}
-              {(!collapsed && expandedSections.teams) && (
+              {(!collapsed && (isSearching || expandedSections.teams)) && (
                 <div className="pl-4 pr-1 mt-0.5 space-y-0.5 whitespace-nowrap">
-                  <Link
-                    to="/employer/attendance"
-                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
-                      isRouteActive('/employer/attendance')
-                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
-                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-                    }`}
-                  >
-                    Attendance
-                  </Link>
-                  <Link
-                    to="/employer/leave"
-                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
-                      isRouteActive('/employer/leave')
-                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
-                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-                    }`}
-                  >
-                    Leave
-                  </Link>
+                  {visibleTeams.map((item) => (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                        isRouteActive(item.path)
+                          ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                          : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                 </div>
               )}
             </div>
+            )}
 
             {/* Finance Section (Expandable) */}
+            {(!isSearching || visibleFinance.length > 0) && (
             <div className="pt-1">
               <button
                 onClick={() => !collapsed && toggleSection('finance')}
@@ -224,8 +295,7 @@ function EmployerLayout() {
                   collapsed ? 'justify-center' : ''
                 } ${
                   collapsed && (isRouteActive('/employer/payroll') ||
-                    isRouteActive('/employer/payslips') ||
-                    isRouteActive('/employer/payment-info'))
+                    isRouteActive('/employer/payslips'))
                     ? 'border-gray-950 bg-gray-100/70 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
                     : 'border-transparent text-gray-700 dark:text-gray-300'
                 }`}
@@ -238,72 +308,58 @@ function EmployerLayout() {
                   <ChevronDown
                     size={14}
                     className={`text-gray-400 transition-transform duration-200 ${
-                      expandedSections.finance ? '' : '-rotate-90'
+                      isSearching || expandedSections.finance ? '' : '-rotate-90'
                     }`}
                   />
                 )}
               </button>
 
-              {(!collapsed && expandedSections.finance) && (
+              {(!collapsed && (isSearching || expandedSections.finance)) && (
                 <div className="pl-4 pr-1 mt-0.5 space-y-0.5 whitespace-nowrap">
-                  <Link
-                    to="/employer/payroll"
-                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
-                      isRouteActive('/employer/payroll')
-                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
-                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-                    }`}
-                  >
-                    Payroll
-                  </Link>
-                  <Link
-                    to="/employer/payslips"
-                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
-                      isRouteActive('/employer/payslips')
-                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
-                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-                    }`}
-                  >
-                    Payslips
-                  </Link>
-                  <Link
-                    to="/employer/payment-info"
-                    className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
-                      isRouteActive('/employer/payment-info')
-                        ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
-                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
-                    }`}
-                  >
-                    Payment information
-                  </Link>
+                  {visibleFinance.map((item) => (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                        isRouteActive(item.path)
+                          ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                          : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                 </div>
               )}
             </div>
+            )}
 
             {/* Bottom utility navigation */}
-            <div className="pt-6 space-y-1 border-t border-gray-100 dark:border-[#262b31]">
-              <Link
-                to="/employer/reports"
-                className={`relative flex items-center gap-3 border-l-[3px] px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                  isRouteActive('/employer/reports')
-                    ? 'border-gray-950 bg-gray-100 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
-                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
-                }`}
-                title={collapsed ? 'Reports' : undefined}
-              >
-                <BarChart3 size={18} className="shrink-0 text-gray-500" />
-                {!collapsed && <span>Reports</span>}
-              </Link>
-            </div>
+            {(!isSearching || matches('Reports')) && (
+              <div className="pt-6 space-y-1 border-t border-gray-100 dark:border-[#262b31]">
+                <Link
+                  to="/employer/reports"
+                  className={`relative flex items-center gap-3 border-l-[3px] px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                    isRouteActive('/employer/reports')
+                      ? 'border-gray-950 bg-gray-100 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
+                  }`}
+                  title={collapsed ? 'Reports' : undefined}
+                >
+                  <BarChart3 size={18} className="shrink-0 text-gray-500" />
+                  {!collapsed && <span>Reports</span>}
+                </Link>
+              </div>
+            )}
           </div>
 
-          {/* Bottom Settings Button */}
+          {/* Bottom Settings button */}
           <div className="p-3 border-t border-gray-100 dark:border-[#262b31]">
             <Link
               to="/employer/settings"
               className={`w-full flex items-center gap-3 border-l-[3px] px-3 py-2 transition-all ${
-                isRouteActive('/employer/settings') || isRouteActive('/employer/admin')
-                  ? 'border-white bg-gray-950 text-white font-bold shadow-xs dark:border-gray-950 dark:bg-white dark:text-gray-950'
+                isRouteActive('/employer/settings')
+                  ? 'border-gray-950 bg-gray-100 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
                   : 'border-transparent text-gray-600 hover:text-gray-950 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#1c2026] font-medium'
               } ${collapsed ? 'justify-center px-2' : ''}`}
               title={collapsed ? 'Settings' : undefined}
@@ -312,7 +368,7 @@ function EmployerLayout() {
               {!collapsed && (
                 <div className="flex-1 min-w-0 flex items-center justify-between">
                   <span className="text-sm">Settings</span>
-                  <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 uppercase font-semibold">Config</span>
+                  <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 uppercase font-semibold">You</span>
                 </div>
               )}
             </Link>
@@ -327,6 +383,13 @@ function EmployerLayout() {
           <Outlet />
         </main>
       </div>
+
+      <GlobalSearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onNavigate={() => setMobileOpen(false)}
+        entries={EMPLOYER_SEARCH_ENTRIES}
+      />
     </div>
   )
 }

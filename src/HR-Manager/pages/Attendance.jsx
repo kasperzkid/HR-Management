@@ -37,6 +37,7 @@ export default function Attendance() {
 
   const [employees, setEmployees] = useState([])
   const [databaseRecords, setDatabaseRecords] = useState([])
+  const [leaves, setLeaves] = useState([])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -60,13 +61,14 @@ export default function Attendance() {
         setApiError('')
         setSuccessMessage('')
 
-        const { employees: employeeData, attendance: attendanceData } =
+        const { employees: employeeData, attendance: attendanceData, leaves: leavesData } =
           await fetchMonthData(monthStart, monthEnd)
 
         if (cancelled) return
 
         setEmployees(employeeData)
         setDatabaseRecords(attendanceData)
+        setLeaves(leavesData)
       } catch (error) {
         console.error('Attendance load error:', error)
 
@@ -94,8 +96,8 @@ export default function Attendance() {
   }, [employees])
 
   const rows = useMemo(
-    () => buildRowsFromDatabase(employees, databaseRecords, year, month),
-    [employees, databaseRecords, year, month],
+    () => buildRowsFromDatabase(employees, databaseRecords, year, month, leaves),
+    [employees, databaseRecords, year, month, leaves],
   )
 
   const filteredRows = useMemo(() => {
@@ -404,13 +406,23 @@ export default function Attendance() {
         align: 'center',
         className: info.isWeekend ? 'bg-slate-100' : '',
         exportValue: (row) => row.attendance[dateKey]?.code || '',
-        render: (row) => (
-          <CodePicker
-            value={row.attendance[dateKey]?.code || ''}
-            disabled={info.isWeekend}
-            onChange={(code) => updateAttendanceCode(row.employeeKey, dateKey, code)}
-          />
-        ),
+        render: (row) => {
+          const cell = row.attendance[dateKey] || {}
+          return (
+            <div className="flex flex-col items-center gap-1">
+              <CodePicker
+                value={cell.code || ''}
+                disabled={info.isWeekend}
+                onChange={(code) => updateAttendanceCode(row.employeeKey, dateKey, code)}
+              />
+              {cell.checkIn && cell.checkOut && (
+                <span className="font-mono text-[9px] leading-none tabular-nums whitespace-nowrap text-slate-400">
+                  {cell.checkIn}–{cell.checkOut}
+                </span>
+              )}
+            </div>
+          )
+        },
       }
     })
 

@@ -5,6 +5,9 @@ import {
   startConversation,
   getThread,
   sendMessage,
+  updateMessage,
+  deleteMessage,
+  bulkDeleteMessages,
   uploadAttachment,
   markRead,
   clearChat,
@@ -21,6 +24,9 @@ router.get('/:contactId', getThread)
 router.post('/:contactId', sendMessage)
 router.post('/:contactId/upload', upload.single('file'), uploadAttachment)
 router.post('/:contactId/read', markRead)
+router.put('/:contactId/messages/:messageId', updateMessage)
+router.delete('/:contactId/messages/bulk', bulkDeleteMessages)
+router.delete('/:contactId/messages/:messageId', deleteMessage)
 router.delete('/:contactId/messages', clearChat)
 router.delete('/:contactId', deleteChat)
 

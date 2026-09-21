@@ -6,21 +6,21 @@ import LuxuryDatePicker from '../../HR-Manager/components/add-employee-modal/Lux
 
 // Per-type guidance so employees know what to submit for each leave category
 const REMARK_HINTS = {
-  Annual: 'E.g. Annual vacation with family, planned holiday dates…',
-  Sick: 'Describe medical condition / illness requiring recuperation…',
-  Maternity: 'Expected delivery date, antenatal schedule, hospital details…',
-  Paternity: 'Date of birth of newborn child, delivery details…',
-  Unpaid: 'Personal matters, family emergency, travel abroad…',
-  Study: 'Exam timetable, certification course name, institution schedule…',
+  'Annual Leave': 'E.g. Annual vacation with family, planned holiday dates…',
+  'Sick Leave': 'Describe medical condition / illness requiring recuperation…',
+  'Maternity Leave': 'Expected delivery date, antenatal schedule, hospital details…',
+  'Paternity Leave': 'Date of birth of newborn child, delivery details…',
+  'Unpaid Leave': 'Personal matters, family emergency, travel abroad…',
+  'Study Leave': 'Exam timetable, certification course name, institution schedule…',
 }
 
 const EVIDENCE_HINTS = {
-  Annual: 'PDF or image document (optional)',
-  Sick: 'Medical certificate / doctor note recommended',
-  Maternity: 'Hospital certificate or clinic note recommended',
-  Paternity: 'Birth notification document (optional)',
-  Unpaid: 'Supporting document (optional)',
-  Study: 'Exam notice or letter of admission recommended',
+  'Annual Leave': 'PDF or image document (optional)',
+  'Sick Leave': 'Medical certificate / doctor note recommended',
+  'Maternity Leave': 'Hospital certificate or clinic note recommended',
+  'Paternity Leave': 'Birth notification document (optional)',
+  'Unpaid Leave': 'Supporting document (optional)',
+  'Study Leave': 'Exam notice or letter of admission recommended',
 }
 
 /**
@@ -178,9 +178,9 @@ function ApplyLeaveModal({ isOpen, onClose, onApply, employee = {} }) {
                 onChange={(e) => setForm({ ...form, leaveType: e.target.value })}
                 className="w-full px-3 py-2 text-xs border border-gray-200 dark:border-[#262b31] rounded-xl bg-white dark:bg-[#1c2026] text-gray-950 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-100 cursor-pointer"
               >
-                {(SETTINGS?.leaveTypes || ['Annual', 'Sick', 'Maternity', 'Paternity', 'Unpaid', 'Study']).map((t) => (
+                {(SETTINGS?.leaveTypes || ['Annual Leave', 'Sick Leave', 'Maternity Leave', 'Paternity Leave', 'Unpaid Leave', 'Study Leave']).map((t) => (
                   <option key={t} value={t}>
-                    {t} Leave
+                    {t}
                   </option>
                 ))}
               </select>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { LogIn, LogOut, Loader2, Check } from 'lucide-react'
+import { LogIn, LogOut, Loader2, Check, CalendarOff } from 'lucide-react'
 import {
   getAddisNow,
   isWorkDay,
@@ -15,7 +15,8 @@ import {
   punchCheckInApi,
   punchCheckOutApi,
 } from '../lib/punchApi'
-import { getPunchLocation, PUNCH_RADIUS_METERS } from '../lib/geo'
+import { getPunchLocation, PUNCH_RADIUS_METERS, formatDistance } from '../lib/geo'
+import GeoBlockModal from './GeoBlockModal'
 
 // Tiny event bus for punch feedback toasts (header + Attendance page)
 export const PUNCH_FEEDBACK_EVENT = 'punch-feedback'
@@ -35,6 +36,7 @@ export default function PunchWidget() {
   const [punch, setPunch] = useState(getPunchState())
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState(null) // { tone, text }
+  const [geoBlock, setGeoBlock] = useState(null) // geo modal message
 
   // Clock tick every 30s (re-evaluates windows + countdown)
   useEffect(() => {
@@ -70,26 +72,33 @@ export default function PunchWidget() {
   const isWeekend = !isWorkDay(day)
   const inWindow = isWithinCheckInWindow(minutes)
   const atCheckOut = isCheckOutTime(minutes)
+  const onLeave = punch.onLeave
 
-  const canCheckIn = !isWeekend && inWindow && !checkedIn && !checkedOut
-  const canCheckOut = !isWeekend && atCheckOut && checkedIn && !checkedOut
+  const canCheckIn = !onLeave && !isWeekend && inWindow && !checkedIn && !checkedOut
+  const canCheckOut = !onLeave && !isWeekend && atCheckOut && checkedIn && !checkedOut
 
   async function handleCheckIn() {
     setBusy(true)
     try {
       const coords = await getPunchLocation()
       if (coords.distanceMeters > PUNCH_RADIUS_METERS) {
-        broadcastPunchFeedback({
-          tone: 'err',
-          text: `You are ${Math.round(coords.distanceMeters)}m from the office — check-in is limited to a ${PUNCH_RADIUS_METERS}m radius. Move closer and try again.`,
-        })
+        setGeoBlock(
+          `You are ${formatDistance(coords.distanceMeters)} from the office. Check-in is blocked outside the ${PUNCH_RADIUS_METERS}m radius.`
+        )
         return
       }
       const res = await punchCheckInApi(coords)
       applyPunchStatus({ checkedIn: true, checkIn: res.record?.checkIn, checkedOut: false })
-      broadcastPunchFeedback({ tone: 'ok', text: res.message })
+      broadcastPunchFeedback({
+        tone: 'ok',
+        text: `${res.message} (${formatDistance(coords.distanceMeters)} from office)`,
+      })
     } catch (err) {
-      broadcastPunchFeedback({ tone: 'err', text: err.message })
+      if (err.code === 'OUTSIDE_PUNCH_RADIUS' || err.code === 'LOCATION_REQUIRED') {
+        setGeoBlock(String(err.message || 'You must be inside the office to check in.'))
+      } else {
+        broadcastPunchFeedback({ tone: 'err', text: err.message })
+      }
     } finally {
       setBusy(false)
     }
@@ -100,17 +109,23 @@ export default function PunchWidget() {
     try {
       const coords = await getPunchLocation()
       if (coords.distanceMeters > PUNCH_RADIUS_METERS) {
-        broadcastPunchFeedback({
-          tone: 'err',
-          text: `You are ${Math.round(coords.distanceMeters)}m from the office — check-out is limited to a ${PUNCH_RADIUS_METERS}m radius. Move closer and try again.`,
-        })
+        setGeoBlock(
+          `You are ${formatDistance(coords.distanceMeters)} from the office. Check-out is blocked outside the ${PUNCH_RADIUS_METERS}m radius.`
+        )
         return
       }
       const res = await punchCheckOutApi(coords)
       applyPunchStatus({ checkedIn: true, checkedOut: true, checkOut: res.record?.checkOut })
-      broadcastPunchFeedback({ tone: 'ok', text: res.message })
+      broadcastPunchFeedback({
+        tone: 'ok',
+        text: `${res.message} (${formatDistance(coords.distanceMeters)} from office)`,
+      })
     } catch (err) {
-      broadcastPunchFeedback({ tone: 'err', text: err.message })
+      if (err.code === 'OUTSIDE_PUNCH_RADIUS' || err.code === 'LOCATION_REQUIRED') {
+        setGeoBlock(String(err.message || 'You must be inside the office to check out.'))
+      } else {
+        broadcastPunchFeedback({ tone: 'err', text: err.message })
+      }
     } finally {
       setBusy(false)
     }
@@ -120,12 +135,26 @@ export default function PunchWidget() {
     'h-7 min-w-16 px-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed'
 
   // Only ONE pill shows at a time — the relevant action for the current state.
-  const showCheckIn = !checkedIn && !checkedOut
-  const showCheckOut = checkedIn && !checkedOut
-  const showDayComplete = checkedOut
+  const showLeave = Boolean(onLeave)
+  const showCheckIn = !showLeave && !checkedIn && !checkedOut
+  const showCheckOut = !showLeave && checkedIn && !checkedOut
+  const showDayComplete = !showLeave && checkedOut
 
   return (
     <div className="relative flex flex-col items-end w-full max-w-[240px]">
+      {/* ON LEAVE — punches disabled */}
+      {showLeave && (
+        <div
+          className="flex items-center gap-1.5 h-8 px-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300"
+          title={`On ${onLeave.leaveType} until ${onLeave.endDate} — check-in/check-out is disabled`}
+        >
+          <CalendarOff size={13} />
+          <span className="text-[11px] font-semibold whitespace-nowrap">
+            {onLeave.leaveType} until {onLeave.endDate}
+          </span>
+        </div>
+      )}
+
       {/* CHECK IN — before punch */}
       {showCheckIn && (
         <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 shadow-xs dark:border-[#262b31] dark:bg-[#0d1015]">
@@ -200,6 +229,9 @@ export default function PunchWidget() {
           {toast.text}
         </div>
       )}
+
+      {/* Location-blocked popup */}
+      <GeoBlockModal message={geoBlock} onClose={() => setGeoBlock(null)} />
     </div>
   )
 }

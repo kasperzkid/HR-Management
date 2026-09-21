@@ -1,24 +1,15 @@
 import { useState, useMemo, useEffect } from 'react'
-import { LogOut } from 'lucide-react'
+import { Clock, Clock3, LogOut } from 'lucide-react'
 import DailyLogTable from '../../HR-Manager/components/DailyLogTable'
-import PunchCard from '../components/PunchCard'
+import PunchCard, { EmergencyCheckOutButton } from '../components/PunchCard'
 import { resolveEmployee } from '../lib/currentUser'
-import { attendanceTotals } from '../lib/attendanceUtils'
 import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
 
 function Attendance() {
   const [employees, setEmployees] = useState([])
   const [attendance, setAttendance] = useState([])
   const [loading, setLoading] = useState(true)
   const currentEmployee = resolveEmployee(employees)
-  const today = new Date()
-  const [monthSel, setMonthSel] = useState(today.getMonth() + 1)
-  const [yearSel, setYearSel] = useState(today.getFullYear())
 
   useEffect(() => {
     let cancelled = false
@@ -38,19 +29,14 @@ function Attendance() {
     }
   }, [])
 
-  // Strictly filter to current logged in employee and selected month/year
-  const filtered = useMemo(() => {
-    return attendance.filter((a) => {
-      const [y, m] = String(a.date).split('-').map(Number)
-      const monthMatches = m === monthSel && y === yearSel
-      const empMatches = a.employeeId === currentEmployee.employeeId
-      return monthMatches && empMatches
-    })
-  }, [attendance, monthSel, yearSel, currentEmployee.employeeId])
+  const myAttendance = useMemo(
+    () => attendance.filter((a) => a.employeeId === currentEmployee.employeeId),
+    [attendance, currentEmployee.employeeId],
+  )
 
   const totals = useMemo(() => {
     const agg = { regular: 0, overtime: 0, late: 0, present: 0, absent: 0, sick: 0 }
-    filtered.forEach((a) => {
+    myAttendance.forEach((a) => {
       agg.regular += a.regular || 0
       agg.overtime += a.overtime || 0
       agg.late += a.late || 0
@@ -59,15 +45,37 @@ function Attendance() {
       else if (a.status === 'Sick Leave') agg.sick += 1
     })
     return agg
-  }, [filtered])
+  }, [myAttendance])
 
-  const allEmpTotals = useMemo(() => attendanceTotals(attendance), [attendance])
-  const myTotal = allEmpTotals[currentEmployee.employeeId] || {
-    days: totals.present,
-    totalHours: totals.regular + totals.overtime,
-    totalOtHours: totals.overtime,
-    absences: totals.absent,
-  }
+  const myTotal = useMemo(() => {
+    return myAttendance.reduce(
+      (acc, a) => {
+        if (a.status === 'Present' || a.status === 'On Leave') {
+          acc.days += 1
+          acc.totalHours += a.regular || 0
+          acc.totalOtHours += a.overtime || 0
+        } else {
+          acc.absences += 1
+        }
+        return acc
+      },
+      { days: 0, totalHours: 0, totalOtHours: 0, absences: 0 },
+    )
+  }, [myAttendance])
+
+  const punchStats = useMemo(() => {
+    const presentDays = myAttendance.filter((a) => a.status === 'Present')
+    const lateSum = presentDays.reduce((s, a) => s + (a.late || 0), 0)
+    const earlySum = presentDays.reduce((s, a) => s + (a.earlyDeparture || 0), 0)
+    const overtimeHours = Math.round(
+      myAttendance.reduce((sum, a) => sum + (a.overtime || 0), 0) * 10
+    ) / 10
+    return {
+      avgLateMin: presentDays.length ? Math.round(lateSum / presentDays.length) : 0,
+      avgEarlyMin: presentDays.length ? Math.round(earlySum / presentDays.length) : 0,
+      overtimeHours,
+    }
+  }, [myAttendance])
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto">
@@ -87,50 +95,7 @@ function Attendance() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={monthSel}
-            onChange={(e) => setMonthSel(Number(e.target.value))}
-            className="px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white font-semibold text-gray-800 dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 cursor-pointer"
-          >
-            {MONTH_NAMES.map((m, i) => (
-              <option key={m} value={i + 1}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <select
-            value={yearSel}
-            onChange={(e) => setYearSel(Number(e.target.value))}
-            className="px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white font-semibold text-gray-800 dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 cursor-pointer"
-          >
-            {[2025, 2026].map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm('Emergency check-out will mark you as checked out right now. Continue?')) {
-                const now = new Date()
-                const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-                const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-                const updated = attendance.map((a) =>
-                  a.employeeId === currentEmployee.employeeId && a.date === dateKey
-                    ? { ...a, checkOut: timeStr, status: a.status || 'Present' }
-                    : a,
-                )
-                setAttendance(updated)
-              }
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors cursor-pointer"
-            title="Emergency check-out — marks you as checked out immediately"
-          >
-            <LogOut size={14} />
-            Emergency Check-Out
-          </button>
+          <EmergencyCheckOutButton />
         </div>
       </div>
 
@@ -157,11 +122,61 @@ function Attendance() {
             ))}
           </div>
 
-          {/* Current Employee Monthly Hours Summary */}
+          {/* Punch status cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs dark:bg-[#15181d] dark:border-[#262b31]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Avg Late Time</p>
+                <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 flex items-center justify-center">
+                  <Clock3 size={14} />
+                </div>
+              </div>
+              <p className="text-xl font-bold text-gray-950 dark:text-gray-100 mt-1 tabular-nums">
+                {punchStats.avgLateMin}m
+              </p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Average minutes past 8:00 AM
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs dark:bg-[#15181d] dark:border-[#262b31]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Avg Early Departure</p>
+                <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 flex items-center justify-center">
+                  <LogOut size={14} />
+                </div>
+              </div>
+              <p className="text-xl font-bold text-gray-950 dark:text-gray-100 mt-1 tabular-nums">
+                {punchStats.avgEarlyMin}m
+              </p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Average minutes before 5:30 PM
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs dark:bg-[#15181d] dark:border-[#262b31]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Overtime</p>
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 flex items-center justify-center">
+                  <Clock size={14} />
+                </div>
+              </div>
+              <p className="text-xl font-bold text-gray-950 dark:text-gray-100 mt-1 tabular-nums">
+                {punchStats.overtimeHours}h
+              </p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                All records
+              </p>
+            </div>
+          </div>
+
+          <PunchCard />
+
+          {/* Current Employee Hours Summary */}
           <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs p-5 dark:bg-[#15181d] dark:border-[#262b31] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-sm font-bold text-gray-950 dark:text-gray-100">
-                Monthly Hours Breakdown — {MONTH_NAMES[monthSel - 1]} {yearSel}
+                Hours Summary
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 Verified working days and overtime submitted to payroll for disbursement.
@@ -183,13 +198,10 @@ function Attendance() {
             </div>
           </div>
 
-          {/* Punch status cards, emergency check-out (check-in/out live in the header) */}
-          <PunchCard />
-
           {/* Daily log */}
           <section id="daily-log-section">
             <DailyLogTable
-              initialLogs={filtered}
+              initialLogs={myAttendance}
               employees={[currentEmployee]}
               title="My Daily Log"
               subtitle={`Check-in and punch records for ${currentEmployee.name}`}

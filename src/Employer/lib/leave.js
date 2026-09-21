@@ -45,10 +45,23 @@ export function annualEntitlement(joinDate, asOf = new Date()) {
   return baseEntitlement + Math.floor(yrs / extraDayPerFullYears)
 }
 
+// Normalize leave-type labels so "Annual" and "Annual Leave" are treated equally
+function normalizeLeaveType(type) {
+  return String(type || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+leave$/, '')
+}
+
 // Approved leave days between start/end for a given user's joins
-export function takenDays(requestsForEmployee, type = 'Annual') {
+export function takenDays(requestsForEmployee, type = 'Annual Leave') {
+  const target = normalizeLeaveType(type)
   return requestsForEmployee
-    .filter((r) => r.leaveType === type && r.approvalStatus === 'Approved')
+    .filter(
+      (r) =>
+        normalizeLeaveType(r.leaveType) === target &&
+        r.approvalStatus === 'Approved'
+    )
     .reduce((sum, r) => sum + (r.days ?? networkdays(r.startDate, r.endDate)), 0)
 }
 
@@ -59,11 +72,29 @@ export function leaveBalance(joinDate, requestsForEmployee, asOf = new Date()) {
   return {
     entitled,
     taken: annualTaken,
-    remaining: entitled - annualTaken,
+    remaining: Math.max(0, entitled - annualTaken),
     sickDaysUsed: sickTaken,
     sickDaysTotal: SETTINGS.leave.sickDaysPerYear,
     sickRemaining: SETTINGS.leave.sickDaysPerYear - sickTaken,
   }
+}
+
+// The most recent APPROVED leave request covering `today` (if any).
+// Also reports `daysLeft` — working days remaining on the leave.
+export function activeLeave(requestsForEmployee, asOf = new Date()) {
+  if (!Array.isArray(requestsForEmployee)) return null
+  const today = asOf.toISOString().slice(0, 10)
+  const match =
+    requestsForEmployee
+      .filter((r) => r.approvalStatus === 'Approved')
+      .filter((r) => {
+        const start = r.startDate || ''
+        const end = r.endDate || r.startDate || ''
+        return start <= today && today <= end
+      })
+      .sort((a, b) => String(b.endDate || '').localeCompare(String(a.endDate || '')))[0] || null
+  if (!match) return null
+  return { ...match, daysLeft: diffDays(today, match.endDate || match.startDate) + 1 }
 }
 
 // Flag two APPROVED requests with overlapping date ranges for the same employee

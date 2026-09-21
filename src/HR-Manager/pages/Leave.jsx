@@ -131,7 +131,8 @@ export default function Leave() {
 
     const approvedRequests = requests.filter(
       (request) =>
-        request.employeeId === selectedEmployeeId &&
+        (request.employeeId === employee.id ||
+          request.employeeId === selectedEmployeeId) &&
         request.approvalStatus === 'Approved',
     )
 
@@ -453,23 +454,23 @@ export default function Leave() {
   )
 
   return (
-    <div className="min-h-full bg-slate-50 p-4 md:p-6 lg:p-8">
+    <div className="min-h-full bg-slate-50 p-4 md:p-6 lg:p-8 dark:bg-[#0a0d10] dark:text-gray-200">
       <div className="mx-auto max-w-[1600px]">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-              <CalendarDays size={16} />
-              <span>HR Management</span>
-              <span>/</span>
-              <span className="text-slate-700">Leave</span>
+            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500 dark:text-gray-400">
+              <CalendarDays size={16} className="text-slate-400 dark:text-gray-500" />
+              <span className="text-slate-500 dark:text-gray-400">HR Management</span>
+              <span className="text-slate-300 dark:text-gray-600">/</span>
+              <span className="text-slate-700 dark:text-gray-200">Leave</span>
             </div>
 
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl dark:text-gray-100">
               Leave Management
             </h1>
 
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
               Manage employee leave requests, approvals, overlaps, and leave balances.
             </p>
           </div>
@@ -477,7 +478,7 @@ export default function Leave() {
           <button
             type="button"
             onClick={openCreateModal}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-slate-800 cursor-pointer"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-slate-800 cursor-pointer dark:bg-[#3a4149] dark:hover:bg-[#262b31]"
           >
             <Plus size={18} />
             New Leave Request
@@ -485,7 +486,7 @@ export default function Leave() {
         </div>
 
         {loadError && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
             {loadError}
           </div>
         )}
@@ -607,17 +608,17 @@ export default function Leave() {
             onSelectEmployee={setSelectedEmployeeId}
           />
 
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 p-5">
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-[#262b31] dark:bg-[#14181e]">
+            <div className="border-b border-slate-200 p-5 dark:border-[#262b31]">
               <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
+                <div className="rounded-lg bg-blue-50 p-2 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
                   <UserCheck size={18} />
                 </div>
 
                 <div>
-                  <h2 className="font-semibold text-slate-900">Leave Balance Details</h2>
+                  <h2 className="font-semibold text-slate-900 dark:text-gray-100">Leave Balance Details</h2>
 
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">
                     Select an employee from the balance table.
                   </p>
                 </div>
@@ -627,16 +628,16 @@ export default function Leave() {
             {selectedBalance ? (
               <div className="p-5">
                 <div className="mb-5 flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
                     {getInitials(getEmployeeName(selectedBalance.employee))}
                   </div>
 
                   <div>
-                    <p className="font-semibold text-slate-900">
+                    <p className="font-semibold text-slate-900 dark:text-gray-100">
                       {getEmployeeName(selectedBalance.employee)}
                     </p>
 
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-gray-400">
                       {getEmployeeId(selectedBalance.employee)} ·{' '}
                       {getDepartment(selectedBalance.employee)}
                     </p>
@@ -644,41 +645,41 @@ export default function Leave() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                    <span className="text-sm text-slate-500">Entitled (Annual)</span>
-                    <span className="font-semibold text-slate-900">{selectedBalance.entitled}</span>
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3 dark:bg-[#1c2026]">
+                    <span className="text-sm text-slate-500 dark:text-gray-400">Entitled (Annual)</span>
+                    <span className="font-semibold text-slate-900 dark:text-gray-100">{selectedBalance.entitled}</span>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                    <span className="text-sm text-slate-500">Taken (Approved)</span>
-                    <span className="font-semibold text-slate-900">{selectedBalance.taken}</span>
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3 dark:bg-[#1c2026]">
+                    <span className="text-sm text-slate-500 dark:text-gray-400">Taken (Approved)</span>
+                    <span className="font-semibold text-slate-900 dark:text-gray-100">{selectedBalance.taken}</span>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3">
-                    <span className="text-sm text-emerald-700">Remaining</span>
-                    <span className="font-bold text-emerald-700">{selectedBalance.remaining}</span>
+                  <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3 dark:bg-emerald-950/30">
+                    <span className="text-sm text-emerald-700 dark:text-emerald-400">Remaining</span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">{selectedBalance.remaining}</span>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                    <span className="text-sm text-slate-500">Sick Days Used</span>
-                    <span className="font-semibold text-slate-900">{selectedBalance.sickUsed}</span>
+                  <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3 dark:bg-[#1c2026]">
+                    <span className="text-sm text-slate-500 dark:text-gray-400">Sick Days Used</span>
+                    <span className="font-semibold text-slate-900 dark:text-gray-100">{selectedBalance.sickUsed}</span>
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-700">
+                <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-700 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-400">
                   Only leave requests with <strong>Approved</strong> status are included in the
                   balance calculations.
                 </div>
               </div>
             ) : (
               <div className="flex min-h-[250px] flex-col items-center justify-center p-6 text-center">
-                <div className="mb-3 rounded-full bg-slate-100 p-4 text-slate-400">
+                <div className="mb-3 rounded-full bg-slate-100 p-4 text-slate-400 dark:bg-[#1c2026] dark:text-gray-500">
                   <Users size={25} />
                 </div>
 
-                <p className="text-sm font-medium text-slate-700">No employee selected</p>
+                <p className="text-sm font-medium text-slate-700 dark:text-gray-200">No employee selected</p>
 
-                <p className="mt-1 max-w-xs text-xs leading-5 text-slate-500">
+                <p className="mt-1 max-w-xs text-xs leading-5 text-slate-500 dark:text-gray-400">
                   Click an employee in the balance table to see detailed leave balance information.
                 </p>
               </div>

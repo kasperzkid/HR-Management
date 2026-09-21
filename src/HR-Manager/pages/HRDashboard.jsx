@@ -132,19 +132,19 @@ function HRDashboard() {
   ]
 
   return (
-    <div className="min-h-full bg-[#F3F4F6] p-4 sm:p-6 lg:p-8">
+    <div className="min-h-full bg-[#F3F4F6] p-4 sm:p-6 lg:p-8 dark:bg-[#0a0d10] dark:text-gray-200">
       {/* Header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">
+          <p className="text-sm font-medium text-slate-500 dark:text-gray-400">
             Human Resources
           </p>
 
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl dark:text-gray-100">
             HR Dashboard
           </h1>
 
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-slate-500 dark:text-gray-400">
             Overview of your company's workforce and HR activities.
           </p>
         </div>
@@ -152,7 +152,7 @@ function HRDashboard() {
         <button
           type="button"
           onClick={() => navigate('/hr-manager/reports')}
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800 cursor-pointer"
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800 cursor-pointer dark:bg-[#3a4149] dark:hover:bg-[#262b31]"
         >
           View Reports
           <ArrowUpRight size={15} />
@@ -167,25 +167,25 @@ function HRDashboard() {
           return (
             <div
               key={stat.title}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#262b31] dark:bg-[#14181e]"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-500">
+                  <p className="text-sm font-medium text-slate-500 dark:text-gray-400">
                     {stat.title}
                   </p>
 
-                  <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
+                  <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950 dark:text-gray-100">
                     {stat.value}
                   </p>
                 </div>
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-[#1c2026] dark:text-gray-300">
                   <Icon size={20} />
                 </div>
               </div>
 
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-3 text-xs text-slate-500 dark:text-gray-400">
                 {stat.description}
               </p>
             </div>
@@ -196,46 +196,46 @@ function HRDashboard() {
       {/* Main dashboard area */}
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         {/* Workforce overview */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2 dark:border-[#262b31] dark:bg-[#14181e]">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-950">
+              <h2 className="text-lg font-bold text-slate-950 dark:text-gray-100">
                 Workforce Overview
               </h2>
 
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
                 Current employee distribution.
               </p>
             </div>
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">
+            <div className="rounded-xl bg-slate-50 p-5 dark:bg-[#1c2026]">
+              <p className="text-sm text-slate-500 dark:text-gray-400">
                 Total Workforce
               </p>
 
-              <p className="mt-2 text-2xl font-bold text-slate-950">
+              <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-gray-100">
                 {totalEmployees}
               </p>
             </div>
 
-            <div className="rounded-xl bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">
+            <div className="rounded-xl bg-slate-50 p-5 dark:bg-[#1c2026]">
+              <p className="text-sm text-slate-500 dark:text-gray-400">
                 Active
               </p>
 
-              <p className="mt-2 text-2xl font-bold text-slate-950">
+              <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-gray-100">
                 {activeEmployees}
               </p>
             </div>
 
-            <div className="rounded-xl bg-slate-50 p-5">
-              <p className="text-sm text-slate-500">
+            <div className="rounded-xl bg-slate-50 p-5 dark:bg-[#1c2026]">
+              <p className="text-sm text-slate-500 dark:text-gray-400">
                 On Leave
               </p>
 
-              <p className="mt-2 text-2xl font-bold text-slate-950">
+              <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-gray-100">
                 {onLeaveEmployees}
               </p>
             </div>
@@ -320,27 +320,27 @@ function HRDashboard() {
 
               <ArrowUpRight
                 size={18}
-                className="text-slate-400"
+                className="text-slate-400 dark:text-gray-500"
               />
             </a>
 
             <a
               href="/hr-manager/leave"
-              className="flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50"
+              className="flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50 dark:border-[#262b31] dark:hover:bg-[#1c2026]"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">
                   Leave Requests
                 </p>
 
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">
                   Review employee leave
                 </p>
               </div>
 
               <ArrowUpRight
                 size={18}
-                className="text-slate-400"
+                className="text-slate-400 dark:text-gray-500"
               />
             </a>
           </div>

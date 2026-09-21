@@ -14,7 +14,7 @@ const NOTIF_ICONS = {
 function Topbar() {
   const [notifOpen, setNotifOpen] = useState(false)
   const notifRef = useRef(null)
-  const { totalUnread, notifications, unreadNotifications, markAllRead, markAllNotificationsReadAndRemove, dismissNotification } =
+  const { totalUnread, notifications, unreadNotifications, markAllNotificationsReadAndRemove, dismissNotification } =
     useMessaging()
   const navigate = useNavigate()
 
@@ -51,17 +51,17 @@ function Topbar() {
         {/* Check-in / Check-out (shared state with Attendance punch card) */}
         <PunchWidget />
 
-        {/* Messages / Inbox */}
-        <button
-          onClick={() => navigate('/employer/inbox')}
-          className="relative p-2.5 rounded-xl text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors"
-          title="Inbox"
-        >
-          <MessageSquare size={19} />
-          {totalUnread > 0 && (
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-gray-500" />
-          )}
-        </button>
+          {/* Messages / Inbox */}
+          <button
+            onClick={() => navigate('/employer/inbox')}
+            className="relative p-2.5 rounded-xl text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors"
+            title="Inbox"
+          >
+            <MessageSquare size={19} />
+            {totalUnread > 0 && (
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-gray-500" />
+            )}
+          </button>
 
         {/* Notifications/Bell */}
         <div ref={notifRef} className="relative">

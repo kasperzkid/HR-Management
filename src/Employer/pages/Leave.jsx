@@ -14,20 +14,29 @@ const STATUS_STYLES = {
 }
 
 const LEAVE_COLORS = {
-  Annual: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400',
-  Sick: 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400',
-  Maternity: 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-400',
-  Paternity: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
-  Study: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
-  Unpaid: 'bg-gray-100 text-gray-600 dark:bg-[#1c2026] dark:text-gray-400',
+  'Annual Leave': 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400',
+  'Sick Leave': 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400',
+  'Maternity Leave': 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-400',
+  'Paternity Leave': 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+  'Study Leave': 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
+  'Unpaid Leave': 'bg-gray-100 text-gray-600 dark:bg-[#1c2026] dark:text-gray-400',
 }
 
 function Leave() {
   const user = getCurrentUser()
-  const currentEmployee = resolveEmployee([], user)
   const [employees, setEmployees] = useState([])
   const [leaveRequests, setLeaveRequests] = useState([])
-  const [requests, setRequests] = useState([])
+  const currentEmployee = useMemo(
+    () => resolveEmployee(employees, user),
+    [employees, user],
+  )
+  const requests = useMemo(
+    () =>
+      leaveRequests.filter(
+        (r) => r.employeeId === currentEmployee.id || r.businessId === currentEmployee.employeeId,
+      ),
+    [leaveRequests, currentEmployee?.id, currentEmployee?.employeeId],
+  )
   const [showForm, setShowForm] = useState(false)
   const [toast, setToast] = useState(null)
   const [pendingReload, setPendingReload] = useState(false)
@@ -50,11 +59,6 @@ function Leave() {
     }
   }, [pendingReload])
 
-  // Sync local table from the backend list
-  useEffect(() => {
-    setRequests(leaveRequests.filter((r) => r.employeeId === currentEmployee.employeeId))
-  }, [leaveRequests, currentEmployee.employeeId])
-
   const showToast = (msg) => {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
@@ -71,6 +75,7 @@ function Leave() {
   const handleApply = async (newReq) => {
     try {
       await createLeaveRequest({
+        employeeId: currentEmployee.id || currentEmployee.employeeId,
         leaveType: newReq.leaveType,
         startDate: newReq.startDate,
         endDate: newReq.endDate,

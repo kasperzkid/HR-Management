@@ -3,7 +3,7 @@ import { Loader2, Save, X } from 'lucide-react'
 import { authHeaders } from '../../../lib/hrApi'
 import {
   API_BASE,
-  calculateOvertimePay,
+  calculateTieredOvertimePay,
   calculatePreview,
   formatCurrency,
   getCurrentMonth,
@@ -59,7 +59,7 @@ export default function PayrollModal({ employee, payroll, month, attendanceSumma
   const [form, setForm] = useState({
     payrollMonth: payroll?.payrollMonth || month || getCurrentMonth(),
     // Overtime is always calculated from Attendance for the selected month.
-    overtimePay: calculateOvertimePay(employee?.basicSalary, attendanceSummary?.overtimeHours),
+    overtimePay: calculateTieredOvertimePay(employee?.basicSalary, attendanceSummary),
     loanDeduction: payroll?.loanDeduction ?? 0,
     otherDeduction: payroll?.otherDeduction ?? 0,
   })
@@ -93,7 +93,7 @@ export default function PayrollModal({ employee, payroll, month, attendanceSumma
       const payload = {
         employeeId: getEmployeeId(employee),
         payrollMonth: form.payrollMonth,
-        overtimePay: calculateOvertimePay(employee?.basicSalary, attendanceSummary?.overtimeHours),
+        overtimePay: calculateTieredOvertimePay(employee?.basicSalary, attendanceSummary),
         loanDeduction: Number(form.loanDeduction || 0),
         otherDeduction: Number(form.otherDeduction || 0),
       }
@@ -184,10 +184,10 @@ export default function PayrollModal({ employee, payroll, month, attendanceSumma
                   Overtime Pay (Auto)
                 </div>
                 <div className="mt-1 text-base font-semibold text-slate-950 dark:text-slate-100">
-                  {formatCurrency(calculateOvertimePay(employee?.basicSalary, attendanceSummary?.overtimeHours))}
+                  {formatCurrency(calculateTieredOvertimePay(employee?.basicSalary, attendanceSummary))}
                 </div>
                 <div className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                  Attendance hours × hourly rate × 1.5.
+                  Tiered OT: 1.25× daytime · 1.5× night / rest day · 2× public holiday (Art. 68).
                 </div>
               </div>
               <Field label="Loan / Advance Deduction" type="number" min="0" step="0.01" value={form.loanDeduction} onChange={(v) => updateField('loanDeduction', v)} />

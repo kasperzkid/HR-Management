@@ -302,6 +302,39 @@ export function PayrollTab({
           exportable={true}
           emptyMessage="No payroll run history yet. Run payroll to populate this ledger."
           exportFilename={`Payroll_Run_History_${history.length}M`}
+          allowViewModeToggle={true}
+          renderGridCard={(h) => (
+            <div
+              key={h.period}
+              className="rounded-xl border border-gray-200/80 dark:border-[#262b31] bg-white dark:bg-[#15181d] p-4 space-y-3 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-2xs"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-950 dark:text-gray-100 text-sm">{h.period}</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60">
+                  {h.status}
+                </span>
+              </div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400">{h.headcount} active employee(s)</div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-gray-100 dark:border-[#262b31]">
+                <div>
+                  <span className="text-gray-400 dark:text-gray-500 block">Gross Pay</span>
+                  <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{formatETB(h.gross)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 dark:text-gray-500 block">Income Tax</span>
+                  <span className="font-semibold tabular-nums text-rose-700 dark:text-rose-400">{formatETB(h.tax)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 dark:text-gray-500 block">Pension (18%)</span>
+                  <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-400">{formatETB(h.pension)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 dark:text-gray-500 block">Net Disbursement</span>
+                  <span className="font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatETB(h.net)}</span>
+                </div>
+              </div>
+            </div>
+          )}
           columns={[
             {
               key: 'period',
@@ -449,6 +482,43 @@ export function AttendanceTab({ data }) {
         searchKeys={['employeeName', 'employeeId', 'department', 'status']}
         exportable={true}
         exportFilename="Attendance_Report"
+        allowViewModeToggle={true}
+        renderGridCard={(a) => (
+          <div
+            key={`${a.date}-${a.employeeId}`}
+            className="rounded-xl border border-gray-200/80 dark:border-[#262b31] bg-white dark:bg-[#15181d] p-4 space-y-3 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-2xs"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-950 dark:text-gray-100 text-sm">{a.employeeName}</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${STATUS_CHIP[a.status] || FALLBACK_CHIP}`}>
+                {a.status}
+              </span>
+            </div>
+            <div className="text-[10px] font-mono text-gray-400 dark:text-gray-500">
+              {fmtDate(a.date)} · {a.department}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-gray-100 dark:border-[#262b31]">
+              <div>
+                <span className="text-gray-400 dark:text-gray-500 block">Check In</span>
+                <span className="font-mono font-semibold text-gray-900 dark:text-gray-100">{a.checkIn || '—'}</span>
+              </div>
+              <div>
+                <span className="text-gray-400 dark:text-gray-500 block">Check Out</span>
+                <span className="font-mono font-semibold text-gray-900 dark:text-gray-100">{a.checkOut || '—'}</span>
+              </div>
+              <div>
+                <span className="text-gray-400 dark:text-gray-500 block">Regular Hrs</span>
+                <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{a.regular ?? 0}h</span>
+              </div>
+              <div>
+                <span className="text-gray-400 dark:text-gray-500 block">OT Hrs</span>
+                <span className="font-semibold tabular-nums text-purple-700 dark:text-purple-400">
+                  {a.overtime ? `${a.overtime}h` : '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
         columns={[
           {
             key: 'date',
@@ -573,6 +643,29 @@ export function LeaveTab({ data }) {
         searchKeys={['employeeName', 'employeeId', 'department', 'leaveType', 'approvalStatus']}
         exportable={true}
         exportFilename="Leave_Report"
+        allowViewModeToggle={true}
+        renderGridCard={(l) => (
+          <div
+            key={l.id || `${l.employeeId}-${l.startDate}`}
+            className="rounded-xl border border-gray-200/80 dark:border-[#262b31] bg-white dark:bg-[#15181d] p-4 space-y-3 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-2xs"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-gray-950 dark:text-gray-100 text-sm">{l.employeeName}</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${STATUS_CHIP[l.approvalStatus] || FALLBACK_CHIP}`}>
+                {l.approvalStatus}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60 font-semibold">
+                {l.leaveType}
+              </span>
+              <span className="font-black tabular-nums text-gray-950 dark:text-gray-100">{l.days}d</span>
+            </div>
+            <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-100 dark:border-[#262b31]">
+              {fmtDate(l.startDate)} → {fmtDate(l.endDate)}
+            </div>
+          </div>
+        )}
         columns={[
           {
             key: 'employeeName',
@@ -694,6 +787,51 @@ export function PaymentTaxTab({ data }) {
         searchKeys={['employeeId', 'name', 'department', 'employmentType']}
         exportable={true}
         exportFilename="Payroll_Tax_Register"
+        allowViewModeToggle={true}
+        renderGridCard={(r) => (
+          <div
+            key={r.employeeId}
+            className="rounded-xl border border-gray-200/80 dark:border-[#262b31] bg-white dark:bg-[#15181d] p-4 space-y-3 hover:border-gray-300 dark:hover:border-gray-700 transition-colors shadow-2xs"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="font-bold text-gray-950 dark:text-gray-100 text-sm block truncate">{r.name}</span>
+                <span className="font-mono text-[10px] text-gray-400 dark:text-gray-500 block truncate">
+                  {r.employeeId} · {r.department}
+                </span>
+              </div>
+              {r.exempt ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full whitespace-nowrap dark:text-amber-300 dark:bg-amber-950/40 dark:border-amber-800">
+                  <XCircle size={10} /> Exempt
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap dark:text-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800">
+                  <CheckCircle2 size={10} /> Taxed
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-gray-100 dark:border-[#262b31]">
+              <div>
+                <span className="text-gray-400 dark:text-gray-500 block">Gross Pay</span>
+                <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{formatETB(r.gross)}</span>
+              </div>
+              <div>
+                <span className="text-gray-400 dark:text-gray-500 block">PAYE Tax</span>
+                <span className="font-semibold tabular-nums text-rose-700 dark:text-rose-400">{formatETB(r.incomeTax)}</span>
+              </div>
+              <div>
+                <span className="text-gray-400 dark:text-gray-500 block">Pension 7% + 11%</span>
+                <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-400">
+                  {formatETB(r.pensionEmployee + r.pensionEmployer)}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400 dark:text-gray-500 block">Net Transfer</span>
+                <span className="font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatETB(r.netSalary)}</span>
+              </div>
+            </div>
+          </div>
+        )}
         columns={[
           {
             key: 'employeeId',

@@ -288,7 +288,7 @@ export default function LuxuryDateRangePicker({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-2 w-auto max-w-[95vw] rounded-2xl border border-slate-200 dark:border-[#262b31] shadow-xl bg-white dark:bg-[#15181d] overflow-hidden text-slate-800 dark:text-gray-200">
+        <div className="absolute right-0 z-50 mt-2 w-auto max-w-[95vw] rounded-2xl border border-slate-200 dark:border-[#262b31] shadow-xl bg-white dark:bg-[#15181d] overflow-hidden text-slate-800 dark:text-gray-200">
           <div className="flex flex-col md:flex-row">
             <div className="w-full md:w-44 bg-slate-50/70 dark:bg-[#1c2026] border-b md:border-b-0 md:border-r border-slate-100 dark:border-[#262b31] p-2.5 md:p-3">
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 py-0.5 md:px-2 md:py-1 mb-1">

@@ -42,9 +42,25 @@ export const sendMessageApi = (contactId, text) =>
     body: JSON.stringify({ text }),
   })
 
-export const sendAttachmentApi = (contactId, file) => {
+export const updateMessageApi = (contactId, messageId, text) =>
+  apiFetch(`/${contactId}/messages/${messageId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ text }),
+  })
+
+export const deleteMessageApi = (contactId, messageId) =>
+  apiFetch(`/${contactId}/messages/${messageId}`, { method: 'DELETE' })
+
+export const bulkDeleteMessagesApi = (contactId, ids) =>
+  apiFetch(`/${contactId}/messages/bulk`, {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  })
+
+export const sendAttachmentApi = (contactId, file, caption) => {
   const form = new FormData()
   form.append('file', file)
+  if (caption && caption.trim()) form.append('caption', caption.trim())
   return apiFetch(`/${contactId}/upload`, { method: 'POST', body: form })
 }
 

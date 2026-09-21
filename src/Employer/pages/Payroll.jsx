@@ -209,36 +209,6 @@ function Payroll() {
             exportValue: (r) => r.pensionEmployee,
           },
           {
-            key: 'otherDeductions',
-            header: 'Other Ded.',
-            align: 'right',
-            render: (r) => (
-              <input
-                type="number"
-
-                value={r.otherDeductions}
-                onChange={(e) => handleOverride(r.employeeId, 'otherDeductions', e.target.value)}
-                className="w-18 text-right px-2 py-0.5 text-xs rounded-lg border border-amber-200 bg-amber-50/40 focus:outline-none focus:ring-1 focus:ring-amber-300 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:border-gray-100 dark:disabled:border-gray-800 text-gray-800 dark:text-gray-200"
-              />
-            ),
-            exportValue: (r) => r.otherDeductions,
-          },
-          {
-            key: 'loanDeductions',
-            header: 'Loan Ded.',
-            align: 'right',
-            render: (r) => (
-              <input
-                type="number"
-
-                value={r.loanDeductions}
-                onChange={(e) => handleOverride(r.employeeId, 'loanDeductions', e.target.value)}
-                className="w-18 text-right px-2 py-0.5 text-xs rounded-lg border border-amber-200 bg-amber-50/40 focus:outline-none focus:ring-1 focus:ring-amber-300 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:border-gray-100 dark:disabled:border-gray-800 text-gray-800 dark:text-gray-200"
-              />
-            ),
-            exportValue: (r) => r.loanDeductions,
-          },
-          {
             key: 'netSalary',
             header: 'Net Salary',
             sortable: true,

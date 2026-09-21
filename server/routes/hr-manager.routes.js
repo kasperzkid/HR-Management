@@ -1,61 +1,90 @@
 import { Router } from 'express'
+import {
+  getHRSettings,
+  updateHRSettings,
+} from '../controllers/hr-settings.controller.js'
+import {
+  getHRReports,
+} from '../controllers/hr-reports.controller.js'
 
 import {
   getDashboard,
+
   getEmployees,
   getEmployee,
   createEmployee,
-  importEmployees,
   updateEmployee,
   deleteEmployee,
+
   getAttendance,
   getAttendanceRecord,
   createAttendance,
   updateAttendance,
   deleteAttendance,
+
+  getLeaveRequests,
+  getLeaveRequest,
+  createLeaveRequest,
+  updateLeaveRequest,
+  deleteLeaveRequest,
+
   getPayroll,
+  getPayrollRecord,
   createPayroll,
   updatePayroll,
   deletePayroll,
-  uploadEmployeeDocument,
-  getLeaveRequests,
-  createLeaveRequest,
-  updateLeaveRequest,
 } from '../controllers/hr-manager.controller.js'
-import { upload } from '../middleware/upload.js'
 
 const router = Router()
 
-// Dashboard
+// ============================================================
+// DASHBOARD
+// ============================================================
+
 router.get('/dashboard', getDashboard)
 
-// Employees
+// ============================================================
+// EMPLOYEES
+// ============================================================
+
 router.get('/employees', getEmployees)
 router.get('/employees/:id', getEmployee)
 router.post('/employees', createEmployee)
 router.put('/employees/:id', updateEmployee)
 router.delete('/employees/:id', deleteEmployee)
+// HR Settings
+router.get('/settings', getHRSettings)
+router.put('/settings', updateHRSettings)
+router.get('/reports', getHRReports)
 
-// Employee imports & document uploads (multipart)
-router.post('/employees/import', upload.single('file'), importEmployees)
-router.post('/uploads', upload.single('file'), uploadEmployeeDocument)
+// ============================================================
+// ATTENDANCE
+// ============================================================
 
-// Attendance
 router.get('/attendance', getAttendance)
 router.get('/attendance/:id', getAttendanceRecord)
 router.post('/attendance', createAttendance)
 router.put('/attendance/:id', updateAttendance)
 router.delete('/attendance/:id', deleteAttendance)
 
-// Payroll
+// ============================================================
+// LEAVE MANAGEMENT
+// ============================================================
+
+router.get('/leave', getLeaveRequests)
+router.get('/leave/:id', getLeaveRequest)
+router.post('/leave', createLeaveRequest)
+router.put('/leave/:id', updateLeaveRequest)
+router.delete('/leave/:id', deleteLeaveRequest)
+
+// ============================================================
+// PAYROLL
+// ============================================================
+
 router.get('/payroll', getPayroll)
+router.get('/payroll/:id', getPayrollRecord)
 router.post('/payroll', createPayroll)
 router.put('/payroll/:id', updatePayroll)
 router.delete('/payroll/:id', deletePayroll)
-
-// Leave
-router.get('/leave', getLeaveRequests)
-router.post('/leave', createLeaveRequest)
-router.put('/leave/:id', updateLeaveRequest)
 
 export default router

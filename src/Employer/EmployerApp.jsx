@@ -7,8 +7,7 @@ import Leave from './pages/Leave'
 import Payroll from './pages/Payroll'
 import Payslips from './pages/Payslips'
 import Reports from './pages/Reports'
-import SettingsPage from './pages/Settings'
-import PaymentInfo from './pages/PaymentInfo'
+import EmployeeSettingsPage from './pages/EmployeeSettings'
 import Profile from './pages/Profile'
 import Inbox from './pages/Inbox'
 
@@ -26,13 +25,10 @@ function EmployerApp() {
           {/* Payroll & Finance routes */}
           <Route path="payroll" element={<Payroll />} />
           <Route path="payslips" element={<Payslips />} />
-          <Route path="salary" element={<Payroll />} />
-          <Route path="payment-info" element={<PaymentInfo />} />
-
-          {/* Reports & settings */}
+          <Route path="salary" element={<Payroll />} />          {/* Reports & settings */}
           <Route path="reports" element={<Reports />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="admin" element={<SettingsPage />} />
+          {/* Personal settings (profile, preferences, notifications, security) */}
+          <Route path="settings" element={<EmployeeSettingsPage />} />
           <Route path="profile" element={<Profile />} />
 
           {/* Inbox / messages */}

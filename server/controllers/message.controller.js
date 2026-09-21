@@ -24,6 +24,7 @@ function serializeMessage(msg, viewerId) {
     time: new Date(msg.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     createdAt: msg.createdAt,
     read: msg.read,
+    edited: msg.edited,
     attachment: msg.attachmentUrl
       ? { url: msg.attachmentUrl, name: msg.attachmentName, type: msg.attachmentType }
       : null,
@@ -49,6 +50,18 @@ function emitNewMessage(ioInstance, senderId, contactId, message) {
   ioInstance
     .to(`user:${contactId}`)
     .emit('message:new', { contactId: senderId, message: serializeMessage(message, contactId) })
+}
+
+function emitMessageUpdated(ioInstance, senderId, contactId, message) {
+  ioInstance
+    .to(`user:${contactId}`)
+    .emit('message:updated', { contactId: senderId, message: serializeMessage(message, contactId) })
+}
+
+function emitMessageDeleted(ioInstance, senderId, contactId, messageId) {
+  ioInstance
+    .to(`user:${contactId}`)
+    .emit('message:deleted', { contactId: senderId, messageId })
 }
 
 export async function getContacts(req, res) {
@@ -216,6 +229,71 @@ export async function sendMessage(req, res) {
 
   emitNewMessage(io, meId, contactId, message)
   res.status(201).json({ message: serializeMessage(message, meId) })
+}
+
+export async function updateMessage(req, res) {
+  const meId = req.user.id
+  const contactId = Number(req.params.contactId)
+  const { messageId } = req.params
+  const text = String(req.body?.text || '').trim()
+
+  if (!Number.isInteger(contactId)) return res.status(400).json({ message: 'Invalid contact' })
+  if (!text) return res.status(400).json({ message: 'Message text is required' })
+
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, senderId: meId, conversation: { OR: [{ userAId: contactId }, { userBId: contactId }] } },
+  })
+  if (!message) return res.status(404).json({ message: 'Message not found' })
+
+  const updated = await prisma.message.update({
+    where: { id: message.id },
+    data: { text, edited: true },
+  })
+
+  emitMessageUpdated(io, meId, contactId, updated)
+  res.json({ message: serializeMessage(updated, meId) })
+}
+
+export async function deleteMessage(req, res) {
+  const meId = req.user.id
+  const contactId = Number(req.params.contactId)
+  const { messageId } = req.params
+
+  if (!Number.isInteger(contactId)) return res.status(400).json({ message: 'Invalid contact' })
+
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, senderId: meId, conversation: { OR: [{ userAId: contactId }, { userBId: contactId }] } },
+  })
+  if (!message) return res.status(404).json({ message: 'Message not found' })
+
+  await prisma.message.delete({ where: { id: message.id } })
+
+  emitMessageDeleted(io, meId, contactId, message.id)
+  res.json({ ok: true })
+}
+
+export async function bulkDeleteMessages(req, res) {
+  const meId = req.user.id
+  const contactId = Number(req.params.contactId)
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : []
+
+  if (!Number.isInteger(contactId)) return res.status(400).json({ message: 'Invalid contact' })
+  if (ids.length === 0) return res.status(400).json({ message: 'No message ids provided' })
+
+  const conversation = await prisma.conversation.findFirst({
+    where: { OR: [{ userAId: meId, userBId: contactId }, { userAId: contactId, userBId: meId }] },
+  })
+  if (conversation) {
+    await prisma.message.deleteMany({
+      where: { id: { in: ids }, senderId: meId, conversationId: conversation.id },
+    })
+  }
+
+  ids.forEach((messageId) => {
+    emitMessageDeleted(io, meId, contactId, messageId)
+  })
+
+  res.json({ ok: true, deleted: ids.length })
 }
 
 export async function uploadAttachment(req, res) {

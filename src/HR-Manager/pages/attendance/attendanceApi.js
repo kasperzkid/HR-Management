@@ -16,11 +16,12 @@ import { buildRowsFromDatabase, getDateKey, getDaysInMonth } from './attendanceH
 const API_URL = '/api/hr-manager'
 
 export async function fetchMonthData(monthStart, monthEnd) {
-  const [employeesResponse, attendanceResponse] = await Promise.all([
+  const [employeesResponse, attendanceResponse, leaveResponse] = await Promise.all([
     fetch(`${API_URL}/employees`, { headers: authHeaders() }),
     fetch(`${API_URL}/attendance?startDate=${monthStart}&endDate=${monthEnd}`, {
       headers: authHeaders(),
     }),
+    fetch(`${API_URL}/leave`, { headers: authHeaders() }),
   ])
 
   if (!employeesResponse.ok) {
@@ -31,14 +32,20 @@ export async function fetchMonthData(monthStart, monthEnd) {
     throw new Error('Unable to load attendance from the database')
   }
 
-  const [employeeData, attendanceData] = await Promise.all([
+  if (!leaveResponse.ok) {
+    throw new Error('Unable to load leave requests from the database')
+  }
+
+  const [employeeData, attendanceData, leaveData] = await Promise.all([
     employeesResponse.json(),
     attendanceResponse.json(),
+    leaveResponse.json(),
   ])
 
   return {
     employees: Array.isArray(employeeData) ? employeeData : [],
     attendance: Array.isArray(attendanceData) ? attendanceData : [],
+    leaves: Array.isArray(leaveData) ? leaveData : [],
   }
 }
 

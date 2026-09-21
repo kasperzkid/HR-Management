@@ -3,6 +3,11 @@
 // overtime and gross/net computation. Extracted from Payroll.jsx.
 // ─────────────────────────────────────────────────────────────
 
+import {
+  calculateTieredOvertimePay,
+  tieredOvertimeHours,
+} from '../../../lib/overtime'
+
 export const API_BASE = '/api/hr-manager'
 
 export const EMPLOYEE_PENSION_RATE = 0.07
@@ -114,6 +119,8 @@ export function calculateOvertimePay(basicSalary, overtimeHours) {
   return Number((hours * hourlyRate * OVERTIME_MULTIPLIER).toFixed(2))
 }
 
+export { calculateTieredOvertimePay, tieredOvertimeHours }
+
 export function calculatePreview(employee, form) {
   const basicSalary = Number(employee?.basicSalary || 0)
   const transportAllowance = Number(employee?.transportAllowance || 0)
@@ -196,9 +203,15 @@ export function getAttendanceSummary(records) {
     summary.lateMinutes += Number(record.late || record.lateMinutes || record.late_minutes || 0)
   }
 
+  const tiers = tieredOvertimeHours(records || [])
+
   return {
     ...summary,
     overtimeHours: Number(summary.overtimeHours.toFixed(2)),
+    regularOvertimeHours: Number(tiers.regular.toFixed(2)),
+    nightOvertimeHours: Number(tiers.night.toFixed(2)),
+    restDayOvertimeHours: Number(tiers.restDay.toFixed(2)),
+    holidayOvertimeHours: Number(tiers.holiday.toFixed(2)),
   }
 }
 

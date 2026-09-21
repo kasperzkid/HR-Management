@@ -58,6 +58,8 @@ export { getAddisNow }
 // Shared punch status — one store consumed by the header widget
 // and the Attendance page (emergency button + status cards) so
 // they never disagree. Backend is the source of truth.
+// Also carries the HR-adjusted status of today's record so the
+// employee sees HR feedback (Acknowledged / Absent / …) live.
 // ─────────────────────────────────────────────────────────────
 const listeners = new Set()
 let state = {
@@ -66,6 +68,12 @@ let state = {
   checkInAt: null,
   checkedOut: false,
   checkOutAt: null,
+  isEmergency: false,
+  employeeRemark: null,
+  hrStatus: null,
+  hrNote: null,
+  hrUpdatedAt: null,
+  onLeave: null,
 }
 
 export function getPunchState() {
@@ -84,6 +92,12 @@ export function applyPunchStatus(status) {
     checkInAt: status.checkIn || null,
     checkedOut: Boolean(status.checkedOut),
     checkOutAt: status.checkOut || null,
+    isEmergency: Boolean(status.isEmergency),
+    employeeRemark: status.employeeRemark || null,
+    hrStatus: status.hrStatus || null,
+    hrNote: status.hrNote || null,
+    hrUpdatedAt: status.hrUpdatedAt || null,
+    onLeave: status.onLeave || null,
   })
 }
 

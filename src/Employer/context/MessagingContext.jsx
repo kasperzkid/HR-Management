@@ -7,6 +7,9 @@ import {
   fetchThreadApi,
   sendMessageApi,
   sendAttachmentApi,
+  updateMessageApi,
+  deleteMessageApi,
+  bulkDeleteMessagesApi,
   markReadApi,
   clearChatApi,
   deleteChatApi,
@@ -260,12 +263,41 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
     setContacts((prev) => prev.map((c) => (String(c.id) === String(userId) ? { ...c, online } : c)))
   }, [])
 
+  const removeMessages = useCallback((contactId, ids) => {
+    const idSet = new Set(ids.map(String))
+    const key = String(contactId)
+    setThreads((prev) => {
+      const current = prev[key] || []
+      const nextMessages = current.filter((m) => !idSet.has(m.id))
+      const store = getLocalSharedStore()
+      store.threads[key] = nextMessages
+      saveLocalSharedStore(store)
+      return { ...prev, [key]: nextMessages }
+    })
+  }, [])
+
+  const handleMessageUpdated = useCallback(
+    ({ contactId, message }) => {
+      upsertMessage(String(contactId), message)
+    },
+    [upsertMessage]
+  )
+
+  const handleMessageDeleted = useCallback(
+    ({ contactId, messageId }) => {
+      removeMessages(String(contactId), [messageId])
+    },
+    [removeMessages]
+  )
+
   useEffect(() => {
     reloadContactsAndThreads()
 
     const socket = connectSocket()
     if (socket) {
       socket.on('message:new', handleIncoming)
+      socket.on('message:updated', handleMessageUpdated)
+      socket.on('message:deleted', handleMessageDeleted)
       socket.on('presence', handlePresence)
     }
 
@@ -291,6 +323,10 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
               message: { ...message, from: 'them', senderName: 'Sarah Jenkins (HR)' },
             })
           }
+        } else if (type === 'MESSAGE_UPDATED' && payload) {
+          upsertMessage(String(payload.contactId), payload.message)
+        } else if (type === 'MESSAGE_DELETED' && payload) {
+          removeMessages(String(payload.contactId), payload.messageIds || [payload.messageId])
         } else if (type === 'CONVERSATION_STARTED') {
           reloadContactsAndThreads()
         }
@@ -300,6 +336,8 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
     return () => {
       if (socket) {
         socket.off('message:new', handleIncoming)
+        socket.off('message:updated', handleMessageUpdated)
+        socket.off('message:deleted', handleMessageDeleted)
         socket.off('presence', handlePresence)
       }
       disconnectSocket()
@@ -308,7 +346,7 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
         channelRef.current = null
       }
     }
-  }, [handleIncoming, handlePresence, isHR, reloadContactsAndThreads])
+  }, [handleIncoming, handlePresence, handleMessageUpdated, handleMessageDeleted, removeMessages, upsertMessage, isHR, reloadContactsAndThreads])
 
   const sendMessage = useCallback(
     async (contactId, text) => {
@@ -387,15 +425,16 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
   )
 
   const sendAttachment = useCallback(
-    async (contactId, file) => {
+    async (contactId, file, caption) => {
       const cId = String(contactId)
+      const text = String(caption || '').trim()
       const tempId = `pending-${Date.now()}`
       const nowTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       const nowIso = new Date().toISOString()
 
       upsertMessage(cId, {
         id: tempId,
-        text: '',
+        text,
         from: 'me',
         senderId: isHR ? 2 : 1,
         time: nowTime,
@@ -406,13 +445,86 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
       })
 
       try {
-        const { message } = await sendAttachmentApi(cId, file)
+        const { message } = await sendAttachmentApi(cId, file, text)
         upsertMessage(cId, message, tempId)
       } catch {
         /* upload failed */
       }
     },
     [isHR, upsertMessage]
+  )
+
+  const editMessage = useCallback(
+    async (contactId, messageId, text) => {
+      const cId = String(contactId)
+      const trimmed = String(text || '').trim()
+      if (!trimmed) return
+      const target = (threadsRef.current[cId] || []).find((m) => m.id === messageId)
+      if (!target) return
+
+      const optimistic = { ...target, text: trimmed, edited: true, pending: true }
+      upsertMessage(cId, optimistic)
+
+      if (channelRef.current) {
+        channelRef.current.postMessage({
+          type: 'MESSAGE_UPDATED',
+          payload: { contactId: cId, message: optimistic },
+        })
+      }
+
+      try {
+        const { message } = await updateMessageApi(cId, messageId, trimmed)
+        upsertMessage(cId, message, messageId)
+      } catch {
+        upsertMessage(cId, { ...target, pending: false }, messageId)
+      }
+    },
+    [upsertMessage]
+  )
+
+  const deleteMessage = useCallback(
+    async (contactId, messageId) => {
+      const cId = String(contactId)
+      const prev = (threadsRef.current[cId] || []).find((m) => m.id === messageId)
+      removeMessages(cId, [messageId])
+
+      if (channelRef.current) {
+        channelRef.current.postMessage({
+          type: 'MESSAGE_DELETED',
+          payload: { contactId: cId, messageId },
+        })
+      }
+
+      try {
+        await deleteMessageApi(cId, messageId)
+      } catch {
+        if (prev) upsertMessage(cId, prev)
+      }
+    },
+    [removeMessages, upsertMessage]
+  )
+
+  const bulkDeleteMessages = useCallback(
+    async (contactId, ids) => {
+      const cId = String(contactId)
+      const clean = (ids || []).map(String).filter(Boolean)
+      if (clean.length === 0) return
+      const idSet = new Set(clean)
+      const removed = (threadsRef.current[cId] || []).filter((m) => idSet.has(m.id))
+      removeMessages(cId, clean)
+
+      channelRef.current?.postMessage({
+        type: 'MESSAGE_DELETED',
+        payload: { contactId: cId, messageIds: clean },
+      })
+
+      try {
+        await bulkDeleteMessagesApi(cId, clean)
+      } catch {
+        removed.forEach((m) => upsertMessage(cId, m))
+      }
+    },
+    [removeMessages, upsertMessage]
   )
 
   const markContactRead = useCallback(
@@ -545,6 +657,9 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
     unreadNotifications,
     sendMessage,
     sendAttachment,
+    editMessage,
+    deleteMessage,
+    bulkDeleteMessages,
     startConversation,
     markContactRead,
     markAllRead,

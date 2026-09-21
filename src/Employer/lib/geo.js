@@ -1,8 +1,8 @@
 // Geofencing for the punch clock. Employees may only check in / check out
 // while physically inside the office radius (default 50m) around the office.
 
-export const OFFICE_LAT = 9.0245
-export const OFFICE_LNG = 38.7485
+export const OFFICE_LAT = 8.9994852
+export const OFFICE_LNG = 38.8206109
 export const PUNCH_RADIUS_METERS = 50
 
 export function haversineMeters(lat1, lng1, lat2, lng2) {
@@ -44,6 +44,11 @@ export function getCurrentPosition(options = { enableHighAccuracy: true, timeout
 
 export function distanceToOfficeMeters(latitude, longitude) {
   return haversineMeters(latitude, longitude, OFFICE_LAT, OFFICE_LNG)
+}
+
+export function formatDistance(meters) {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)}km`
+  return `${Math.round(meters)}m`
 }
 
 // Returns { latitude, longitude, distanceMeters } or throws.

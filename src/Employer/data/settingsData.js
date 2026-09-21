@@ -63,7 +63,7 @@ export const SETTINGS = {
 
   employmentTypes: ['Permanent', 'Contractual', 'Intern'],
   employmentStatuses: ['Active', 'On Leave', 'Resigned', 'Terminated'],
-  leaveTypes: ['Annual', 'Sick', 'Maternity', 'Paternity', 'Unpaid', 'Study'],
+  leaveTypes: ['Annual Leave', 'Sick Leave', 'Maternity Leave', 'Paternity Leave', 'Unpaid Leave', 'Study Leave'],
   attendanceStatuses: ['Present', 'Absent', 'Sick Leave', 'On Leave'],
   approvalStatuses: ['Pending', 'Approved', 'Rejected'],
   genders: ['Male', 'Female'],

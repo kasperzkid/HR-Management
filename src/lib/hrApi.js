@@ -5,14 +5,12 @@ const API_BASE = '/api/hr-manager'
 export function authHeaders(extra = {}) {
   const token = getToken()
   return {
-    ...(token && !token.startsWith('session-')
-      ? { Authorization: `Bearer ${token}` }
-      : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...extra,
   }
 }
 
-async function hrFetch(path, options = {}) {
+export async function hrFetch(path, options = {}) {
   const isForm = options.body instanceof FormData
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
