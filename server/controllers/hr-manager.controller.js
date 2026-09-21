@@ -167,6 +167,31 @@ export async function getEmployees(req, res) {
   }
 }
 
+export async function getCurrentUserEmployee(req, res) {
+  try {
+    const userId = req.user.id
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const email = (user.email || '').toLowerCase()
+    const employee = await prisma.employee.findFirst({
+      where: { email },
+      include: EMPLOYEE_INCLUDE,
+    })
+
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee record not found' })
+    }
+
+    res.json(employee)
+  } catch (error) {
+    console.error('Get current user employee error:', error)
+    res.status(500).json({ message: 'Failed to load employee record' })
+  }
+}
+
 export async function getEmployee(req, res) {
   try {
     const { id } = req.params

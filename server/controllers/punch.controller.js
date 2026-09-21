@@ -21,8 +21,8 @@ const STANDARD_WORK_MINUTES = 8 * 60 + 30 // 08:00 → 17:30 including break
 // ── Geofencing ─────────────────────────────────────────────
 // Punches are only accepted while the employee is physically within
 // PUNCH_RADIUS_METERS of the office coordinates.
-const OFFICE_LATITUDE = 8.9994852
-const OFFICE_LONGITUDE = 38.8206109
+const OFFICE_LATITUDE = 9.0245
+const OFFICE_LONGITUDE = 38.7485
 const PUNCH_RADIUS_METERS = 50
 
 function haversineMeters(lat1, lng1, lat2, lng2) {
