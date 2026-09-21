@@ -18,6 +18,7 @@ import {
   Pencil,
   ListChecks,
   Check,
+  ChevronLeft,
 } from 'lucide-react'
 import { useMessaging } from '../context/messagingStore'
 import { fetchUsersApi } from '../../lib/messagesApi'
@@ -88,17 +89,17 @@ function NewConversationModal({ open, onClose, onSelect }) {
         <div className="px-5 py-4 border-b border-gray-100 dark:border-[#262b31] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gray-950 dark:bg-white text-white dark:text-gray-950 flex items-center justify-center shadow-xs">
-              <UserPlus size={16} />
+              <UserPlus size={24} />
             </div>
             <div>
               <h3 className="text-sm font-bold text-gray-950 dark:text-gray-100">New conversation</h3>
               <p className="text-[11px] text-gray-500 dark:text-gray-400">Select a team member or employee to message</p>
             </div>
           </div>
-          <button
+<button
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1c2026] rounded-lg transition-colors cursor-pointer"
-          >
+            className="px-4 sm:px-5 rounded-lg transition-colors cursor-pointer"
+>
             <X size={16} />
           </button>
         </div>
@@ -312,9 +313,21 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
     return thread.length > 0 || c.lastMessage !== null
   })
 
+  // Track screen size for responsive layout: mobile = stacked/routing, desktop = side-by-side
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => {
+    const check = () => setIsDesktop(window.innerWidth >= 1024)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  // On mobile: only set activeContact when a contact is selected via route
+  // On desktop: always select first contact for side-by-side layout
   const activeContact =
-    relevantContacts.find((c) => String(c.id) === String(contactId || relevantContacts[0]?.id)) ||
-    relevantContacts[0]
+    contactId
+      ? relevantContacts.find((c) => String(c.id) === String(contactId))
+      : (isDesktop ? relevantContacts[0] : null)
 
   const activeContactId = activeContact ? String(activeContact.id) : null
   const messages = activeContactId ? threads[activeContactId] || [] : []
@@ -491,8 +504,8 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
           2. MESSAGING WORKSPACE (Side-by-side or stacked on mobile)
          ───────────────────────────────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row gap-5 min-h-[620px] h-[calc(100vh-210px)] max-h-[820px]">
-        {/* LEFT SIDEBAR: CONTACT LIST */}
-        <aside className="w-full lg:w-80 shrink-0 flex flex-col bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden">
+        {/* LEFT SIDEBAR: CONTACT LIST — hidden on mobile when a contact is selected */}
+        <aside className={`w-full lg:w-80 shrink-0 flex flex-col bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden ${!isDesktop && activeContact ? 'hidden' : ''}`}>
           {/* Search bar */}
           <div className="p-3.5 border-b border-gray-100 dark:border-[#262b31]">
             <div className="relative">
@@ -593,8 +606,8 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
           </div>
         </aside>
 
-        {/* RIGHT PANEL: CHAT THREAD */}
-        <section className="flex-1 flex flex-col bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden min-w-0">
+        {/* RIGHT PANEL: CHAT THREAD — hidden on mobile when no contact is selected */}
+        <section className={`flex-1 flex flex-col bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs overflow-hidden min-w-0 ${!isDesktop && !activeContact ? 'hidden' : ''}`}>
           {!activeContact ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-gray-400 dark:text-gray-500">
               <InboxIcon className="w-12 h-12 mb-3 text-gray-300 dark:text-gray-600 stroke-1" />
@@ -619,8 +632,17 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
               {/* Chat Thread Header */}
               <header className="px-5 py-3.5 border-b border-gray-100 dark:border-[#262b31] flex items-center justify-between gap-3 bg-white dark:bg-[#15181d] shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
+                  {/* Back button — mobile only */}
+                  <button
+                    type="button"
+                    onClick={() => navigate(basePath, { replace: true })}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors cursor-pointer flex-shrink-0 lg:hidden"
+                    aria-label="Back to conversations"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
                   <div
-                    className={`w-9 h-9 rounded-full ${activeContact.color || 'bg-gray-700'} text-white font-bold text-xs flex items-center justify-center shadow-2xs shrink-0`}
+                    className={`w-12 h-12 rounded-full ${activeContact.color || 'bg-gray-700'} text-white font-bold text-xs flex items-center justify-center shadow-2xs shrink-0`}
                   >
                     {activeContact.initials || 'U'}
                   </div>

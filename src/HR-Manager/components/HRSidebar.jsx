@@ -44,7 +44,7 @@ function HRSidebar({ mobileOpen = false, onClose, onOpenSearch }) {
     finance: true,
   })
 
-  const collapsed = !isHovered
+  const collapsed = !isHovered && !mobileOpen
 
   const toggleSection = (key) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -96,7 +96,7 @@ function HRSidebar({ mobileOpen = false, onClose, onOpenSearch }) {
           'transition-all duration-300 ease-in-out select-none',
           collapsed ? 'lg:w-[72px]' : 'lg:w-[250px]',
           mobileOpen
-            ? 'translate-x-0 w-[260px] shadow-2xl'
+            ? 'translate-x-0 w-[85vw] max-w-[280px] shadow-2xl'
             : '-translate-x-full lg:translate-x-0',
         ].join(' ')}
       >

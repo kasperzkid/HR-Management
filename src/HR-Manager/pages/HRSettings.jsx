@@ -925,8 +925,8 @@ function HRSettings() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <aside className="w-full lg:w-56 shrink-0 lg:sticky lg:top-6">
-          <nav className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0" aria-label="HR Settings sections">
+        <aside className="w-full lg:w-56 lg:sticky lg:top-6 bg-white dark:bg-[#15181d] border-r border-slate-200 dark:border-[#262b31] shrink-0">
+          <nav className="flex-col gap-1.5 pb-2" aria-label="HR Settings sections">
             {NAV_GROUPS.map((group) => {
               const groupActive = group.items.some((item) => item.id === activeSection)
               return (
@@ -947,7 +947,7 @@ function HRSettings() {
                         type="button"
                         onClick={() => setActiveSection(id)}
                         onMouseEnter={() => setActiveSection(id)}
-                        className={`group flex items-center gap-3 border-l-[3px] px-3 py-2 text-left whitespace-nowrap transition-colors min-w-[160px] lg:min-w-0 ${
+                        className={`group flex w-full items-center gap-3 border-l-[3px] px-3 py-2 text-left whitespace-nowrap transition-colors min-w-[160px] lg:min-w-0 ${
                           isActive
                             ? 'border-gray-950 bg-white text-gray-950 shadow-2xs dark:border-white dark:bg-[#22262c] dark:text-white'
                             : 'border-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-[#1c2026] dark:hover:text-gray-100'

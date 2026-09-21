@@ -9,10 +9,10 @@ function normalizeStatus(raw) {
   if (s === 'P' || s === 'PRESENT') return 'present'
   if (s === 'PH') return 'present' // half-day counts as a working day
   if (s === 'A' || s === 'ABSENT') return 'absent'
-  if (s === 'SL' || s === 'SICK' || s === 'SICK_LEAVE' || s === 'SICKLEAVE') return 'sick'
-  if (s === 'AL' || s === 'ANNUAL_LEAVE' || s === 'ANNUALLEAVE' || s === 'ON_LEAVE') return 'on_leave'
-  if (s === 'ML' || s === 'MEDICAL_LEAVE' || s === 'MEDICALLEAVE') return 'on_leave'
-  if (s === 'OL' || s === 'OTHER_LEAVE' || s === 'OTHERLEAVE') return 'on_leave'
+  if (s === 'SL' || s === 'SICK' || s === 'SICK_LEAVE' || s === 'SICKLEAVE' || s === 'SICK LEAVE') return 'sick'
+  if (s === 'AL' || s === 'ANNUAL_LEAVE' || s === 'ANNUALLEAVE' || s === 'ON_LEAVE' || s === 'ANNUAL LEAVE') return 'on_leave'
+  if (s === 'ML' || s === 'MEDICAL_LEAVE' || s === 'MEDICALLEAVE' || s === 'MEDICAL LEAVE') return 'on_leave'
+  if (s === 'OL' || s === 'OTHER_LEAVE' || s === 'OTHERLEAVE' || s === 'OTHER LEAVE') return 'on_leave'
   return 'unknown'
 }
 

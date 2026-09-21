@@ -71,13 +71,6 @@ function HRLayout() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#F3F4F6] dark:bg-[#0a0d10] text-gray-800 dark:text-gray-200">
       <div className="relative flex flex-1 overflow-hidden dark:bg-[#0a0d10]">
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
         <HRSidebar
           mobileOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}

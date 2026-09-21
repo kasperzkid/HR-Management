@@ -105,7 +105,7 @@ function DashboardSlide() {
   ]
 
   return (
-    <div className="w-full max-w-[590px] h-[540px] bg-white text-gray-950 rounded-2xl shadow-2xl border border-gray-200/90 flex flex-col justify-between overflow-hidden">
+    <div className="w-full max-w-[590px] h-[280px] sm:h-[380px] lg:h-[540px] bg-white text-gray-950 rounded-2xl shadow-2xl border border-gray-200/90 flex flex-col justify-between overflow-hidden">
       {/* Constant Top Header with Site Logo */}
       <SlideHeader />
 
@@ -125,7 +125,7 @@ function DashboardSlide() {
           {kpis.map((k) => (
             <div
               key={k.label}
-              className={`p-3 h-[98px] rounded-xl border bg-gradient-to-b ${k.color} transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xs flex flex-col justify-between`}
+              className={`p-2.5 sm:p-3 h-[70px] sm:h-[90px] lg:h-[98px] rounded-xl border bg-gradient-to-b ${k.color} transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xs flex flex-col justify-between`}
             >
               <div className="flex items-center justify-between">
                 <div className="w-7 h-7 rounded-lg bg-white/90 backdrop-blur-xs flex items-center justify-center shadow-2xs">
@@ -137,10 +137,10 @@ function DashboardSlide() {
               </div>
               <div>
                 <div className="flex items-baseline gap-1">
-                  <p className="text-2xl font-black text-gray-950 tracking-tight">{k.value}</p>
+                  <p className="text-xl sm:text-2xl font-black text-gray-950 tracking-tight">{k.value}</p>
                   {k.unit && <span className="text-xs font-bold text-gray-500">{k.unit}</span>}
                 </div>
-                <p className="text-[10px] font-medium text-gray-600 mt-0.5">{k.label}</p>
+                <p className="text-[10px] sm:text-[11px] font-medium text-gray-600 mt-0.5">{k.label}</p>
               </div>
             </div>
           ))}
@@ -157,12 +157,12 @@ function DashboardSlide() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {depts.map((d) => (
-              <div key={d.name} className="p-2 h-[46px] rounded-lg bg-white border border-gray-200/70 flex flex-col justify-between">
-                <div className="flex items-center justify-between text-[9px]">
+              <div key={d.name} className="p-2 sm:p-2.5 h-[34px] sm:h-[40px] lg:h-[46px] rounded-lg bg-white border border-gray-200/70 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-[9px] sm:text-[10px]">
                   <span className="font-semibold text-gray-700 truncate">{d.name}</span>
                   <span className="font-bold text-gray-950">{d.count}</span>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-gray-100 rounded-full h-1 sm:h-1.5 overflow-hidden">
                   <div className={`h-full rounded-full ${d.bar}`} style={{ width: d.pct }} />
                 </div>
               </div>
@@ -179,7 +179,7 @@ function DashboardSlide() {
             </span>
             <span className="text-[10px] font-semibold text-gray-400">Live Status</span>
           </div>
-          <div className="relative h-[190px] overflow-hidden">
+          <div className="relative h-[110px] sm:h-[150px] lg:h-[190px] overflow-hidden">
             {/* Gradient masks for smooth top/bottom edge transition */}
             <div className="absolute top-0 inset-x-0 h-4 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
             <div className="absolute bottom-0 inset-x-0 h-4 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
@@ -251,7 +251,7 @@ const CHAT_MESSAGES = [
 
 function ChatSlide({ chatStep }) {
   return (
-    <div className="w-full max-w-[590px] h-[540px] bg-white text-gray-950 rounded-2xl shadow-2xl border border-gray-200/90 flex flex-col justify-between overflow-hidden">
+    <div className="w-full max-w-[590px] h-[280px] sm:h-[380px] lg:h-[540px] bg-white text-gray-950 rounded-2xl shadow-2xl border border-gray-200/90 flex flex-col justify-between overflow-hidden">
       {/* Constant Top Header with Site Logo */}
       <SlideHeader />
 
@@ -296,30 +296,30 @@ function ChatSlide({ chatStep }) {
                 <img
                   src={msg.avatar}
                   alt={msg.name}
-                  className="w-8 h-8 rounded-xl object-cover shadow-xs ring-1 ring-gray-200/80"
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl object-cover shadow-xs ring-1 ring-gray-200/80"
                 />
                 <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
               </div>
 
               {/* Bubble Body */}
-              <div className={`flex flex-col max-w-[80%] ${msg.isMe ? 'items-end' : 'items-start'}`}>
+              <div className={`flex flex-col max-w-[85%] sm:max-w-[80%] ${msg.isMe ? 'items-end' : 'items-start'}`}>
                 <div className={`flex items-center gap-1.5 mb-1 ${msg.isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                  <span className="text-[11px] font-extrabold text-gray-950">{msg.name}</span>
-                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${msg.roleBadge}`}>
+                  <span className="text-[10px] sm:text-[11px] font-extrabold text-gray-950">{msg.name}</span>
+                  <span className={`text-[7px] sm:text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${msg.roleBadge}`}>
                     {msg.role}
                   </span>
-                  <span className="text-[9px] text-gray-400">{msg.time}</span>
+                  <span className="text-[8px] text-gray-400">{msg.time}</span>
                 </div>
 
                 <div
-                  className={`relative px-4 py-2.5 rounded-2xl text-[11px] leading-relaxed shadow-sm ${
-                    msg.isMe
-                      ? msg.whiteBubble
+                    className={`relative px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl text-[10px] sm:text-[11px] leading-relaxed shadow-sm ${
+                      msg.isMe && msg.whiteBubble
                         ? 'bg-white text-gray-800 border border-gray-200/90 rounded-tr-xs shadow-gray-100'
-                        : 'bg-gradient-to-r from-gray-950 via-indigo-950 to-gray-950 text-white rounded-tr-xs shadow-indigo-950/20'
-                      : 'bg-white text-gray-800 border border-gray-200/90 rounded-tl-xs shadow-gray-100'
-                  }`}
-                >
+                        : msg.isMe
+                          ? 'bg-gradient-to-r from-gray-950 via-indigo-950 to-gray-950 text-white rounded-tr-xs shadow-indigo-950/20'
+                          : 'bg-white text-gray-800 border border-gray-200/90 rounded-tl-xs shadow-gray-100'
+                    }`}
+                  >
                   <p>{msg.message}</p>
                 </div>
 
@@ -376,8 +376,10 @@ function ChatSlide({ chatStep }) {
 /* ─────────────── Slide 3: Executive Risk & Reporting Dashboard (Matching report.png) ─────────────── */
 function ReportSlide() {
   const [mounted, setMounted] = React.useState(false)
+  const [barScale, setBarScale] = React.useState(1.5)
   React.useEffect(() => {
     const t = setTimeout(() => setMounted(true), 80)
+    setBarScale(window.innerWidth < 640 ? 0.9 : 1.5)
     return () => clearTimeout(t)
   }, [])
 
@@ -397,7 +399,7 @@ function ReportSlide() {
   ]
 
   return (
-    <div className="w-full max-w-[590px] h-[540px] bg-white text-gray-950 rounded-2xl shadow-2xl border border-gray-200/90 flex flex-col justify-between overflow-hidden">
+    <div className="w-full max-w-[590px] h-[280px] sm:h-[380px] lg:h-[540px] bg-white text-gray-950 rounded-2xl shadow-2xl border border-gray-200/90 flex flex-col justify-between overflow-hidden">
       {/* Constant Top Header with Site Logo */}
       <SlideHeader />
 
@@ -420,8 +422,8 @@ function ReportSlide() {
             <MoreHorizontal size={13} className="text-gray-400 cursor-pointer" />
           </div>
           <div className="flex flex-col items-center justify-center my-auto py-1">
-            <div className="relative w-36 h-22 flex items-end justify-center">
-              <svg className="w-36 h-22 overflow-visible" viewBox="0 0 120 68">
+            <div className="relative w-28 sm:w-32 lg:w-36 h-16 sm:h-18 lg:h-22 flex items-end justify-center">
+              <svg className="w-28 sm:w-32 lg:w-36 h-16 sm:h-18 lg:h-22 overflow-visible" viewBox="0 0 120 68">
                 {/* Background muted gray arc */}
                 <path
                   d="M 16 64 A 44 44 0 0 1 104 64"
@@ -474,7 +476,7 @@ function ReportSlide() {
             <MoreHorizontal size={13} className="text-gray-400 cursor-pointer" />
           </div>
           <div className="flex flex-col justify-end h-full pt-1 pb-0.5">
-            <div className="h-20 w-full relative overflow-hidden rounded-sm">
+            <div className="h-14 sm:h-18 lg:h-20 w-full relative overflow-hidden rounded-sm">
               {/* Scan beam */}
               <div
                 className="animate-scan-beam absolute top-0 bottom-0 w-px bg-gray-400/70 pointer-events-none"
@@ -555,7 +557,7 @@ function ReportSlide() {
             <MoreHorizontal size={13} className="text-gray-400 cursor-pointer" />
           </div>
           <div className="relative flex flex-col justify-end h-full pt-1 pb-0.5">
-            <div className="flex items-end gap-1 h-20 px-1 relative">
+            <div className="flex items-end gap-1 h-14 sm:h-18 lg:h-20 px-1 relative">
               {/* Overlaid line with dots in site monochrome */}
               <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible" viewBox="0 0 180 50" preserveAspectRatio="none">
                 <path
@@ -591,28 +593,28 @@ function ReportSlide() {
                   <div
                     className="w-full bg-gray-200 rounded-t-xs"
                     style={{
-                      height: mounted ? `${bar.h[3] * 1.5}px` : '0px',
+                      height: mounted ? `${bar.h[3] * barScale}px` : '0px',
                       transition: `height 0.6s cubic-bezier(0.34,1.56,0.64,1) ${idx * 0.06}s`,
                     }}
                   />
                   <div
                     className="w-full bg-gray-400"
                     style={{
-                      height: mounted ? `${bar.h[2] * 1.5}px` : '0px',
+                      height: mounted ? `${bar.h[2] * barScale}px` : '0px',
                       transition: `height 0.6s cubic-bezier(0.34,1.56,0.64,1) ${0.05 + idx * 0.06}s`,
                     }}
                   />
                   <div
                     className="w-full bg-gray-700"
                     style={{
-                      height: mounted ? `${bar.h[1] * 1.5}px` : '0px',
+                      height: mounted ? `${bar.h[1] * barScale}px` : '0px',
                       transition: `height 0.6s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + idx * 0.06}s`,
                     }}
                   />
                   <div
                     className="w-full bg-black rounded-b-xs"
                     style={{
-                      height: mounted ? `${bar.h[0] * 1.5}px` : '0px',
+                      height: mounted ? `${bar.h[0] * barScale}px` : '0px',
                       transition: `height 0.6s cubic-bezier(0.34,1.56,0.64,1) ${0.15 + idx * 0.06}s`,
                     }}
                   />
@@ -736,7 +738,7 @@ function Login() {
   return (
     <div className="min-h-screen bg-white text-gray-900 flex flex-col lg:flex-row antialiased font-sans selection:bg-black selection:text-white">
       {/* ── LEFT COLUMN: 50% Clean Login Form ── */}
-      <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-16 flex flex-col justify-between min-h-screen bg-white">
+      <div className="w-full lg:w-1/2 p-4 sm:p-6 lg:p-12 flex flex-col justify-between min-h-0 lg:min-h-screen bg-white">
         {/* Brand Logo */}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-black text-white flex items-center justify-center shadow-xs">
@@ -748,7 +750,7 @@ function Login() {
         </div>
 
         {/* Center Form */}
-        <div className="max-w-[360px] w-full mx-auto my-auto py-8">
+        <div className="max-w-[360px] w-full mx-auto my-auto py-4 sm:py-6 lg:py-8">
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-semibold tracking-tight text-gray-900 mb-2">Log in</h1>
             <p className="text-sm text-gray-500">Welcome back! Please enter your details.</p>
@@ -853,14 +855,14 @@ function Login() {
       </div>
 
       {/* ── RIGHT COLUMN: 50% Premium Dark Inset Slider ── */}
-      <div className="w-full lg:w-1/2 p-4 sm:p-5 lg:p-6 flex flex-col bg-white">
+      <div className="hidden sm:block w-full lg:w-1/2 flex-1 flex-col min-h-0 p-4 sm:p-5 lg:p-6 bg-white">
         <div className="flex-1 rounded-[32px] bg-gradient-to-br from-[#232733] via-[#1c202b] to-[#161822] text-white flex flex-col justify-between relative overflow-hidden shadow-2xl border border-gray-700/30">
           {/* Ambient Glows */}
           <div className="absolute -right-24 -top-24 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -left-24 -bottom-24 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Carousel Track */}
-          <div className="my-auto relative w-full overflow-hidden py-5 px-3 sm:px-6">
+          <div className="my-auto relative w-full overflow-hidden py-3 sm:py-4 lg:py-5 px-3 sm:px-6">
             <div
               className="flex transition-transform duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform"
               style={{ transform: `translateX(-${activeIdx * 100}%)` }}
@@ -883,7 +885,7 @@ function Login() {
           </div>
 
           {/* Caption & Dots */}
-          <div className="text-center pb-8 px-6 space-y-3">
+          <div className="text-center pb-3 sm:pb-8 px-3 sm:px-6 space-y-2 sm:space-y-3">
             <div className="min-h-[52px] transition-opacity duration-500">
               <h2 className="text-lg font-bold tracking-tight text-white mb-1">{activeSlide.title}</h2>
               <p className="text-[11px] text-gray-400 leading-relaxed max-w-sm mx-auto">{activeSlide.description}</p>
