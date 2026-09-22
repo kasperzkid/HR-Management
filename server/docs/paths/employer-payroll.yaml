@@ -1,0 +1,31 @@
+paths:
+  /payroll:
+    get:
+      tags: [Employer — Shared Data]
+      summary: Payroll run history
+      description: |
+        Returns certified payroll records from the PayrollRecord table.
+        EMPLOYEE accounts receive only their own rows; EMPLOYER and
+        HR_MANAGER accounts receive all records. Filter by `payrollMonth`
+        (format `YYYY-MM`) to scope a single period.
+      parameters:
+        - name: payrollMonth
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2026-09"
+      responses:
+        '200':
+          description: Payroll records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      $ref: '../schemas.yaml#/components/schemas/PayrollRecord'
+        '401':
+          $ref: '../responses.yaml#/Unauthorized'

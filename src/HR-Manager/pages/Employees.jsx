@@ -21,7 +21,7 @@ import AddEmployeeModal from '../components/AddEmployeeModal'
 import EmployeeDetailsModal from '../../Employer/components/EmployeeDetailsModal'
 import OrgChartView from '../../Employer/components/OrgChartView'
 import LuxuryDataTable from '../components/LuxuryDataTable'
-import { fetchEmployeesApi, createEmployeeApi, authHeaders, importEmployeesApi } from '../../lib/hrApi'
+import { fetchEmployeesApi, createEmployeeApi, updateEmployeeApi, authHeaders, importEmployeesApi } from '../../lib/hrApi'
 
 const REQUIRED_COLUMNS = [
   'Employee ID',
@@ -156,25 +156,41 @@ function Employees() {
       } else {
         showToast(`Added ${created.name || newEmp.name} to the team`)
       }
+      return created
     } catch (err) {
       console.error('Create employee error:', err)
-      // Keep the UI responsive: add locally and surface the reason
-      setEmployees((prev) => [newEmp, ...prev])
-      showToast('Could not save to database', err.message || 'Added locally — a database write failed')
+      showToast('Could not save employee', err.message || 'The database write failed')
+      throw err
     }
   }
 
-  const handleUpdateStatus = (id, newStatus) => {
-    setEmployees(employees.map((e) => (e.id === id ? { ...e, status: newStatus, employmentStatus: newStatus } : e)))
-    if (selectedEmployee?.id === id) setSelectedEmployee((prev) => ({ ...prev, status: newStatus }))
-    const label = newStatus.toUpperCase()
-    showToast('Status updated', label === 'ACTIVE' ? 'Employee is now active' : `Employee is now ${newStatus.toLowerCase()}`)
+  const handleUpdateStatus = async (id, newStatus) => {
+    try {
+      const updated = await updateEmployeeApi(id, { status: newStatus, employmentStatus: newStatus })
+      setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, ...updated } : e)))
+      if (selectedEmployee?.id === id) setSelectedEmployee((prev) => ({ ...prev, ...updated }))
+      const label = newStatus.toUpperCase()
+      showToast('Status updated', label === 'ACTIVE' ? 'Employee is now active' : `Employee is now ${newStatus.toLowerCase()}`)
+      return updated
+    } catch (err) {
+      console.error('Update employee status error:', err)
+      showToast('Could not update status', err.message || 'The database write failed')
+      throw err
+    }
   }
 
-  const handleUpdateEmployee = (updated) => {
-    setEmployees((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)))
-    if (selectedEmployee?.id === updated.id) setSelectedEmployee(updated)
-    showToast('Employee updated', `${updated.name}'s record was saved`)
+  const handleUpdateEmployee = async (updated) => {
+    try {
+      const saved = await updateEmployeeApi(updated.id, toApiPayload(updated))
+      setEmployees((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...saved } : e)))
+      if (selectedEmployee?.id === updated.id) setSelectedEmployee((prev) => ({ ...prev, ...saved }))
+      showToast('Employee updated', `${saved.name}'s record was saved`)
+      return saved
+    } catch (err) {
+      console.error('Update employee error:', err)
+      showToast('Could not save employee', err.message || 'The database write failed')
+      throw err
+    }
   }
 
   const handleDeleteEmployee = (id) => {
@@ -373,6 +389,7 @@ function Employees() {
         />
       ) : activeTab === 'directory' ? (
         <LuxuryDataTable
+          key="directory"
           title="Employee Directory"
           subtitle={`${filteredEmployees.length} employees across ${new Set(filteredEmployees.map((e) => e.department)).size} departments`}
           columns={[
@@ -451,7 +468,6 @@ function Employees() {
           defaultPageSize={10}
           loading={false}
           emptyMessage="No employees match your search or filter criteria."
-          allowViewModeToggle
           defaultViewMode="grid"
           renderGridCard={(emp) => {
             const rawStatus = emp.employmentStatus || emp.status || ''
@@ -572,6 +588,7 @@ function Employees() {
         />
       ) : (
         <LuxuryDataTable
+          key="list"
           title="Employee Registry"
           subtitle={`${filteredEmployees.length} employees · ${SETTINGS.standardMonthlyHours} standard hours/mo`}
           columns={[
@@ -650,7 +667,6 @@ function Employees() {
           defaultPageSize={10}
           loading={false}
           emptyMessage="No employees match your search or filter criteria."
-          allowViewModeToggle
           defaultViewMode="list"
           renderGridCard={(emp) => {
             const rawStatus = emp.employmentStatus || emp.status || ''

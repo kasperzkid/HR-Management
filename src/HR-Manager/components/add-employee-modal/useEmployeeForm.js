@@ -4,6 +4,7 @@ import { HR_SETTINGS } from '../../data/settingsData'
 import { lookupTax, isExempt } from '../../lib/payroll'
 import { generateNextId } from './constants'
 import { formatAge } from './formSections'
+import { uploadEmployeeFile } from '../../../lib/hrApi'
 
 // Compute DOB validity for audit warnings (DOB is optional, but implausible values get flagged)
 export function dobStatus(dateStr) {
@@ -30,7 +31,6 @@ const VALID_MOBILE_PREFIXES = [
 ]
 const VALID_LANDLINE_PREFIXES = ['11', '22', '33', '34', '44', '46', '47', '57', '58']
 
-// International codes accepted by the phone input dropdown
 const PHONE_COUNTRIES = [
   { code: '+251', maxDigits: 9 },
   { code: '+254', maxDigits: 9 },
@@ -46,6 +46,29 @@ const PHONE_COUNTRIES = [
   { code: '+44', maxDigits: 10 },
   { code: '+971', maxDigits: 9 },
 ]
+
+function fileFromUrl(url, name, type = '', size = 0) {
+  return {
+    name: name || String(url || '').split('/').pop() || 'document',
+    size,
+    type,
+    lastModified: 0,
+    url,
+  }
+}
+
+async function uploadOrReuse(file) {
+  if (!file) return null
+  if (file.url) {
+    return {
+      url: file.url,
+      name: file.name,
+      type: file.type || '',
+      size: file.size || 0,
+    }
+  }
+  return uploadEmployeeFile(file)
+}
 
 // Validate a phone number (may carry a country code from the dropdown).
 // Returns null if valid (or empty), or an error message string otherwise.
@@ -85,6 +108,21 @@ export function validatePhone(raw) {
 }
 
 export function buildInitialForm({ editingEmployee, existingEmployees, todayStr }) {
+  const identityFile = editingEmployee?.identityFrontUrl
+    ? fileFromUrl(
+      editingEmployee.identityFrontUrl,
+      editingEmployee.identityFrontName,
+      '',
+      0,
+    )
+    : null
+  const cvFile = editingEmployee?.cvUrl
+    ? fileFromUrl(editingEmployee.cvUrl, editingEmployee.cvName, '', 0)
+    : null
+  const existingCertificates = Array.isArray(editingEmployee?.certifications)
+    ? editingEmployee.certifications
+    : []
+
   return {
     // 1. Identification & Personal
     employeeId: editingEmployee?.employeeId || generateNextId(existingEmployees),
@@ -101,7 +139,11 @@ export function buildInitialForm({ editingEmployee, existingEmployees, todayStr 
     identityIdNumber: editingEmployee?.identityIdNumber || editingEmployee?.identityNumber || '',
     identityIssuedBy: editingEmployee?.identityIssuedBy || editingEmployee?.identityIssuer || '',
     identityIssuedDate: editingEmployee?.identityIssuedDate || editingEmployee?.identityIssueDate || '',
-    identityDocument: Array.isArray(editingEmployee?.identityDocument) ? editingEmployee.identityDocument : [],
+    identityDocument: Array.isArray(editingEmployee?.identityDocument)
+      ? editingEmployee.identityDocument
+      : identityFile
+        ? [identityFile]
+        : [],
 
     // 2. Job & Employment
     jobTitle: editingEmployee?.jobTitle || '',
@@ -126,16 +168,36 @@ export function buildInitialForm({ editingEmployee, existingEmployees, todayStr 
     tin: editingEmployee?.tin || '',
     pensionId: editingEmployee?.pensionId || '',
 
-    certificates: Array.isArray(editingEmployee?.certificates)
-      ? editingEmployee.certificates.map((c) => ({
-          id: `cert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    certificates: existingCertificates.length > 0
+      ? existingCertificates.map((c) => ({
+          id: c.id || `cert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           title: c.title || c.name || '',
           issuer: c.issuer || '',
           issueDate: c.issueDate || '',
-          file: c.file || null,
+          expiryDate: c.expiryDate || '',
+          file: c.fileUrl
+            ? fileFromUrl(c.fileUrl, c.fileName, c.mimeType, c.fileSize)
+            : null,
+          fileUrl: c.fileUrl || '',
+          fileName: c.fileName || '',
+          mimeType: c.mimeType || '',
+          fileSize: c.fileSize || 0,
         }))
-      : [],
-    cv: Array.isArray(editingEmployee?.cv) ? editingEmployee.cv : [],
+      : Array.isArray(editingEmployee?.certificates)
+        ? editingEmployee.certificates.map((c) => ({
+            id: c.id || `cert-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            title: c.title || c.name || '',
+            issuer: c.issuer || '',
+            issueDate: c.issueDate || '',
+            expiryDate: c.expiryDate || '',
+            file: c.file || null,
+          }))
+        : [],
+    cv: Array.isArray(editingEmployee?.cv)
+      ? editingEmployee.cv
+      : cvFile
+        ? [cvFile]
+        : [],
 
     // 5. Notes
     notes: editingEmployee?.notes || '',
@@ -330,67 +392,71 @@ export function useEmployeeForm({ isOpen, onClose, onSave, existingEmployees, ed
     }))
   }
 
-  const buildPayload = () => ({
-    id: editingEmployee?.id || `emp-${Date.now()}`,
-    employeeId: formData.employeeId.trim(),
-    name: formData.name.trim(),
-    gender: formData.gender,
-    dateOfBirth: formData.dateOfBirth || null,
-    joinDate: formData.joinDate || todayStr,
-    jobTitle: formData.jobTitle.trim(),
-    department: formData.department,
-    employmentType: formData.employmentType,
-    basicSalary: basicSalaryNum,
-    transportAllowance: transportNum,
-    housingAllowance: housingNum,
-    mealAllowance: mealNum,
-    otherAllowance: otherNum,
-    otherDeductions: 0,
-    loanDeductions: 0,
-    bankName: formData.bankName || 'Commercial Bank of Ethiopia',
-    bankAccount: formData.bankAccount.trim(),
-    tin: formData.tin.trim(),
-    pensionId: formData.pensionId.trim(),
-    phone: formData.phone.trim(),
-    email: formData.email.trim(),
-    address: formData.address.trim(),
-    emergencyContact: formData.emergencyContact.trim(),
-    identityIdType: formData.identityIdType,
-    identityIdNumber: formData.identityIdNumber.trim(),
-    identityIssuedBy: formData.identityIssuedBy.trim(),
-    identityIssuedDate: formData.identityIssuedDate,
-    identityDocument: formData.identityDocument.map((f) => ({
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      lastModified: f.lastModified,
-    })),
-    employmentStatus: formData.employmentStatus,
-    exitDate: shouldShowExitDate && formData.exitDate ? formData.exitDate : null,
-    certificates: formData.certificates
-      .filter((c) => c.file || c.title.trim())
-      .map((c) => ({
-        id: c.id,
-        title: c.title.trim() || c.file?.name?.replace(/\.[^/.]+$/, '') || 'Untitled',
-        issuer: c.issuer.trim(),
-        issueDate: c.issueDate,
-        name: c.file?.name || c.title.trim(),
-        size: c.file?.size || 0,
-        type: c.file?.type || '',
-        lastModified: c.file?.lastModified || null,
-      })),
-    cv: formData.cv.map((f) => ({
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      lastModified: f.lastModified,
-    })),
-    notes: formData.notes.trim(),
-    dataCheck: dataCheckBadge.status,
-    dataCheckWarnings: auditWarnings,
-  })
+  const buildPayload = async () => {
+    const identityUpload = await uploadOrReuse(formData.identityDocument[0] || null)
+    const cvUpload = await uploadOrReuse(formData.cv[0] || null)
+    const certifications = (await Promise.all(
+      formData.certificates.map(async (c) => {
+        const uploaded = await uploadOrReuse(c.file)
+        return {
+          id: c.id,
+          name: c.title.trim() || uploaded?.name || c.name || 'Untitled',
+          issuer: c.issuer.trim(),
+          issueDate: c.issueDate || '',
+          expiryDate: c.expiryDate || '',
+          fileName: uploaded?.name || c.file?.name || c.fileName || '',
+          fileUrl: uploaded?.url || c.fileUrl || '',
+          mimeType: uploaded?.type || c.file?.type || c.mimeType || '',
+          fileSize: uploaded?.size || c.file?.size || c.fileSize || 0,
+        }
+      }),
+    )).filter((c) => c.name)
 
-  const handleSubmit = (e) => {
+    return {
+      id: editingEmployee?.id || `emp-${Date.now()}`,
+      employeeId: formData.employeeId.trim(),
+      name: formData.name.trim(),
+      gender: formData.gender,
+      dateOfBirth: formData.dateOfBirth || null,
+      joinDate: formData.joinDate || todayStr,
+      jobTitle: formData.jobTitle.trim(),
+      department: formData.department,
+      employmentType: formData.employmentType,
+      basicSalary: basicSalaryNum,
+      transportAllowance: transportNum,
+      housingAllowance: housingNum,
+      mealAllowance: mealNum,
+      otherAllowance: otherNum,
+      otherDeductions: 0,
+      loanDeductions: 0,
+      bankName: formData.bankName || 'Commercial Bank of Ethiopia',
+      bankAccount: formData.bankAccount.trim(),
+      tin: formData.tin.trim(),
+      pensionId: formData.pensionId.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim(),
+      address: formData.address.trim(),
+      emergencyContact: formData.emergencyContact.trim(),
+      identityType: formData.identityIdType,
+      identityNumber: formData.identityIdNumber.trim(),
+      identityIssueDate: formData.identityIssuedDate,
+      identityExpiryDate: editingEmployee?.identityExpiryDate || '',
+      identityFrontUrl: identityUpload?.url || '',
+      identityFrontName: identityUpload?.name || '',
+      identityBackUrl: editingEmployee?.identityBackUrl || '',
+      identityBackName: editingEmployee?.identityBackName || '',
+      cvUrl: cvUpload?.url || '',
+      cvName: cvUpload?.name || '',
+      employmentStatus: formData.employmentStatus,
+      exitDate: shouldShowExitDate && formData.exitDate ? formData.exitDate : null,
+      certifications,
+      notes: formData.notes.trim(),
+      dataCheck: dataCheckBadge.status,
+      dataCheckWarnings: auditWarnings,
+    }
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
     const newErrors = {}
@@ -408,15 +474,17 @@ export function useEmployeeForm({ isOpen, onClose, onSave, existingEmployees, ed
       return false
     }
 
-    const payload = buildPayload()
+    try {
+      const payload = await buildPayload()
 
-    if (editingEmployee && onEdit) {
-      onEdit(payload)
-    } else {
-      onSave(payload)
+      if (editingEmployee && onEdit) {
+        await onEdit(payload)
+      } else {
+        await onSave(payload)
+      }
+      onClose()
+      return true
     }
-    onClose()
-    return true
   }
 
   return {

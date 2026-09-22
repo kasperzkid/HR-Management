@@ -75,17 +75,21 @@ export default function AddEmployeeModal({
     banking: ['bankName', 'bankAccount', 'tin', 'pensionId'],
   }
 
-  const handleFormSubmit = (e) => {
-    const ok = form.handleSubmit(e)
-    if (ok) return
-    const firstBad = STEPS.findIndex((s) => STEP_FIELDS[s.key]?.some((f) => errors[f]))
-    if (firstBad !== -1 && firstBad !== active) {
-      setErr(`Please fix the highlighted fields in "${STEPS[firstBad].label}"`)
-      setActive(firstBad)
-    } else {
-      setErr('Please fix the highlighted fields before saving')
+  const handleFormSubmit = async (e) => {
+    try {
+      const ok = await form.handleSubmit(e)
+      if (ok) return
+      const firstBad = STEPS.findIndex((s) => STEP_FIELDS[s.key]?.some((f) => errors[f]))
+      if (firstBad !== -1 && firstBad !== active) {
+        setErr(`Please fix the highlighted fields in "${STEPS[firstBad].label}"`)
+        setActive(firstBad)
+      } else {
+        setErr('Please fix the highlighted fields before saving')
+      }
+      setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+    } catch (error) {
+      setErr(error.message || 'Unable to save employee')
     }
-    setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
   }
 
   return (

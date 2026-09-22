@@ -81,18 +81,56 @@ function normalizeCertifications(list = []) {
 }
 
 function identityFields(data = {}, existing = {}) {
+  const identityDocument = Array.isArray(data.identityDocument) ? data.identityDocument[0] : null
+  const cv = Array.isArray(data.cv) ? data.cv[0] : null
+
   return {
-    identityType: data.identityType ?? existing.identityType ?? '',
-    identityNumber: data.identityNumber ?? existing.identityNumber ?? '',
-    identityIssueDate: data.identityIssueDate ?? existing.identityIssueDate ?? '',
+    identityType: data.identityType ?? data.identityIdType ?? existing.identityType ?? '',
+    identityNumber: data.identityNumber ?? data.identityIdNumber ?? existing.identityNumber ?? '',
+    identityIssueDate: data.identityIssueDate ?? data.identityIssuedDate ?? existing.identityIssueDate ?? '',
     identityExpiryDate: data.identityExpiryDate ?? existing.identityExpiryDate ?? '',
-    identityFrontUrl: data.identityFrontUrl ?? existing.identityFrontUrl ?? '',
-    identityFrontName: data.identityFrontName ?? existing.identityFrontName ?? '',
+    identityFrontUrl: data.identityFrontUrl ?? identityDocument?.url ?? existing.identityFrontUrl ?? '',
+    identityFrontName: data.identityFrontName ?? identityDocument?.name ?? existing.identityFrontName ?? '',
     identityBackUrl: data.identityBackUrl ?? existing.identityBackUrl ?? '',
     identityBackName: data.identityBackName ?? existing.identityBackName ?? '',
-    cvUrl: data.cvUrl ?? existing.cvUrl ?? '',
-    cvName: data.cvName ?? existing.cvName ?? '',
+    cvUrl: data.cvUrl ?? cv?.url ?? existing.cvUrl ?? '',
+    cvName: data.cvName ?? cv?.name ?? existing.cvName ?? '',
   }
+}
+
+function parseMoney(value) {
+  if (value === undefined || value === null || value === '') return undefined
+  const number = Number(value)
+  if (!Number.isFinite(number) || number < 0) {
+    return null
+  }
+  return number
+}
+
+function moneyValue(value, fallback) {
+  const parsed = parseMoney(value)
+  return parsed === undefined ? fallback : parsed
+}
+
+function validateMoneyFields(data) {
+  const fields = [
+    'basicSalary',
+    'transportAllowance',
+    'housingAllowance',
+    'mealAllowance',
+    'otherAllowance',
+    'otherDeductions',
+    'loanDeductions',
+    'salary',
+  ]
+
+  for (const field of fields) {
+    if (data[field] === undefined) continue
+    if (parseMoney(data[field]) === null) {
+      return `${field} must be a non-negative number`
+    }
+  }
+  return null
 }
 
 // ============================================================
@@ -200,6 +238,7 @@ export async function getEmployee(req, res) {
       where: {
         id,
       },
+      include: EMPLOYEE_INCLUDE,
     })
 
     if (!employee) {
@@ -220,7 +259,11 @@ export async function getEmployee(req, res) {
 
 export async function createEmployee(req, res) {
   try {
-    const data = req.body
+    const data = req.body || {}
+    const moneyError = validateMoneyFields(data)
+    if (moneyError) {
+      return res.status(400).json({ message: moneyError })
+    }
 
     if (!data.employeeId || !data.name) {
       return res.status(400).json({
@@ -362,7 +405,11 @@ async function provisionEmployeeAccount(data) {
 export async function updateEmployee(req, res) {
   try {
     const { id } = req.params
-    const data = req.body
+    const data = req.body || {}
+    const moneyError = validateMoneyFields(data)
+    if (moneyError) {
+      return res.status(400).json({ message: moneyError })
+    }
 
     const existing = await prisma.employee.findUnique({
       where: {
@@ -393,6 +440,19 @@ export async function updateEmployee(req, res) {
       }
     }
 
+    const basicSalary = moneyValue(data.basicSalary, existing.basicSalary)
+    const transportAllowance = moneyValue(data.transportAllowance, existing.transportAllowance)
+    const housingAllowance = moneyValue(data.housingAllowance, existing.housingAllowance)
+    const mealAllowance = moneyValue(data.mealAllowance, existing.mealAllowance)
+    const otherAllowance = moneyValue(data.otherAllowance, existing.otherAllowance)
+    const otherDeductions = moneyValue(data.otherDeductions, existing.otherDeductions)
+    const loanDeductions = moneyValue(data.loanDeductions, existing.loanDeductions)
+    const salary = data.salary !== undefined
+      ? moneyValue(data.salary, existing.salary)
+      : data.basicSalary !== undefined
+        ? basicSalary
+        : existing.salary
+
     const employee = await prisma.employee.update({
       where: {
         id,
@@ -408,40 +468,13 @@ export async function updateEmployee(req, res) {
         employmentType:
           data.employmentType ?? existing.employmentType,
 
-        basicSalary:
-          data.basicSalary !== undefined
-            ? Number(data.basicSalary) || 0
-            : existing.basicSalary,
-
-        transportAllowance:
-          data.transportAllowance !== undefined
-            ? Number(data.transportAllowance) || 0
-            : existing.transportAllowance,
-
-        housingAllowance:
-          data.housingAllowance !== undefined
-            ? Number(data.housingAllowance) || 0
-            : existing.housingAllowance,
-
-        mealAllowance:
-          data.mealAllowance !== undefined
-            ? Number(data.mealAllowance) || 0
-            : existing.mealAllowance,
-
-        otherAllowance:
-          data.otherAllowance !== undefined
-            ? Number(data.otherAllowance) || 0
-            : existing.otherAllowance,
-
-        otherDeductions:
-          data.otherDeductions !== undefined
-            ? Number(data.otherDeductions) || 0
-            : existing.otherDeductions,
-
-        loanDeductions:
-          data.loanDeductions !== undefined
-            ? Number(data.loanDeductions) || 0
-            : existing.loanDeductions,
+        basicSalary,
+        transportAllowance,
+        housingAllowance,
+        mealAllowance,
+        otherAllowance,
+        otherDeductions,
+        loanDeductions,
 
         bankName: data.bankName ?? existing.bankName,
         bankAccount: data.bankAccount ?? existing.bankAccount,

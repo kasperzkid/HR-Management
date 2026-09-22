@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Clock, Clock3, LogOut } from 'lucide-react'
 import DailyLogTable from '../../HR-Manager/components/DailyLogTable'
 import PunchCard, { EmergencyCheckOutButton } from '../components/PunchCard'
 import { resolveEmployee } from '../lib/currentUser'
 import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
+import useRealtimeRefetch from '../hooks/useRealtimeRefetch'
 
 function Attendance() {
   const [employees, setEmployees] = useState([])
@@ -28,6 +29,15 @@ function Attendance() {
       cancelled = true
     }
   }, [])
+
+  // Live refresh: today's punch or an HR status change updates the log
+  // and KPI totals instantly (no manual reload needed).
+  const reloadAttendance = useCallback(() => {
+    fetchAttendance()
+      .then((att) => setAttendance(Array.isArray(att) ? att : (att?.attendance || [])))
+      .catch(() => {})
+  }, [])
+  useRealtimeRefetch('attendance', reloadAttendance)
 
   const myAttendance = useMemo(
     () => {

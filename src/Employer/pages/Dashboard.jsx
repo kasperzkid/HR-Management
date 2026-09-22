@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Users,
   UserCheck,
@@ -34,13 +34,15 @@ import AddEmployeeModal from '../../HR-Manager/components/AddEmployeeModal'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
 import { attendanceTotals } from '../lib/attendanceUtils'
-import { fetchEmployees, fetchAttendance, fetchLeaveRequests } from '../lib/employerApi'
+import { fetchEmployees, fetchAttendance, fetchLeaveRequests, fetchPayrollRecords } from '../lib/employerApi'
+import useRealtimeRefetch from '../hooks/useRealtimeRefetch'
 
 function Dashboard() {
   const user = getCurrentUser()
   const [employees, setEmployees] = useState([])
   const [attendance, setAttendance] = useState([])
   const [leaveRequests, setLeaveRequests] = useState([])
+  const [payrollRecords, setPayrollRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const currentEmployee = resolveEmployee(employees, user)
   const isEmployeeRole = !user?.role || user?.role === 'EMPLOYEE'
@@ -49,18 +51,20 @@ function Dashboard() {
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
   const [toast, setToast] = useState(null)
 
-  useEffect(() => {
+  const loadAll = useCallback(() => {
     let cancelled = false
     Promise.all([
       fetchEmployees(),
       fetchAttendance(),
       fetchLeaveRequests(),
+      fetchPayrollRecords(),
     ])
-      .then(([emps, att, leaves]) => {
+      .then(([emps, att, leaves, records]) => {
         if (!cancelled) {
           setEmployees(emps)
           setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
           setLeaveRequests(Array.isArray(leaves) ? leaves : (leaves?.requests || []))
+          setPayrollRecords(records)
         }
       })
       .catch(() => {})
@@ -71,6 +75,12 @@ function Dashboard() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => loadAll(), [loadAll])
+
+  // Live refresh: refetch when any punch/HR attendance change is pushed
+  // over the socket, plus a 60s safety-net poll.
+  useRealtimeRefetch('dashboard', loadAll)
 
   const today = new Date().toLocaleDateString('en-ET', {
     weekday: 'long',
@@ -158,18 +168,29 @@ function Dashboard() {
       .sort((a, b) => b.gross - a.gross)
     const maxDeptGross = Math.max(1, ...byDept.map((d) => d.gross))
 
-    // 6-month payroll cost trend (projected from current run)
-    const trend = []
-    for (let i = 5; i >= 0; i -= 1) {
-      const d = new Date()
-      d.setMonth(d.getMonth() - i)
-      const factor = 1 - i * 0.015 + (i === 2 ? 0.05 : 0)
-      trend.push({
-        month: d.toLocaleString('en-ET', { month: 'short' }),
-        gross: roundMoney(totalGross * factor),
-        net: roundMoney(totalNet * factor),
-      })
-    }
+    // 6-month payroll cost trend — REAL history from PayrollRecord rows
+    // (current month shows the live computed run, past months the certified
+    // records; months with no runs are simply absent from the chart).
+    const monthKeys = [...new Set(payrollRecords.map((r) => r.payrollMonth))]
+      .sort()
+      .slice(-6)
+    const trend = monthKeys.map((key) => {
+      const monthRows = payrollRecords.filter((r) => r.payrollMonth === key)
+      const isCurrentMonth = key === new Date().toISOString().slice(0, 7)
+      if (isCurrentMonth) {
+        // Show the live computed position for the current run.
+        return {
+          month: new Date(`${key}-01T00:00:00`).toLocaleString('en-ET', { month: 'short' }),
+          gross: totalGross,
+          net: totalNet,
+        }
+      }
+      return {
+        month: new Date(`${key}-01T00:00:00`).toLocaleString('en-ET', { month: 'short' }),
+        gross: roundMoney(monthRows.reduce((s, r) => s + (r.grossSalary || 0), 0)),
+        net: roundMoney(monthRows.reduce((s, r) => s + (r.netSalary || 0), 0)),
+      }
+    })
 
     return {
       totalGross,
@@ -187,7 +208,7 @@ function Dashboard() {
       trend,
       monthlyStatutory: roundMoney(totalTax + totalPension),
     }
-  }, [employees, attendance, leaveRequests])
+  }, [employees, attendance, leaveRequests, payrollRecords])
 
   const workforceShare = companyData.headcount
     ? Math.round((companyData.activeCount / companyData.headcount) * 100)
@@ -389,7 +410,7 @@ function Dashboard() {
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div>
                   <h3 className="text-sm font-bold text-gray-950 dark:text-gray-100">Payroll Cost — 6-Month Trend</h3>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Gross vs net disbursement</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Certified runs · current month live</p>
                 </div>
                 <div className="flex items-center gap-3 text-[10.5px] font-semibold">
                   <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Gross</span>

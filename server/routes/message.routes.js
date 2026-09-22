@@ -22,7 +22,14 @@ router.post('/start', startConversation)
 router.get('/contacts', getContacts)
 router.get('/:contactId', getThread)
 router.post('/:contactId', sendMessage)
-router.post('/:contactId/upload', upload.single('file'), uploadAttachment)
+router.post('/:contactId/upload', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'File upload error' })
+    }
+    next()
+  })
+}, uploadAttachment)
 router.post('/:contactId/read', markRead)
 router.put('/:contactId/messages/:messageId', updateMessage)
 router.delete('/:contactId/messages/bulk', bulkDeleteMessages)

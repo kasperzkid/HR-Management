@@ -88,6 +88,8 @@ paths:
     $ref: './paths/hr-employees.yaml#/paths/~1employees'
   /employer/attendance:
     $ref: './paths/hr-attendance.yaml#/paths/~1attendance'
+  /employer/payroll:
+    $ref: './paths/employer-payroll.yaml#/paths/~1payroll'
 
   # ── HR: dashboard ───────────────────────────────────────
   /hr-manager/dashboard:

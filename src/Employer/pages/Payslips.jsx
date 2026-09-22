@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Printer,
   Search,
@@ -16,6 +16,7 @@ import PaymentSlip, { formatSlipAmount } from '../../components/PaymentSlip'
 import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
 import { attendanceTotals } from '../lib/attendanceUtils'
 import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
+import useRealtimeRefetch from '../hooks/useRealtimeRefetch'
 
 export default function Payslips() {
   const [employees, setEmployees] = useState([])
@@ -59,6 +60,15 @@ export default function Payslips() {
       cancelled = true
     }
   }, [month, year])
+
+  // Live refresh: today's punch instantly updates the current month's
+  // slip figures (OT pay changes as soon as check-out is recorded).
+  const reloadAttendance = useCallback(() => {
+    fetchAttendance({ month, year })
+      .then((att) => setAttendance(Array.isArray(att) ? att : (att?.attendance || [])))
+      .catch(() => {})
+  }, [month, year])
+  useRealtimeRefetch(`${month}-${year}`, reloadAttendance)
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',

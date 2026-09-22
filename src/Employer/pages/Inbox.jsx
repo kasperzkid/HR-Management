@@ -19,6 +19,7 @@ import {
   ListChecks,
   Check,
   ChevronLeft,
+  Download,
 } from 'lucide-react'
 import { useMessaging } from '../context/messagingStore'
 import { fetchUsersApi } from '../../lib/messagesApi'
@@ -743,7 +744,11 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
                 {messages.map((msg) => {
                   const mine = msg.from === 'me'
                   const att = msg.attachment
-                  const isImage = att && att.type && att.type.startsWith('image/')
+                  const isImage = att && (
+                    (att.type && att.type.toLowerCase().startsWith('image/')) ||
+                    /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(att.name || '') ||
+                    /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(att.url || '')
+                  )
                   const isEditing = editingId === msg.id
                   const isSelected = selectedIds.has(msg.id)
                   const isPending = msg.pending || msg.id.startsWith('pending-')
@@ -787,21 +792,64 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
                         {att && (
                           <div className="mb-2">
                             {isImage ? (
-                              <a href={att.url} target="_blank" rel="noreferrer">
+                              <div className="relative group/img rounded-xl overflow-hidden border border-gray-200/40 dark:border-[#262b31] bg-black/5">
                                 <img
                                   src={att.url}
                                   alt={att.name}
-                                  className="rounded-lg border-0 max-h-48 w-auto object-cover"
+                                  className="max-h-56 w-auto object-cover rounded-xl"
                                 />
-                              </a>
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                  <a
+                                    href={att.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-3 py-1.5 rounded-lg bg-white/90 hover:bg-white text-gray-950 text-xs font-bold shadow-sm transition-transform hover:scale-105 flex items-center gap-1.5"
+                                  >
+                                    View
+                                  </a>
+                                  <a
+                                    href={att.url}
+                                    download={att.name}
+                                    className="p-2 rounded-lg bg-white/90 hover:bg-white text-gray-950 shadow-sm transition-transform hover:scale-105 flex items-center justify-center"
+                                    title="Download image"
+                                  >
+                                    <Download size={15} />
+                                  </a>
+                                </div>
+                              </div>
                             ) : (
                               <div
-                                className={`flex items-center gap-2 p-2 rounded-lg text-xs ${
-                                  mine ? 'bg-black/10 dark:bg-gray-900/10' : 'bg-white/60 dark:bg-white/10'
-                                }`}
+                                className={`flex items-center justify-between gap-3 p-3 rounded-xl border text-xs ${
+                                  mine
+                                    ? 'bg-white/10 dark:bg-gray-900/20 border-white/20 dark:border-gray-700/40 text-white'
+                                    : 'bg-white dark:bg-[#15181d] border-gray-200 dark:border-[#262b31] text-gray-900 dark:text-gray-100'
+                                } shadow-2xs`}
                               >
-                                <FileText size={14} />
-                                <span className="truncate">{att.name}</span>
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className={`p-2 rounded-lg shrink-0 ${mine ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400'}`}>
+                                    <FileText size={18} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-bold truncate">{att.name}</p>
+                                    <p className={`text-[10px] truncate ${mine ? 'text-gray-200/80' : 'text-gray-400 dark:text-gray-500'}`}>
+                                      {att.type || 'Document file'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <a
+                                  href={att.url}
+                                  download={att.name}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={`p-2 rounded-xl transition-all shrink-0 cursor-pointer shadow-2xs flex items-center justify-center ${
+                                    mine
+                                      ? 'bg-white text-gray-950 hover:bg-gray-100'
+                                      : 'bg-gray-950 text-white hover:bg-black dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200'
+                                  }`}
+                                  title="Download document"
+                                >
+                                  <Download size={15} />
+                                </a>
                               </div>
                             )}
                           </div>

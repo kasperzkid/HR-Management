@@ -36,6 +36,12 @@ export const createEmployeeApi = (payload) =>
     body: JSON.stringify(payload),
   })
 
+export const updateEmployeeApi = (id, payload) =>
+  hrFetch(`/employees/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+
 export const importEmployeesApi = (file) => {
   const form = new FormData()
   form.append('file', file)
@@ -56,21 +62,5 @@ export async function uploadEmployeeFile(file) {
 
 export async function uploadOrLocal(file) {
   if (!file) return null
-
-  try {
-    const uploaded = await uploadEmployeeFile(file)
-    return {
-      url: uploaded.url,
-      name: uploaded.name || file.name,
-      type: uploaded.type || file.type,
-      size: uploaded.size || file.size,
-    }
-  } catch {
-    return {
-      url: URL.createObjectURL(file),
-      name: file.name,
-      type: file.type,
-      size: file.size,
-    }
-  }
+  return uploadEmployeeFile(file)
 }

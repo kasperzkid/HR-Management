@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import { SETTINGS } from '../data/settingsData'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
 import { attendanceTotals } from '../lib/attendanceUtils'
 import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
+import useRealtimeRefetch from '../hooks/useRealtimeRefetch'
 
 function Payroll() {
   const [employees, setEmployees] = useState([])
@@ -46,6 +47,15 @@ function Payroll() {
       cancelled = true
     }
   }, [month, year])
+
+  // Live refresh: a punch or HR status change instantly recomputes the
+  // payroll rows for the selected month (OT hours feed the rows).
+  const reloadAttendance = useCallback(() => {
+    fetchAttendance({ month, year })
+      .then((att) => setAttendance(Array.isArray(att) ? att : (att?.attendance || [])))
+      .catch(() => {})
+  }, [month, year])
+  useRealtimeRefetch(`${month}-${year}`, reloadAttendance)
 
   const filteredEmployees = useMemo(() => {
     if (showAllEmployees) return employees.filter((emp) => emp.employmentStatus !== 'Resigned' && emp.employmentStatus !== 'Terminated')

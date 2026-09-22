@@ -57,7 +57,339 @@
   animation-play-state: paused;
 }
 
-/* Analytics Slide Animations */
+/* ── Org pyramid chart (ported from Yanol landing page team hierarchy) ── */
+.org-chart {
+  --org-line: rgb(129 140 248 / 0.55); /* indigo-400, slightly translucent */
+}
+
+.dark .org-chart {
+  --org-line: rgb(99 102 241 / 0.55); /* indigo-500 */
+}
+
+/* Scroll reveal — [data-reveal] elements stay hidden until .is-visible is
+   added by the IntersectionObserver in OrgChartView. */
+.org-chart [data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.55s ease-out,
+    transform 0.55s ease-out;
+  transition-delay: var(--reveal-delay, 0s);
+}
+
+.org-chart [data-reveal].is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.org-level-label {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: rgb(107 114 128); /* gray-500 */
+  margin-bottom: 18px;
+}
+
+.dark .org-level-label {
+  color: rgb(156 163 175); /* gray-400 */
+}
+
+.org-card {
+  display: flex;
+  flex-direction: column;
+  width: 150px;
+  background-color: #fff;
+  border: 1px solid rgb(27 27 27 / 0.06);
+  border-radius: 20px;
+  padding: 8px;
+  box-shadow: 0 10px 26px -18px rgb(27 27 27 / 0.25);
+  transition:
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
+}
+
+.org-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 46px -22px rgb(27 27 27 / 0.3);
+}
+
+.dark .org-card {
+  background-color: #1c2026;
+  border-color: rgb(255 255 255 / 0.06);
+  box-shadow: 0 10px 26px -18px rgb(0 0 0 / 0.6);
+}
+
+.dark .org-card:hover {
+  box-shadow: 0 24px 46px -22px rgb(0 0 0 / 0.7);
+}
+
+.org-card-photo {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  aspect-ratio: 3 / 3.2;
+}
+
+.org-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  transition: transform 0.6s ease;
+}
+
+.org-card:hover .org-card-img {
+  transform: scale(1.05);
+}
+
+.org-card-meta {
+  padding: 10px 6px 4px;
+  min-width: 0;
+}
+
+.org-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: rgb(17 24 39); /* gray-900 */
+  margin-bottom: 2px;
+}
+
+.dark .org-card-name {
+  color: rgb(243 244 246); /* gray-100 */
+}
+
+.org-card-position {
+  font-size: 11px;
+  color: rgb(107 114 128); /* gray-500 */
+  line-height: 1.3;
+}
+
+.dark .org-card-position {
+  color: rgb(156 163 175); /* gray-400 */
+}
+
+/* Employment type badge over the photo */
+.org-card-type {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background-color: rgb(17 24 39 / 0.75);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(4px);
+}
+
+.dark .org-card-type {
+  background-color: rgb(0 0 0 / 0.65);
+}
+
+/* Inline profile rows on each card */
+.org-card-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(27 27 27 / 0.07);
+}
+
+.dark .org-card-profile {
+  border-top-color: rgb(255 255 255 / 0.07);
+}
+
+.org-card-contact {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 10px;
+  line-height: 1.3;
+  color: rgb(107 114 128); /* gray-500 */
+}
+
+.org-card-contact svg {
+  color: rgb(79 70 229); /* indigo-600 */
+}
+
+.dark .org-card-contact {
+  color: rgb(156 163 175); /* gray-400 */
+}
+
+.dark .org-card-contact svg {
+  color: rgb(129 140 248); /* indigo-400 */
+}
+
+/* Featured (top-of-chart) card — tinted, larger */
+.org-card.is-featured {
+  width: 200px;
+  border: none;
+  background:
+    linear-gradient(160deg, rgb(79 70 229 / 0.1), rgb(79 70 229 / 0.02)),
+    #fff;
+  box-shadow: 0 20px 44px -20px rgb(79 70 229 / 0.35);
+}
+
+.org-card.is-featured .org-card-name {
+  font-size: 16px;
+}
+
+.org-card.is-featured .org-card-photo {
+  border-radius: 16px;
+}
+
+.dark .org-card.is-featured {
+  background:
+    linear-gradient(160deg, rgb(99 102 241 / 0.18), rgb(99 102 241 / 0.04)),
+    #1c2026;
+}
+
+@media (min-width: 640px) {
+  .org-card {
+    width: 185px;
+  }
+
+  .org-card.is-featured {
+    width: 240px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .org-card {
+    width: 200px;
+  }
+
+  .org-card.is-featured {
+    width: 260px;
+  }
+}
+
+/* ── Department sections ── */
+.org-dept {
+  margin-bottom: 44px;
+}
+
+.org-dept:last-child {
+  margin-bottom: 0;
+}
+
+.org-dept-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.org-dept-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background-color: rgb(79 70 229 / 0.1); /* indigo-600 @ 10% */
+  color: rgb(79 70 229);
+  flex-shrink: 0;
+}
+
+.dark .org-dept-icon {
+  background-color: rgb(99 102 241 / 0.15);
+  color: rgb(129 140 248);
+}
+
+.org-dept-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgb(17 24 39); /* gray-900 */
+  letter-spacing: -0.01em;
+}
+
+.dark .org-dept-name {
+  color: rgb(243 244 246);
+}
+
+.org-dept-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: rgb(79 70 229 / 0.08);
+  color: rgb(79 70 229);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dark .org-dept-count {
+  background-color: rgb(99 102 241 / 0.15);
+  color: rgb(129 140 248);
+}
+
+.org-dept-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, rgb(27 27 27 / 0.12), transparent);
+}
+
+.dark .org-dept-line {
+  background: linear-gradient(to right, rgb(255 255 255 / 0.12), transparent);
+}
+
+/* Connector band between rows */
+.org-connector {
+  width: 100%;
+  max-width: 900px;
+  height: 80px;
+  margin: 4px auto 20px;
+}
+
+.org-connector-stub,
+.org-connector-rail {
+  stroke: var(--org-line);
+  stroke-width: 1.5;
+  /* pathLength="1" normalizes each line, so a dash of 1 == full length */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 0.35s ease-out;
+}
+
+.org-connector-stub.is-child {
+  stroke-opacity: 0.6;
+}
+
+.org-connector-rail {
+  stroke-width: 1;
+  stroke-opacity: 0.35;
+  transition-delay: 0.15s;
+}
+
+.org-connector.is-visible .org-connector-stub,
+.org-connector.is-visible .org-connector-rail {
+  stroke-dashoffset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .org-chart [data-reveal] {
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .org-connector-stub,
+  .org-connector-rail {
+    transition: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ── Analytics Slide Animations ── */
 @keyframes arcDraw {
   0% {
     stroke-dashoffset: 140;

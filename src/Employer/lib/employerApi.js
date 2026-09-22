@@ -37,6 +37,9 @@ export const fetchAttendance = ({ month, year } = {}) => {
   return ef(`/attendance${qs ? `?${qs}` : ''}`)
 }
 
+// ── Payroll run history (real PayrollRecord rows) ────────────
+export const fetchPayrollRecords = () => ef('/payroll').then((d) => d?.records || [])
+
 // ── Leave requests ───────────────────────────────────────────
 export const fetchLeaveRequests = () => ef('/leave')
 export const createLeaveRequest = (payload) =>

@@ -1,23 +1,31 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { calcPayroll, roundMoney } from '../../lib/payroll'
 import { attendanceTotals } from '../../lib/attendanceUtils'
-import { fetchEmployees, fetchAttendance, fetchLeaveRequests } from '../../lib/employerApi'
+import {
+  fetchEmployees,
+  fetchAttendance,
+  fetchLeaveRequests,
+  fetchPayrollRecords,
+} from '../../lib/employerApi'
 import { buildHistory } from './reportsConfig'
+import useRealtimeRefetch from '../../hooks/useRealtimeRefetch'
 
 export function useReportData(dateRange) {
   const [employees, setEmployees] = useState([])
   const [attendance, setAttendance] = useState([])
   const [leaveRequests, setLeaveRequests] = useState([])
+  const [payrollRecords, setPayrollRecords] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const loadAll = useCallback(() => {
     let cancelled = false
-    Promise.all([fetchEmployees(), fetchAttendance(), fetchLeaveRequests()])
-      .then(([emps, att, leaves]) => {
+    Promise.all([fetchEmployees(), fetchAttendance(), fetchLeaveRequests(), fetchPayrollRecords()])
+      .then(([emps, att, leaves, records]) => {
         if (!cancelled) {
           setEmployees(emps)
           setAttendance(Array.isArray(att) ? att : att?.attendance || [])
           setLeaveRequests(Array.isArray(leaves) ? leaves : leaves?.requests || [])
+          setPayrollRecords(records)
         }
       })
       .catch(() => {})
@@ -29,9 +37,14 @@ export function useReportData(dateRange) {
     }
   }, [])
 
+  useEffect(() => loadAll(), [loadAll])
+
+  // Live refresh: punches and HR edits keep the report totals current.
+  useRealtimeRefetch('reports', loadAll)
+
   const history = useMemo(
-    () => buildHistory(dateRange, employees, attendance),
-    [dateRange, employees, attendance],
+    () => buildHistory(dateRange, employees, attendance, payrollRecords),
+    [dateRange, employees, attendance, payrollRecords],
   )
 
   // Department cost breakdown

@@ -13,6 +13,7 @@ import {
   getMyLeave,
   createLeave,
 } from '../controllers/leave.controller.js'
+import { getPayrollRecords } from '../controllers/employer-payroll.controller.js'
 import {
   getEmployees,
   getAttendance,
@@ -33,6 +34,9 @@ router.post('/leave', createLeave)
 // Employees & attendance (shared with HR-Manager queries)
 router.get('/employees', getEmployees)
 router.get('/attendance', getAttendance)
+
+// Payroll run history (real PayrollRecord rows)
+router.get('/payroll', getPayrollRecords)
 
 // Current user's employee record
 router.get('/me/employee', getCurrentUserEmployee)

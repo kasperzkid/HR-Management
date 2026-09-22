@@ -6,6 +6,7 @@ import {
 import {
   getHRReports,
 } from '../controllers/hr-reports.controller.js'
+import { upload } from '../middleware/upload.js'
 
 import {
   getDashboard,
@@ -50,8 +51,16 @@ router.get('/dashboard', getDashboard)
 // ============================================================
 
 router.get('/employees', getEmployees)
-router.get('/employees/:id', getEmployee)
 router.post('/employees', createEmployee)
+router.post('/uploads', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'File upload error' })
+    }
+    next()
+  })
+}, uploadEmployeeDocument)
+router.get('/employees/:id', getEmployee)
 router.put('/employees/:id', updateEmployee)
 router.delete('/employees/:id', deleteEmployee)
 // HR Settings
