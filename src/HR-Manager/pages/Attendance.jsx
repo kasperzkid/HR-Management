@@ -781,50 +781,50 @@ export default function Attendance() {
 
         {/* KPI cards */}
         <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#262b31] dark:bg-[#14181e]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-400">
               Employees
             </p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{totals.employees}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-gray-100">{totals.employees}</p>
           </div>
 
-          <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+          <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm dark:border-emerald-900/60 dark:bg-[#14181e]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
               Present
             </p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{totals.present}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-gray-100">{totals.present}</p>
           </div>
 
-          <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Absent</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{totals.absent}</p>
+          <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm dark:border-red-900/60 dark:bg-[#14181e]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">Absent</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-gray-100">{totals.absent}</p>
           </div>
 
-          <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Leave</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{totals.leave}</p>
+          <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm dark:border-amber-900/60 dark:bg-[#14181e]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Leave</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-gray-100">{totals.leave}</p>
           </div>
 
-          <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm dark:border-blue-900/60 dark:bg-[#14181e]">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
                 Overtime
               </p>
               <Clock3 size={16} className="text-blue-500" />
             </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{totals.overtime.toFixed(1)}h</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-gray-100">{totals.overtime.toFixed(1)}h</p>
           </div>
         </div>
 
         {/* Attendance Codes */}
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-slate-900">Attendance Codes</h3>
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#262b31] dark:bg-[#14181e]">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-gray-100">Attendance Codes</h3>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {ATTENDANCE_CODES.map((item) => (
               <div
                 key={item.code}
-                className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2"
+                className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-[#1c2026] dark:border dark:border-[#262b31]"
               >
                 <span
                   className={`flex h-7 w-10 items-center justify-center rounded-md border text-xs font-bold ${CODE_CLASSES[item.code]}`}

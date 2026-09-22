@@ -63,14 +63,15 @@ export function calcPayroll(employee, attendance) {
     otherAllowance +
     otPay
 
-  // Allowances treated as 100% taxable by default
-  const taxableIncome = gross
-
-  const incomeTax = exempt ? 0 : lookupTax(taxableIncome)
-
-  // Pension computed on basic salary only
+  // Allowances treated as 100% taxable by default.
+  // Pension (7%) is deducted from gross before PAYE, matching the
+  // server-side payroll engine (hr-manager.controller.js).
   const employeePension = exempt ? 0 : basicSalary * SETTINGS.pension.employeeRate
   const employerPension = exempt ? 0 : basicSalary * SETTINGS.pension.employerRate
+
+  const taxableIncome = Math.max(0, gross - employeePension)
+
+  const incomeTax = exempt ? 0 : lookupTax(taxableIncome)
 
   const otherDeductions = employee.otherDeductions ?? 0
   const loanDeductions = employee.loanDeductions ?? 0

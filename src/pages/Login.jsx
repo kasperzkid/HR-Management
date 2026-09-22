@@ -855,14 +855,14 @@ function Login() {
       </div>
 
       {/* ── RIGHT COLUMN: 50% Premium Dark Inset Slider ── */}
-      <div className="hidden sm:block w-full lg:w-1/2 flex-1 flex-col min-h-0 p-4 sm:p-5 lg:p-6 bg-white">
-        <div className="flex-1 rounded-[32px] bg-gradient-to-br from-[#232733] via-[#1c202b] to-[#161822] text-white flex flex-col justify-between relative overflow-hidden shadow-2xl border border-gray-700/30">
+      <div className="hidden sm:flex w-full lg:w-1/2 flex-1 min-h-0 p-4 sm:p-5 lg:p-6 bg-white">
+        <div className="flex-1 min-h-0 rounded-[32px] bg-gradient-to-br from-[#232733] via-[#1c202b] to-[#161822] text-white flex flex-col justify-between relative overflow-hidden shadow-2xl border border-gray-700/30">
           {/* Ambient Glows */}
           <div className="absolute -right-24 -top-24 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -left-24 -bottom-24 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Carousel Track */}
-          <div className="my-auto relative w-full overflow-hidden py-3 sm:py-4 lg:py-5 px-3 sm:px-6">
+          <div className="relative w-full flex-1 min-h-0 overflow-hidden flex flex-col justify-center py-3 sm:py-4 lg:py-5 px-3 sm:px-6">
             <div
               className="flex transition-transform duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform"
               style={{ transform: `translateX(-${activeIdx * 100}%)` }}

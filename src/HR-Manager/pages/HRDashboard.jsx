@@ -274,46 +274,46 @@ function HRDashboard() {
         </section>
 
         {/* Quick Actions */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-950">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-[#262b31] dark:bg-[#14181e]">
+          <h2 className="text-lg font-bold text-slate-950 dark:text-gray-100">
             Quick Actions
           </h2>
 
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">
             Common HR tasks.
           </p>
 
           <div className="mt-5 space-y-3">
             <a
               href="/hr-manager/employees"
-              className="flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50"
+              className="flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50 dark:border-[#262b31] dark:hover:bg-[#1c2026]"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">
                   Manage Employees
                 </p>
 
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">
                   View and manage employee records
                 </p>
               </div>
 
               <ArrowUpRight
                 size={18}
-                className="text-slate-400"
+                className="text-slate-400 dark:text-gray-500"
               />
             </a>
 
             <a
               href="/hr-manager/attendance"
-              className="flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50"
+              className="flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50 dark:border-[#262b31] dark:hover:bg-[#1c2026]"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">
                   Attendance
                 </p>
 
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-gray-400">
                   Review attendance records
                 </p>
               </div>

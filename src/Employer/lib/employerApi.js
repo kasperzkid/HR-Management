@@ -23,7 +23,19 @@ async function ef(path, options = {}) {
 export const fetchEmployees = () => ef('/employees')
 
 // ── Attendance ───────────────────────────────────────────────
-export const fetchAttendance = () => ef('/attendance')
+// Optional { month, year } limits the rows to that calendar month so
+// the payroll / payslip previews match the period actually selected.
+export const fetchAttendance = ({ month, year } = {}) => {
+  const params = new URLSearchParams()
+  if (month && year) {
+    const padded = String(month).padStart(2, '0')
+    const lastDay = new Date(year, month, 0).getDate()
+    params.set('startDate', `${year}-${padded}-01`)
+    params.set('endDate', `${year}-${padded}-${String(lastDay).padStart(2, '0')}`)
+  }
+  const qs = params.toString()
+  return ef(`/attendance${qs ? `?${qs}` : ''}`)
+}
 
 // ── Leave requests ───────────────────────────────────────────
 export const fetchLeaveRequests = () => ef('/leave')

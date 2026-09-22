@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Printer,
   Download,
@@ -14,10 +14,12 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { useEmployees } from '../../Employer/hooks/useEmployees'
+import { calcPayroll } from '../../Employer/lib/payroll'
+import { attendanceTotals } from '../../Employer/lib/attendanceUtils'
+import { authHeaders } from '../../lib/hrApi'
+import { getMonthRange } from './payroll/payrollMath'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 import PaymentSlip from '../../components/PaymentSlip'
-
-const PENSION_RATE = 0.07
 
 // Departments computed from loaded employees inside the component
 
@@ -28,11 +30,6 @@ function getEmployeeName(employee) {
 
 function getEmployeeId(employee, index) {
   return employee.employeeId || employee.id || `EMP-${String(index + 1).padStart(3, '0')}`
-}
-
-function getSalary(employee) {
-  const salary = Number(employee.basicSalary ?? employee.salary ?? 0)
-  return Number.isFinite(salary) ? salary : 0
 }
 
 function formatCurrency(value) {
@@ -51,56 +48,6 @@ function formatMonth(month) {
   if (!month) return ''
   const date = new Date(`${month}-01T00:00:00`)
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-}
-
-function calculatePayroll(employee) {
-  const basicSalary = getSalary(employee)
-  const transportAllowance = Number(employee.transportAllowance || 0)
-  const housingAllowance = Number(employee.housingAllowance || 0)
-  const mealAllowance = Number(employee.mealAllowance || 0)
-  const otherAllowance = Number(employee.otherAllowance || 0)
-  const overtime = Number(employee.overtime || 0)
-
-  const gross =
-    basicSalary + transportAllowance + housingAllowance + mealAllowance + otherAllowance + overtime
-
-  const pension = Number((basicSalary * PENSION_RATE).toFixed(2))
-  const incomeTax = Number(employee.incomeTax || 0)
-  const loanAdvance = Number(employee.loanAdvance || 0)
-  const otherDeduction = Number(employee.otherDeduction || 0)
-
-  const totalDeductions = pension + incomeTax + loanAdvance + otherDeduction
-  const netSalary = gross - totalDeductions
-
-  return {
-    basicSalary,
-    transportAllowance,
-    housingAllowance,
-    mealAllowance,
-    otherAllowance,
-    overtime,
-    gross,
-    pension,
-    incomeTax,
-    loanAdvance,
-    otherDeduction,
-    totalDeductions,
-    netSalary,
-  }
-}
-
-function buildPayslip(employee, index) {
-  return {
-    employeeKey: employee.id || employee.employeeId || index,
-    employeeId: getEmployeeId(employee, index),
-    employeeName: getEmployeeName(employee),
-    department: employee.department || 'Unassigned',
-    jobTitle: employee.jobTitle || 'Employee',
-    employmentStatus: employee.employmentStatus || employee.status || 'Active',
-    tin: employee.tin || '',
-    bankAccount: employee.bankAccount || '',
-    ...calculatePayroll(employee),
-  }
 }
 
 function SlipPreviewModal({ payslip, month, onClose, onPrev, onNext, hasPrev, hasNext }) {
@@ -203,9 +150,30 @@ export default function PaymentSlips() {
   const [search, setSearch] = useState('')
   const [department, setDepartment] = useState('All Departments')
   const [selectedPayslip, setSelectedPayslip] = useState(null)
+  const [attendance, setAttendance] = useState([])
 
-  // Generate payslips from employee records (samuel-dashboard buildPayslip logic)
+  // Generate payslips from employee records using the shared payroll
+  // engine + the attendance of the selected month (never 0 tax / 0 OT).
   const { employees } = useEmployees()
+
+  useEffect(() => {
+    let cancelled = false
+    const { startDate, endDate } = getMonthRange(payrollMonth)
+    fetch(`/api/hr-manager/attendance?startDate=${startDate}&endDate=${endDate}`, {
+      headers: authHeaders(),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setAttendance(Array.isArray(data) ? data : [])
+      })
+      .catch(() => {
+        if (!cancelled) setAttendance([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [payrollMonth])
+
   const DEPARTMENTS = useMemo(
     () => [
       'All Departments',
@@ -213,7 +181,38 @@ export default function PaymentSlips() {
     ],
     [employees]
   )
-  const payslips = useMemo(() => employees.map(buildPayslip), [employees])
+  const payslips = useMemo(() => {
+    const attTotals = attendanceTotals(attendance)
+    return employees.map((employee, index) => {
+      const row = calcPayroll(
+        employee,
+        attTotals[employee.id] || attTotals[employee.employeeId] || { totalOtHours: 0 },
+      )
+      return {
+        employeeKey: employee.id || employee.employeeId || index,
+        employeeId: getEmployeeId(employee, index),
+        employeeName: getEmployeeName(employee),
+        department: employee.department || 'Unassigned',
+        jobTitle: employee.jobTitle || 'Employee',
+        employmentStatus: employee.employmentStatus || employee.status || 'Active',
+        tin: employee.tin || '',
+        bankAccount: employee.bankAccount || '',
+        basicSalary: row.basicSalary,
+        transportAllowance: row.transportAllowance,
+        housingAllowance: row.housingAllowance,
+        mealAllowance: row.mealAllowance,
+        otherAllowance: row.otherAllowance,
+        overtime: row.otPay,
+        gross: row.gross,
+        pension: row.pensionEmployee,
+        incomeTax: row.incomeTax,
+        loanAdvance: row.loanDeductions || 0,
+        otherDeduction: row.otherDeductions || 0,
+        totalDeductions: row.totalDeductions,
+        netSalary: row.netSalary,
+      }
+    })
+  }, [employees, attendance])
 
   const filteredPayslips = useMemo(() => {
     const query = search.trim().toLowerCase()

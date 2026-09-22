@@ -131,16 +131,16 @@ export default function LeaveRequestModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white dark:bg-[#15181d] shadow-2xl border border-slate-200 dark:border-[#262b31]">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-[#262b31] bg-white dark:bg-[#15181d] px-6 py-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-gray-100">
               {editingRequest
                 ? 'Edit Leave Request'
                 : 'New Leave Request'}
             </h2>
 
-            <p className="mt-0.5 text-sm text-slate-500">
+            <p className="mt-0.5 text-sm text-slate-500 dark:text-gray-400">
               Enter the leave request details below.
             </p>
           </div>

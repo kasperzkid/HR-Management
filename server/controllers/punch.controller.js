@@ -363,12 +363,12 @@ export async function punchCheckOut(req, res) {
     }
 
     const isEmergency = Boolean(req.body.emergency)
+    const reason = String(req.body.remark || '').trim()
     const stats = deriveStats(attendance.checkIn, time, isEmergency)
 
     // Emergency check-outs must carry a reason and notify HR before the
     // record is closed. If HR can't be reached the punch is NOT recorded.
     if (isEmergency) {
-      const reason = String(req.body.remark || '').trim()
       if (reason.length < 5) {
         return res.status(400).json({
           message: 'A reason (at least 5 characters) is required for an emergency check-out.',

@@ -19,12 +19,9 @@ function Payroll() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([fetchEmployees(), fetchAttendance()])
-      .then(([emps, att]) => {
-        if (!cancelled) {
-          setEmployees(emps)
-          setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
-        }
+    fetchEmployees()
+      .then((emps) => {
+        if (!cancelled) setEmployees(Array.isArray(emps) ? emps : [])
       })
       .catch(() => {})
       .finally(() => {
@@ -35,6 +32,21 @@ function Payroll() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    setAttendance([])
+    fetchAttendance({ month, year })
+      .then((att) => {
+        if (!cancelled) setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
+      })
+      .catch(() => {
+        if (!cancelled) setAttendance([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [month, year])
+
   const filteredEmployees = useMemo(() => {
     if (showAllEmployees) return employees.filter((emp) => emp.employmentStatus !== 'Resigned' && emp.employmentStatus !== 'Terminated')
     return employees.filter((emp) => emp.employeeId === currentEmployeeId)
@@ -43,7 +55,7 @@ function Payroll() {
   const rows = useMemo(() => {
     const attTotals = attendanceTotals(attendance)
     return filteredEmployees.map((emp) => {
-      const base = calcPayroll(emp, attTotals[emp.employeeId] || { totalOtHours: 0 })
+      const base = calcPayroll(emp, attTotals[emp.id] || attTotals[emp.employeeId] || { totalOtHours: 0 })
       const ov = overrides[emp.employeeId]
       const otherDeductions = ov?.otherDeductions ?? emp.otherDeductions ?? 0
       const loanDeductions = ov?.loanDeductions ?? emp.loanDeductions ?? 0

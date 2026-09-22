@@ -32,21 +32,33 @@ export default function Payslips() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([fetchEmployees(), fetchAttendance()])
-      .then(([emps, att]) => {
-        if (!cancelled) {
-          setEmployees(emps)
-          setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
-        }
+    fetchEmployees()
+      .then((emps) => {
+        if (!cancelled) setEmployees(Array.isArray(emps) ? emps : [])
       })
       .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setAttendance([])
+    fetchAttendance({ month, year })
+      .then((att) => {
+        if (!cancelled) setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
+      })
+      .catch(() => {
+        if (!cancelled) setAttendance([])
+      })
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [month, year])
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -58,7 +70,7 @@ export default function Payslips() {
   const slipsData = useMemo(() => {
     const attTotals = attendanceTotals(attendance)
     return employees.map((emp) => {
-      const att = attTotals[emp.employeeId] || { totalOtHours: 0 }
+      const att = attTotals[emp.id] || attTotals[emp.employeeId] || { totalOtHours: 0 }
       const row = calcPayroll(emp, att)
 
       const earnings = {

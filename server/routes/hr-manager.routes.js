@@ -21,6 +21,8 @@ import {
   createAttendance,
   updateAttendance,
   deleteAttendance,
+  updateAttendanceHrStatus,
+  acknowledgeEmergencyDeparture,
 
   getLeaveRequests,
   getLeaveRequest,
@@ -66,6 +68,11 @@ router.get('/attendance/:id', getAttendanceRecord)
 router.post('/attendance', createAttendance)
 router.put('/attendance/:id', updateAttendance)
 router.delete('/attendance/:id', deleteAttendance)
+
+// HR review status (separate endpoint — only hrStatus/hrNote, no punch data)
+router.patch('/attendance/:id/hr-status', updateAttendanceHrStatus)
+// Acknowledge an emergency check-out after HR review
+router.post('/attendance/:id/acknowledge', acknowledgeEmergencyDeparture)
 
 // ============================================================
 // LEAVE MANAGEMENT
