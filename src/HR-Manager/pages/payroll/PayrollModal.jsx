@@ -131,7 +131,7 @@ export default function PayrollModal({ employee, payroll, month, attendanceSumma
       value: `${attendanceSummary?.presentDays ?? 0} / ${attendanceSummary?.leaveDays ?? 0}`,
       tone: 'text-slate-950 dark:text-slate-100',
     },
-    { label: 'Overtime Hours', value: `${Number(attendanceSummary?.overtimeHours || 0).toFixed(2)} hrs`, tone: 'text-slate-950 dark:text-slate-100' },
+    { label: 'Overtime Hours', value: fmtHours(attendanceSummary?.overtimeHours ?? 0), tone: 'text-slate-950 dark:text-slate-100' },
   ]
 
   return (

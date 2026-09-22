@@ -21,6 +21,19 @@ import ExportModal from './daily-log/ExportModal'
 import RecordAttendanceModal from './daily-log/RecordAttendanceModal'
 import { getStatusBadge } from './daily-log/statusBadge'
 
+// Format hours: show as days (÷8) when ≥8h, otherwise show hours
+function fmtHours(h) {
+  if (h == null || isNaN(h)) return '0h'
+  const hours = Number(h)
+  if (hours >= 8) {
+    const days = hours / 8
+    return days >= 10
+      ? `${days.toFixed(0)}d`
+      : `${days.toFixed(1)}d`
+  }
+  return `${hours.toFixed(2)}h`
+}
+
 // ─────────────────────────────────────────────────────────────
 // MAIN COMPONENT: DailyLogTable (Modeled on Qirb-Alga LuxuryDataTable)
 // ─────────────────────────────────────────────────────────────
@@ -558,14 +571,14 @@ export default function DailyLogTable({
 
                       {/* Regular Hours */}
                       <td className="py-3 px-3.5 text-right font-mono tabular-nums text-slate-800 dark:text-slate-200">
-                        {log.regularHrs ?? log.regular ?? 0}h
+                        {fmtHours(log.regularHrs ?? log.regular ?? 0)}
                       </td>
 
                       {/* Overtime Hours */}
                       <td className="py-3 px-3.5 text-right font-mono tabular-nums font-bold">
                         {(log.otHrs ?? log.overtime ?? 0) > 0 ? (
                           <span className="text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
-                            +{(log.otHrs ?? log.overtime ?? 0)}h
+                            +{fmtHours(log.otHrs ?? log.overtime ?? 0)}
                           </span>
                         ) : (
                           <span className="text-slate-400">0h</span>

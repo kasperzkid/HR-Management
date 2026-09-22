@@ -48,6 +48,19 @@ import {
 import LuxuryDataTable from '../../components/LuxuryDataTable'
 import { hrFetch } from '../../lib/hrApi'
 
+// Format hours: show as days (÷8) when ≥8h, otherwise show hours
+function fmtHours(h) {
+  if (h == null || isNaN(h)) return '0h'
+  const hours = Number(h)
+  if (hours >= 8) {
+    const days = hours / 8
+    return days >= 10
+      ? `${days.toFixed(0)}d`
+      : `${days.toFixed(1)}d`
+  }
+  return `${hours.toFixed(2)}h`
+}
+
 const EMPLOYMENT_TYPES = [
   'All Employment Types',
   'Permanent',
@@ -571,7 +584,7 @@ function AttendanceTab({ employees, month, backendMetrics }) {
         />
         <KpiCard
           label="Overtime Hours"
-          value={`${otHours}h`}
+          value={fmtHours(otHours)}
           sub={`${employees.length} employees · ${month}`}
           icon={Clock}
           iconCls="bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400"

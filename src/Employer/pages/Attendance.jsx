@@ -52,6 +52,19 @@ function Attendance() {
     [attendance, currentEmployee.employeeId],
   )
 
+  // Format hours: show as days (÷8) when ≥8h, otherwise show hours
+  const fmtHours = (h) => {
+    if (h == null || isNaN(h)) return '0h'
+    const hours = Number(h)
+    if (hours >= 8) {
+      const days = hours / 8
+      return days >= 10
+        ? `${days.toFixed(0)}d`
+        : `${days.toFixed(1)}d`
+    }
+    return `${hours.toFixed(2)}h`
+  }
+
   const normalizeStatus = (raw) => {
     const s = String(raw || '').trim().toUpperCase()
     if (s === 'P' || s === 'PRESENT') return 'present'
@@ -141,8 +154,8 @@ function Attendance() {
               { label: 'Present Days', value: totals.present, color: 'text-emerald-600' },
               { label: 'Absent Days', value: totals.absent, color: 'text-rose-600' },
               { label: 'Sick Days', value: totals.sick, color: 'text-teal-600' },
-              { label: 'Regular Hours', value: `${totals.regular}h`, color: 'text-gray-950 dark:text-gray-100' },
-              { label: 'Overtime Hours', value: `${totals.overtime}h`, color: 'text-indigo-600' },
+              { label: 'Regular Hours', value: fmtHours(totals.regular), color: 'text-gray-950 dark:text-gray-100' },
+              { label: 'Overtime Hours', value: fmtHours(totals.overtime), color: 'text-indigo-600' },
             ].map((s) => (
               <div
                 key={s.label}

@@ -484,6 +484,9 @@ export function useEmployeeForm({ isOpen, onClose, onSave, existingEmployees, ed
       }
       onClose()
       return true
+    } catch (err) {
+      console.error('Save employee error:', err)
+      return false
     }
   }
 
