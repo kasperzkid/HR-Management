@@ -12,8 +12,8 @@ function Salary() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-slate-900">Salary</h2>
-        <p className="text-slate-500 mt-1">Your compensation breakdown</p>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-gray-100">Salary</h2>
+        <p className="text-slate-500 dark:text-gray-400 mt-1">Your compensation breakdown</p>
       </div>
 
       <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-xl p-6 text-white shadow-lg">
@@ -24,11 +24,11 @@ function Salary() {
         <p className="text-sm text-indigo-200 mt-3">Paid on the 1st of each month</p>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h3 className="font-semibold text-slate-900">Breakdown</h3>
+      <div className="bg-white dark:bg-[#15181d] rounded-xl shadow-sm border border-slate-200 dark:border-[#262b31] overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 dark:border-[#262b31]">
+          <h3 className="font-semibold text-slate-900 dark:text-gray-100">Breakdown</h3>
         </div>
-        <div className="divide-y divide-slate-50">
+        <div className="divide-y divide-slate-50 dark:divide-[#262b31]">
           {salaryBreakdown.map((item) => (
             <div
               key={item.label}
@@ -44,11 +44,11 @@ function Salary() {
                         : 'bg-rose-500'
                   }`}
                 />
-                <p className="text-sm font-medium text-slate-800">{item.label}</p>
+                <p className="text-sm font-medium text-slate-800 dark:text-gray-200">{item.label}</p>
               </div>
               <p
                 className={`text-sm font-semibold ${
-                  item.amount > 0 ? 'text-slate-900' : 'text-rose-600'
+                  item.amount > 0 ? 'text-slate-900 dark:text-gray-100' : 'text-rose-600'
                 }`}
               >
                 {item.amount > 0 ? '+' : ''}${item.amount.toLocaleString()}
@@ -56,8 +56,8 @@ function Salary() {
             </div>
           ))}
         </div>
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-t border-slate-100">
-          <p className="text-sm font-semibold text-slate-900">Total</p>
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-[#1c2026] border-t border-slate-100 dark:border-[#262b31]">
+          <p className="text-sm font-semibold text-slate-900 dark:text-gray-100">Total</p>
           <p className="text-sm font-bold text-indigo-600">${total.toLocaleString()}</p>
         </div>
       </div>

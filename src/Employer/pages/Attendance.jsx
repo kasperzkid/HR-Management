@@ -1,169 +1,261 @@
-import { useState, useMemo } from 'react'
-import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
-import { INITIAL_EMPLOYEES } from '../data/employeeData'
-
-const STATUS_STYLES = {
-  Present: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  'Sick Leave': 'bg-teal-50 text-teal-700 border border-teal-200',
-  'On Leave': 'bg-amber-50 text-amber-700 border border-amber-200',
-  Absent: 'bg-rose-50 text-rose-700 border border-rose-200',
-}
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { Clock, Clock3, LogOut } from 'lucide-react'
+import DailyLogTable from '../../HR-Manager/components/DailyLogTable'
+import PunchCard, { EmergencyCheckOutButton } from '../components/PunchCard'
+import { resolveEmployee } from '../lib/currentUser'
+import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
+import useRealtimeRefetch from '../hooks/useRealtimeRefetch'
 
 function Attendance() {
-  const today = new Date()
-  const [monthSel, setMonthSel] = useState(today.getMonth() + 1)
-  const [yearSel, setYearSel] = useState(today.getFullYear())
-  const [empFilter, setEmpFilter] = useState('all')
+  const [employees, setEmployees] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [loading, setLoading] = useState(true)
+  const currentEmployee = resolveEmployee(employees)
 
-  const filtered = useMemo(() => {
-    return ATTENDANCE.filter((a) => {
-      const [y, m] = a.date.split('-').map(Number)
-      const monthMatches = m === monthSel && y === yearSel
-      const empMatches = empFilter === 'all' || a.employeeId === empFilter
-      return monthMatches && empMatches
-    })
-  }, [monthSel, yearSel, empFilter])
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchEmployees(), fetchAttendance()])
+      .then(([emps, att]) => {
+        if (!cancelled) {
+          setEmployees(emps)
+          setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Live refresh: today's punch or an HR status change updates the log
+  // and KPI totals instantly (no manual reload needed).
+  const reloadAttendance = useCallback(() => {
+    fetchAttendance()
+      .then((att) => setAttendance(Array.isArray(att) ? att : (att?.attendance || [])))
+      .catch(() => {})
+  }, [])
+  useRealtimeRefetch('attendance', reloadAttendance)
+
+  const myAttendance = useMemo(
+    () => {
+      // If the current user resolved to a real employee, filter to their records.
+      // Fall back to all attendance when no matching employee record exists
+      // (e.g. employer accounts that have no Employee row).
+      if (currentEmployee.employeeId !== '—') {
+        return attendance.filter((a) => a.employeeId === currentEmployee.employeeId)
+      }
+      return attendance
+    },
+    [attendance, currentEmployee.employeeId],
+  )
+
+  // Format hours: show as days (÷8) when ≥8h, otherwise show hours
+  const fmtHours = (h) => {
+    if (h == null || isNaN(h)) return '0h'
+    const hours = Number(h)
+    if (hours >= 8) {
+      const days = hours / 8
+      return days >= 10
+        ? `${days.toFixed(0)}d`
+        : `${days.toFixed(1)}d`
+    }
+    return `${hours.toFixed(2)}h`
+  }
+
+  const normalizeStatus = (raw) => {
+    const s = String(raw || '').trim().toUpperCase()
+    if (s === 'P' || s === 'PRESENT') return 'present'
+    if (s === 'PH') return 'present' // half-day counts as present
+    if (s === 'A' || s === 'ABSENT') return 'absent'
+    if (s === 'SL' || s === 'SICK' || s === 'SICK_LEAVE' || s === 'SICKLEAVE' || s === 'SICK LEAVE') return 'sick'
+    if (s === 'AL' || s === 'ANNUAL_LEAVE' || s === 'ANNUALLEAVE' || s === 'ON_LEAVE' || s === 'ANNUAL LEAVE') return 'on_leave'
+    if (s === 'ML' || s === 'MEDICAL_LEAVE' || s === 'MEDICALLEAVE' || s === 'MEDICAL LEAVE') return 'on_leave'
+    if (s === 'OL' || s === 'OTHER_LEAVE' || s === 'OTHERLEAVE' || s === 'OTHER LEAVE') return 'on_leave'
+    return 'unknown'
+  }
 
   const totals = useMemo(() => {
     const agg = { regular: 0, overtime: 0, late: 0, present: 0, absent: 0, sick: 0 }
-    filtered.forEach((a) => {
+    myAttendance.forEach((a) => {
       agg.regular += a.regular || 0
       agg.overtime += a.overtime || 0
       agg.late += a.late || 0
-      if (a.status === 'Present') agg.present += 1
-      else if (a.status === 'Absent') agg.absent += 1
-      else if (a.status === 'Sick Leave') agg.sick += 1
+      const st = normalizeStatus(a.status)
+      if (st === 'present') agg.present += 1
+      else if (st === 'absent') agg.absent += 1
+      else if (st === 'sick') agg.sick += 1
     })
     return agg
-  }, [filtered])
+  }, [myAttendance])
 
-  const employeeTotals = useMemo(() => attendanceTotals(ATTENDANCE), [])
+  const myTotal = useMemo(() => {
+    return myAttendance.reduce(
+      (acc, a) => {
+        const st = normalizeStatus(a.status)
+        if (st === 'present' || st === 'on_leave') {
+          acc.days += 1
+          acc.totalHours += a.regular || 0
+          acc.totalOtHours += a.overtime || 0
+        } else {
+          acc.absences += 1
+        }
+        return acc
+      },
+      { days: 0, totalHours: 0, totalOtHours: 0, absences: 0 },
+    )
+  }, [myAttendance])
+
+  const punchStats = useMemo(() => {
+    const presentDays = myAttendance.filter((a) => normalizeStatus(a.status) === 'present')
+    const lateSum = presentDays.reduce((s, a) => s + (a.late || 0), 0)
+    const earlySum = presentDays.reduce((s, a) => s + (a.earlyDeparture || 0), 0)
+    const overtimeHours = Math.round(
+      myAttendance.reduce((sum, a) => sum + (a.overtime || 0), 0) * 10
+    ) / 10
+    return {
+      avgLateMin: presentDays.length ? Math.round(lateSum / presentDays.length) : 0,
+      avgEarlyMin: presentDays.length ? Math.round(earlySum / presentDays.length) : 0,
+      overtimeHours,
+    }
+  }, [myAttendance])
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-950">Attendance</h1>
-          <p className="text-xs text-gray-500 mt-1">Daily check-in/check-out log — regular & OT hours derived automatically</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <select value={empFilter} onChange={(e) => setEmpFilter(e.target.value)} className="px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white font-semibold text-gray-800">
-            <option value="all">All employees</option>
-            {INITIAL_EMPLOYEES.map((e) => <option key={e.employeeId} value={e.employeeId}>{e.employeeId} — {e.name}</option>)}
-          </select>
-          <select value={monthSel} onChange={(e) => setMonthSel(Number(e.target.value))} className="px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white font-semibold text-gray-800">
-            {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
-              <option key={m} value={i + 1}>{m}</option>
-            ))}
-          </select>
-          <select value={yearSel} onChange={(e) => setYearSel(Number(e.target.value))} className="px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white font-semibold text-gray-800">
-            {[2025, 2026].map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* Summary stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {[
-          { label: 'Present Days', value: totals.present, color: 'text-emerald-600' },
-          { label: 'Absent Days', value: totals.absent, color: 'text-rose-600' },
-          { label: 'Sick Days', value: totals.sick, color: 'text-teal-600' },
-          { label: 'Regular Hours', value: `${totals.regular}h`, color: 'text-gray-950' },
-          { label: 'Overtime Hours', value: `${totals.overtime}h`, color: 'text-indigo-600' },
-        ].map((s) => (
-          <div key={s.label} className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs">
-            <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-950 dark:text-gray-100">
+              My Attendance
+            </h1>
+            <span className="text-[11px] font-bold text-gray-500 bg-gray-100 dark:bg-[#1c2026] dark:text-gray-400 border border-gray-200 dark:border-[#262b31] px-2 py-0.5 rounded-md">
+              {currentEmployee.name} ({currentEmployee.employeeId})
+            </span>
           </div>
-        ))}
-      </div>
-
-      {/* Daily log */}
-      <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-bold text-gray-950">Daily Log</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Personal punch log, scheduled shifts &amp; overtime hours computed automatically
+          </p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[900px]">
-            <thead>
-              <tr className="text-[11px] text-gray-500 border-b border-gray-100 bg-gray-50/50">
-                <th className="px-5 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Employee</th>
-                <th className="px-4 py-3 font-medium">Department</th>
-                <th className="px-4 py-3 font-medium">Check-in</th>
-                <th className="px-4 py-3 font-medium">Check-out</th>
-                <th className="px-4 py-3 font-medium text-right">Regular Hrs</th>
-                <th className="px-4 py-3 font-medium text-right">OT Hrs</th>
-                <th className="px-4 py-3 font-medium text-right">Late (min)</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-5 py-10 text-center text-xs text-gray-400">No attendance records for this selection.</td>
-                </tr>
-              ) : (
-                filtered.map((a) => (
-                  <tr key={a.id} className="text-xs">
-                    <td className="px-5 py-3 text-gray-600 whitespace-nowrap">{a.date}</td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900">{a.employeeName}</p>
-                      <p className="text-[11px] text-gray-400">{a.employeeId}</p>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">{a.department}</td>
-                    <td className="px-4 py-3 font-mono text-gray-700">{a.checkIn || '—'}</td>
-                    <td className="px-4 py-3 font-mono text-gray-700">{a.checkOut || '—'}</td>
-                    <td className="px-4 py-3 text-right tabular-nums font-semibold">{a.regular}h</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-indigo-600">{a.overtime}h</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-amber-600">{a.late}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <EmergencyCheckOutButton />
         </div>
       </div>
 
-      {/* Per-employee OT summary (feeds payroll) */}
-      <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-bold text-gray-950">Monthly Hours Summary (feeds payroll)</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[700px]">
-            <thead>
-              <tr className="text-[11px] text-gray-500 border-b border-gray-100 bg-gray-50/50">
-                <th className="px-5 py-3 font-medium">Employee</th>
-                <th className="px-4 py-3 font-medium text-right">Days Worked</th>
-                <th className="px-4 py-3 font-medium text-right">Total Hrs</th>
-                <th className="px-4 py-3 font-medium text-right">OT Hrs</th>
-                <th className="px-4 py-3 font-medium text-right">Absences</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {Object.entries(employeeTotals).map(([empId, agg]) => {
-                const emp = INITIAL_EMPLOYEES.find((e) => e.employeeId === empId)
-                return (
-                  <tr key={empId} className="text-xs">
-                    <td className="px-5 py-3">
-                      <p className="font-semibold text-gray-900">{emp?.name || empId}</p>
-                      <p className="text-[11px] text-gray-400">{empId}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right">{agg.days}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{agg.totalHours}h</td>
-                    <td className="px-4 py-3 text-right text-indigo-600 font-semibold">{agg.totalOtHours}h</td>
-                    <td className="px-4 py-3 text-right text-rose-600">{agg.absences}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {loading ? (
+        <div className="py-20 text-center text-xs font-semibold text-gray-400">Loading attendance…</div>
+      ) : (
+        <>
+          {/* Summary stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {[
+              { label: 'Present Days', value: totals.present, color: 'text-emerald-600' },
+              { label: 'Absent Days', value: totals.absent, color: 'text-rose-600' },
+              { label: 'Sick Days', value: totals.sick, color: 'text-teal-600' },
+              { label: 'Regular Hours', value: fmtHours(totals.regular), color: 'text-gray-950 dark:text-gray-100' },
+              { label: 'Overtime Hours', value: fmtHours(totals.overtime), color: 'text-indigo-600' },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs dark:bg-[#15181d] dark:border-[#262b31]"
+              >
+                <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Punch status cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs dark:bg-[#15181d] dark:border-[#262b31]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Avg Late Time</p>
+                <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 flex items-center justify-center">
+                  <Clock3 size={14} />
+                </div>
+              </div>
+              <p className="text-xl font-bold text-gray-950 dark:text-gray-100 mt-1 tabular-nums">
+                {punchStats.avgLateMin}m
+              </p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Average minutes past 8:00 AM
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs dark:bg-[#15181d] dark:border-[#262b31]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Avg Early Departure</p>
+                <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 flex items-center justify-center">
+                  <LogOut size={14} />
+                </div>
+              </div>
+              <p className="text-xl font-bold text-gray-950 dark:text-gray-100 mt-1 tabular-nums">
+                {punchStats.avgEarlyMin}m
+              </p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Average minutes before 5:30 PM
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 border border-gray-200/90 shadow-2xs dark:bg-[#15181d] dark:border-[#262b31]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Overtime</p>
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 flex items-center justify-center">
+                  <Clock size={14} />
+                </div>
+              </div>
+              <p className="text-xl font-bold text-gray-950 dark:text-gray-100 mt-1 tabular-nums">
+                {punchStats.overtimeHours}h
+              </p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                All records
+              </p>
+            </div>
+          </div>
+
+          <PunchCard />
+
+          {/* Current Employee Hours Summary */}
+          <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs p-5 dark:bg-[#15181d] dark:border-[#262b31] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-gray-950 dark:text-gray-100">
+                Hours Summary
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Verified working days and overtime submitted to payroll for disbursement.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <div className="bg-slate-50 dark:bg-[#1c2026] border border-slate-200 dark:border-[#262b31] px-3 py-2 rounded-xl">
+                <span className="text-slate-400 text-[10px] uppercase font-bold block">Worked Days</span>
+                <span className="font-bold text-slate-800 dark:text-gray-100 text-sm">{myTotal.days}</span>
+              </div>
+              <div className="bg-slate-50 dark:bg-[#1c2026] border border-slate-200 dark:border-[#262b31] px-3 py-2 rounded-xl">
+                <span className="text-slate-400 text-[10px] uppercase font-bold block">Total Hours</span>
+                <span className="font-bold text-slate-800 dark:text-gray-100 text-sm">{myTotal.totalHours}h</span>
+              </div>
+              <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50 px-3 py-2 rounded-xl">
+                <span className="text-indigo-600 dark:text-indigo-400 text-[10px] uppercase font-bold block">Overtime</span>
+                <span className="font-bold text-indigo-700 dark:text-indigo-300 text-sm">{myTotal.totalOtHours}h</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Daily log */}
+          <section id="daily-log-section">
+            <DailyLogTable
+              initialLogs={myAttendance}
+              employees={[currentEmployee]}
+              title="My Daily Log"
+              subtitle={`Check-in and punch records for ${currentEmployee.name}`}
+              showActions={false}
+              tableId="employer-daily-log-table"
+            />
+          </section>
+        </>
+      )}
     </div>
   )
 }

@@ -1,38 +1,93 @@
-import { useState } from 'react'
-import { Link, useLocation, Outlet } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Users,
   BadgeDollarSign,
-  Headphones,
-  Search,
-  ChevronDown,
-  Menu,
-  X,
-  Check,
   BarChart3,
+  ChevronDown,
+  LayoutDashboard,
+  Menu,
   MessageSquare,
-  UserRound,
+  Search,
   Settings as SettingsIcon,
+  Users,
+  X,
 } from 'lucide-react'
+import GlobalSearchModal from '../../components/GlobalSearchModal'
 import Topbar from './Topbar'
 import ProfileMenu from './ProfileMenu'
+import PunchWidget from './PunchWidget'
 import { useMessaging } from '../context/messagingStore'
+
+const EMPLOYER_SEARCH_ENTRIES = [
+  {
+    id: 'dashboard',
+    section: 'Dashboard',
+    icon: LayoutDashboard,
+    items: [{ label: 'Dashboard', path: '/employer/dashboard' }],
+  },
+  {
+    id: 'teams',
+    section: 'Teams',
+    icon: Users,
+    items: [
+      { label: 'Attendance', path: '/employer/attendance' },
+      { label: 'Leave', path: '/employer/leave' },
+    ],
+  },
+  {
+    id: 'finance',
+    section: 'Finance',
+    icon: BadgeDollarSign,
+    items: [
+      { label: 'Payroll', path: '/employer/payroll' },
+      { label: 'Payment Slips', path: '/employer/payslips' },
+    ],
+  },
+  {
+    id: 'reports',
+    section: 'Reports',
+    icon: BarChart3,
+    items: [{ label: 'Reports', path: '/employer/reports' }],
+  },
+  {
+    id: 'messages',
+    section: 'Messages',
+    icon: MessageSquare,
+    items: [{ label: 'Inbox', path: '/employer/inbox' }],
+  },
+  {
+    id: 'system',
+    section: 'System',
+    icon: SettingsIcon,
+    items: [{ label: 'Settings', path: '/employer/settings' }],
+  },
+]
 
 function EmployerLayout() {
   const location = useLocation()
   const { totalUnread } = useMessaging()
   const [isHovered, setIsHovered] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [showOrgMenu, setShowOrgMenu] = useState(false)
-  const [currentOrg, setCurrentOrg] = useState({ name: 'Wishbone', members: '61 members', code: 'WB' })
-
+  const searchInputRef = useRef(null)
   // Expandable sections in the sidebar
   const [expandedSections, setExpandedSections] = useState({
     teams: true,
     finance: true,
   })
+
+  // ⌘F / ⌘K opens the global search modal, like the HR workspace
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'k')) {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const toggleSection = (section) => {
     setExpandedSections((prev) => ({
@@ -40,12 +95,6 @@ function EmployerLayout() {
       [section]: !prev[section],
     }))
   }
-
-  const organizations = [
-    { name: 'Wishbone', members: '61 members', code: 'WB', active: true },
-    { name: 'Acme Corp', members: '142 members', code: 'AC', active: false },
-    { name: 'Starlight Inc', members: '34 members', code: 'SI', active: false },
-  ]
 
   const isRouteActive = (path) => {
     if (path === '/employer/dashboard' && (location.pathname === '/employer/dashboard' || location.pathname === '/employer' || location.pathname === '/employer/')) {
@@ -56,33 +105,50 @@ function EmployerLayout() {
 
   const collapsed = !isHovered
 
+  // Live filter for sidebar navigation, same behavior as the HR sidebar
+  const query = searchQuery.trim().toLowerCase()
+  const isSearching = query.length > 0
+  const matches = (label) => label.toLowerCase().includes(query)
+
+  const teamsItems = [
+    { label: 'Attendance', path: '/employer/attendance' },
+    { label: 'Leave', path: '/employer/leave' },
+  ]
+  const financeItems = [
+    { label: 'Payroll', path: '/employer/payroll' },
+    { label: 'Payslips', path: '/employer/payslips' },
+  ]
+  const visibleTeams = isSearching ? teamsItems.filter((i) => matches(i.label)) : teamsItems
+  const visibleFinance = isSearching ? financeItems.filter((i) => matches(i.label)) : financeItems
+
   return (
-    <div className="h-screen overflow-hidden bg-[#f4f5f7] text-gray-800 flex flex-col antialiased">
+    <div className="h-screen overflow-hidden bg-[#f4f5f7] dark:bg-[#0a0d10] text-gray-800 dark:text-gray-200 flex flex-col antialiased print:h-auto print:overflow-visible print:bg-white">
       {/* Mobile Top Navigation Header */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 sticky top-0 z-40 shadow-xs">
+      <div className="lg:hidden print:hidden flex items-center justify-between px-4 py-3 bg-white dark:bg-[#15181d] border-b border-gray-200 dark:border-[#262b31] sticky top-0 z-40 shadow-xs">
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors"
             aria-label="Toggle menu"
           >
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs shadow-xs">
+            <div className="w-7 h-7 rounded-lg bg-black dark:bg-[#3a4149] text-white flex items-center justify-center font-bold text-xs shadow-xs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M12 3v6m0 6v6" />
                 <path d="M3 12h6m6 0h6" />
               </svg>
             </div>
-            <span className="font-bold tracking-tight text-gray-950 text-sm">Yanol-HR</span>
+            <span className="font-bold tracking-tight text-gray-950 dark:text-gray-100 text-sm">Yanol-HR</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <PunchWidget />
           <Link
             to="/employer/inbox"
-            className="relative p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            className="relative p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#1c2026] transition-colors"
             aria-label="Inbox"
           >
             <MessageSquare size={18} />
@@ -108,22 +174,22 @@ function EmployerLayout() {
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
           className={`
-            fixed lg:static inset-y-0 left-0 z-50 bg-white border-r border-gray-200/80
-            flex flex-col shrink-0 transition-all duration-300 ease-in-out select-none
+            fixed lg:static inset-y-0 left-0 z-50 bg-white dark:bg-[#0d1014] border-r border-gray-200/80 dark:border-[#262b31]
+            flex flex-col shrink-0 transition-all duration-300 ease-in-out select-none print:hidden
             ${collapsed ? 'lg:w-[72px]' : 'lg:w-[250px]'}
             ${mobileOpen ? 'translate-x-0 w-[260px] shadow-2xl' : '-translate-x-full lg:translate-x-0'}
           `}
         >
           {/* Logo & Header */}
-          <div className="h-16 px-4 flex items-center justify-between border-b border-gray-100">
+          <div className="h-16 px-4 flex items-center justify-between border-b border-gray-100 dark:border-[#262b31]">
             <div className={`flex items-center gap-2.5 overflow-hidden transition-all duration-200 ${collapsed ? 'justify-center w-full' : ''}`}>
-              <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+              <div className="w-8 h-8 rounded-lg bg-black dark:bg-[#3a4149] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 3.2L18 9l-6 3.8L6 9l6-3.8zm-6.5 5.5l5.5 3.5v7.2L5.5 18v-7.3zm13 0v7.3l-5.5 3.5v-7.2l5.5-3.6z" />
                 </svg>
               </div>
               {!collapsed && (
-                <span className="font-extrabold tracking-tight text-gray-950 text-sm font-sans whitespace-nowrap">
+                <span className="font-extrabold tracking-tight text-gray-950 dark:text-gray-100 text-sm font-sans whitespace-nowrap">
                   Yanol-HR
                 </span>
               )}
@@ -136,15 +202,13 @@ function EmployerLayout() {
               <div className="relative flex items-center">
                 <Search size={15} className="absolute left-3 text-gray-400 pointer-events-none" />
                 <input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-12 py-1.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white text-xs text-gray-800 rounded-lg border border-gray-200/70 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-400"
+                  className="w-full pl-9 pr-3 py-2 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white dark:bg-[#15181d] dark:hover:bg-[#1c2026] dark:focus:bg-gray-900 text-[13px] text-gray-800 dark:text-gray-200 rounded-lg border border-gray-200/70 dark:border-[#33383f] focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-400"
                 />
-                <span className="absolute right-2 text-[10px] font-medium text-gray-400 bg-white px-1.5 py-0.5 rounded border border-gray-200 shadow-2xs">
-                  ⌘ F
-                </span>
               </div>
             </div>
           ) : (
@@ -158,44 +222,38 @@ function EmployerLayout() {
           {/* Navigation Links */}
           <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 text-sm custom-scrollbar overflow-x-hidden">
             {/* Dashboard Item */}
+            {(!isSearching || matches('Dashboard')) && (
             <Link
               to="/employer/dashboard"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+              className={`relative flex items-center gap-3 border-l-[3px] px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
                 isRouteActive('/employer/dashboard') && !location.pathname.includes('/employee')
-                  ? 'bg-gray-100 text-gray-950 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'border-gray-950 bg-gray-100 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
               }`}
               title={collapsed ? 'Dashboard' : undefined}
             >
-              <LayoutDashboard size={16} className="shrink-0 text-gray-500" />
+              <LayoutDashboard size={18} className="shrink-0 text-gray-500" />
               {!collapsed && <span>Dashboard</span>}
             </Link>
-
-            {/* Employee Dashboard (self-service) */}
-            <Link
-              to="/employer/employee-dashboard"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                isRouteActive('/employer/employee-dashboard') || isRouteActive('/employer/my-dashboard')
-                  ? 'bg-gray-100 text-gray-950 font-semibold'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-              title={collapsed ? 'Employee Dashboard' : undefined}
-            >
-              <UserRound size={16} className="shrink-0 text-gray-500" />
-              {!collapsed && <span>Employee Dashboard</span>}
-            </Link>
+            )}
 
             {/* Teams Section (Expandable) */}
+            {(!isSearching || visibleTeams.length > 0) && (
             <div className="pt-1">
               <button
                 onClick={() => !collapsed && toggleSection('teams')}
-                className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap ${
+                className={`w-full flex items-center justify-between border-l-[3px] px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors whitespace-nowrap ${
                   collapsed ? 'justify-center' : ''
+                } ${
+                  collapsed && (isRouteActive('/employer/attendance') ||
+                    isRouteActive('/employer/leave'))
+                    ? 'border-gray-950 bg-gray-100/70 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                    : 'border-transparent text-gray-700 dark:text-gray-300'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Users size={16} className="shrink-0 text-gray-500" />
-                  {!collapsed && <span className="font-semibold text-gray-900">Teams</span>}
+                  <Users size={18} className="shrink-0 text-gray-500" />
+                  {!collapsed && <span className="font-semibold text-gray-900 dark:text-gray-100">Teams</span>}
                 </div>
                 {!collapsed && (
                   <ChevronDown
@@ -208,187 +266,130 @@ function EmployerLayout() {
               </button>
 
               {/* Sub items under Teams */}
-              {(!collapsed && expandedSections.teams) && (
+              {(!collapsed && (isSearching || expandedSections.teams)) && (
                 <div className="pl-4 pr-1 mt-0.5 space-y-0.5 whitespace-nowrap">
-                  <Link
-                    to="/employer/employee"
-                    className="relative flex items-center px-3 py-1.5 text-xs rounded-md text-gray-950 font-semibold bg-gray-50/60 hover:bg-gray-100/70 transition-colors group"
-                  >
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-gray-950 rounded-r-full" />
-                    <span className="ml-1">Employee</span>
-                  </Link>
-                  <Link
-                    to="/employer/attendance"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
-                  >
-                    Attendance
-                  </Link>
-                  <Link
-                    to="/employer/leave"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
-                  >
-                    Leave
-                  </Link>
+                  {visibleTeams.map((item) => (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                        isRouteActive(item.path)
+                          ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                          : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                 </div>
               )}
             </div>
+            )}
 
             {/* Finance Section (Expandable) */}
+            {(!isSearching || visibleFinance.length > 0) && (
             <div className="pt-1">
               <button
                 onClick={() => !collapsed && toggleSection('finance')}
-                className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap ${
+                className={`w-full flex items-center justify-between border-l-[3px] px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] transition-colors whitespace-nowrap ${
                   collapsed ? 'justify-center' : ''
+                } ${
+                  collapsed && (isRouteActive('/employer/payroll') ||
+                    isRouteActive('/employer/payslips'))
+                    ? 'border-gray-950 bg-gray-100/70 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                    : 'border-transparent text-gray-700 dark:text-gray-300'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <BadgeDollarSign size={16} className="shrink-0 text-gray-500" />
-                  {!collapsed && <span className="font-semibold text-gray-900">Finance</span>}
+                  <BadgeDollarSign size={18} className="shrink-0 text-gray-500" />
+                  {!collapsed && <span className="font-semibold text-gray-900 dark:text-gray-100">Finance</span>}
                 </div>
                 {!collapsed && (
                   <ChevronDown
                     size={14}
                     className={`text-gray-400 transition-transform duration-200 ${
-                      expandedSections.finance ? '' : '-rotate-90'
+                      isSearching || expandedSections.finance ? '' : '-rotate-90'
                     }`}
                   />
                 )}
               </button>
 
-              {(!collapsed && expandedSections.finance) && (
+              {(!collapsed && (isSearching || expandedSections.finance)) && (
                 <div className="pl-4 pr-1 mt-0.5 space-y-0.5 whitespace-nowrap">
-                  <Link
-                    to="/employer/payroll"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
-                  >
-                    Payroll
-                  </Link>
-                  <Link
-                    to="/employer/payslips"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
-                  >
-                    Payslips
-                  </Link>
-                  <Link
-                    to="/employer/payment-info"
-                    className="flex items-center px-4 py-1.5 text-xs rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
-                  >
-                    Payment information
-                  </Link>
+                  {visibleFinance.map((item) => (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`relative flex items-center border-l-[3px] px-3 py-1.5 text-[13px] transition-colors ${
+                        isRouteActive(item.path)
+                          ? 'border-gray-950 bg-gray-50/60 font-semibold text-gray-950 dark:border-white dark:bg-[#1c2026] dark:text-white'
+                          : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-[#1c2026]'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                 </div>
               )}
             </div>
+            )}
 
             {/* Bottom utility navigation */}
-            <div className="pt-6 space-y-1 border-t border-gray-100">
-              <Link
-                to="/employer/reports"
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                  isRouteActive('/employer/reports')
-                    ? 'bg-gray-100 text-gray-950 font-semibold'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                title={collapsed ? 'Reports' : undefined}
-              >
-                <BarChart3 size={16} className="shrink-0 text-gray-500" />
-                {!collapsed && <span>Reports</span>}
-              </Link>
-              <Link
-                to="/employer/settings"
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                  isRouteActive('/employer/settings') || isRouteActive('/employer/admin')
-                    ? 'bg-gray-100 text-gray-950 font-semibold'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                title={collapsed ? 'Settings' : undefined}
-              >
-                <SettingsIcon size={16} className="shrink-0 text-gray-500" />
-                {!collapsed && <span>Settings</span>}
-              </Link>
-              <Link
-                to="/employer/help"
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
-                title={collapsed ? 'Help and support' : undefined}
-              >
-                <Headphones size={16} className="shrink-0 text-gray-500" />
-                {!collapsed && <span>Help and support</span>}
-              </Link>
-            </div>
-          </div>
-
-          {/* Logout */}
-          <div className="px-3 pb-2">
-            <button
-              onClick={() => { localStorage.removeItem('user'); window.location.href = '/login' }}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors whitespace-nowrap ${collapsed ? 'justify-center' : ''}`}
-              title={collapsed ? 'Logout' : undefined}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-              {!collapsed && <span>Logout</span>}
-            </button>
-          </div>
-
-          {/* Bottom Organization Card */}
-          <div className="p-3 border-t border-gray-100 relative">
-            <button
-              onClick={() => setShowOrgMenu(!showOrgMenu)}
-              className={`w-full flex items-center justify-between p-2 rounded-xl bg-gray-100/90 hover:bg-gray-200/70 border border-gray-200/60 transition-colors text-left ${
-                collapsed ? 'justify-center p-1.5' : ''
-              }`}
-            >
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="w-8 h-8 rounded-full bg-gray-950 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                  {currentOrg.code}
-                </div>
-                {!collapsed && (
-                  <div className="truncate">
-                    <p className="text-xs font-semibold text-gray-900 truncate">{currentOrg.name}</p>
-                    <p className="text-[11px] text-gray-500 truncate">{currentOrg.members}</p>
-                  </div>
-                )}
-              </div>
-              {!collapsed && <ChevronDown size={14} className="text-gray-500 shrink-0 ml-1" />}
-            </button>
-
-            {/* Org Switcher Dropdown */}
-            {showOrgMenu && !collapsed && (
-              <div className="absolute bottom-16 left-3 right-3 bg-white rounded-xl shadow-xl border border-gray-200/90 p-2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 px-2.5 py-1">
-                  Organizations
-                </p>
-                {organizations.map((org) => (
-                  <button
-                    key={org.name}
-                    onClick={() => {
-                      setCurrentOrg(org)
-                      setShowOrgMenu(false)
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors ${
-                      org.name === currentOrg.name
-                        ? 'bg-gray-100 text-gray-950 font-semibold'
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-gray-950 text-white text-[10px] font-bold flex items-center justify-center">
-                        {org.code}
-                      </div>
-                      <span>{org.name}</span>
-                    </div>
-                    {org.name === currentOrg.name && <Check size={14} className="text-gray-900" />}
-                  </button>
-                ))}
+            {(!isSearching || matches('Reports')) && (
+              <div className="pt-6 space-y-1 border-t border-gray-100 dark:border-[#262b31]">
+                <Link
+                  to="/employer/reports"
+                  className={`relative flex items-center gap-3 border-l-[3px] px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                    isRouteActive('/employer/reports')
+                      ? 'border-gray-950 bg-gray-100 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-[#1c2026]'
+                  }`}
+                  title={collapsed ? 'Reports' : undefined}
+                >
+                  <BarChart3 size={18} className="shrink-0 text-gray-500" />
+                  {!collapsed && <span>Reports</span>}
+                </Link>
               </div>
             )}
+          </div>
+
+          {/* Bottom Settings button */}
+          <div className="p-3 border-t border-gray-100 dark:border-[#262b31]">
+            <Link
+              to="/employer/settings"
+              className={`w-full flex items-center gap-3 border-l-[3px] px-3 py-2 transition-all ${
+                isRouteActive('/employer/settings')
+                  ? 'border-gray-950 bg-gray-100 text-gray-950 font-semibold dark:border-white dark:bg-[#1c2026] dark:text-white'
+                  : 'border-transparent text-gray-600 hover:text-gray-950 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-[#1c2026] font-medium'
+              } ${collapsed ? 'justify-center px-2' : ''}`}
+              title={collapsed ? 'Settings' : undefined}
+            >
+              <SettingsIcon size={18} className="shrink-0" />
+              {!collapsed && (
+                <div className="flex-1 min-w-0 flex items-center justify-between">
+                  <span className="text-sm">Settings</span>
+                  <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500 uppercase font-semibold">You</span>
+                </div>
+              )}
+            </Link>
           </div>
         </aside>
 
         {/* Main Workspace Area */}
-        <main className="flex-1 min-w-0 overflow-y-auto bg-[#f4f5f7]">
-          <Topbar />
+        <main className="flex-1 min-w-0 overflow-y-auto bg-[#f4f5f7] dark:bg-[#0a0d10] print:overflow-visible print:bg-white print:h-auto print:p-0">
+          <div className="print:hidden">
+            <Topbar />
+          </div>
           <Outlet />
         </main>
       </div>
+
+      <GlobalSearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onNavigate={() => setMobileOpen(false)}
+        entries={EMPLOYER_SEARCH_ENTRIES}
+      />
     </div>
   )
 }
