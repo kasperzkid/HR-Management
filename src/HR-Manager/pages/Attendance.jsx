@@ -1,15 +1,22 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  AlertCircle,
   CalendarDays,
-  Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Loader2,
-  Save,
+  MapPin,
+  RefreshCw,
   Search,
+  ShieldCheck,
+  UserCheck,
+  UserX,
+  Users,
   X,
 } from 'lucide-react'
+import { PageTitle } from '../../components/ui'
 
 const API_URL = 'http://localhost:4000/api/hr-manager'
 
@@ -28,32 +35,84 @@ const MONTHS = [
   'December',
 ]
 
-const ATTENDANCE_CODES = [
-  { code: 'P', label: 'Present' },
-  { code: 'A', label: 'Absent' },
-  { code: 'SL', label: 'Sick Leave' },
-  { code: 'AL', label: 'Annual Leave' },
-  { code: 'ML', label: 'Maternity Leave' },
-  { code: 'OL', label: 'Other Leave' },
-  { code: 'PH', label: 'Public Holiday' },
-  { code: 'WK', label: 'Weekend' },
-  { code: 'HD', label: 'Half Day' },
-]
+const STATUS_STYLES = {
+  PRESENT: {
+    label: 'Present',
+    className:
+      'border-emerald-200 bg-emerald-50 text-emerald-700',
+  },
 
-const CODE_LABELS = Object.fromEntries(
-  ATTENDANCE_CODES.map((item) => [item.code, item.label]),
-)
+  CHECKED_IN: {
+    label: 'Checked In',
+    className:
+      'border-blue-200 bg-blue-50 text-blue-700',
+  },
 
-const CODE_CLASSES = {
-  P: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  A: 'bg-red-50 text-red-700 border-red-200',
-  SL: 'bg-amber-50 text-amber-700 border-amber-200',
-  AL: 'bg-blue-50 text-blue-700 border-blue-200',
-  ML: 'bg-purple-50 text-purple-700 border-purple-200',
-  OL: 'bg-orange-50 text-orange-700 border-orange-200',
-  PH: 'bg-slate-100 text-slate-600 border-slate-200',
-  WK: 'bg-slate-100 text-slate-500 border-slate-200',
-  HD: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+  PENDING_CHECKOUT: {
+    label: 'Pending Checkout',
+    className:
+      'border-blue-200 bg-blue-50 text-blue-700',
+  },
+
+  PENDING_REVIEW: {
+    label: 'Pending Review',
+    className:
+      'border-amber-200 bg-amber-50 text-amber-700',
+  },
+
+  LATE: {
+    label: 'Late',
+    className:
+      'border-amber-200 bg-amber-50 text-amber-700',
+  },
+
+  ABSENT: {
+    label: 'Absent',
+    className:
+      'border-red-200 bg-red-50 text-red-700',
+  },
+
+  A: {
+    label: 'Absent',
+    className:
+      'border-red-200 bg-red-50 text-red-700',
+  },
+
+  SL: {
+    label: 'Sick Leave',
+    className:
+      'border-amber-200 bg-amber-50 text-amber-700',
+  },
+
+  AL: {
+    label: 'Annual Leave',
+    className:
+      'border-blue-200 bg-blue-50 text-blue-700',
+  },
+
+  ML: {
+    label: 'Maternity Leave',
+    className:
+      'border-purple-200 bg-purple-50 text-purple-700',
+  },
+
+  OL: {
+    label: 'Other Leave',
+    className:
+      'border-orange-200 bg-orange-50 text-orange-700',
+  },
+
+  PH: {
+    label: 'Public Holiday',
+    className:
+      'border-slate-200 bg-slate-100 text-slate-600',
+  },
+
+  WK: {
+    label: 'Weekend',
+    className:
+      'border-slate-200 bg-slate-100 text-slate-500',
+  },
 }
 
 function getCurrentMonth() {
@@ -83,11 +142,17 @@ function getDayInfo(year, monthIndex, day) {
     dayName: date.toLocaleDateString('en-US', {
       weekday: 'short',
     }),
-    isWeekend: date.getDay() === 0 || date.getDay() === 6,
+    isWeekend:
+      date.getDay() === 0 ||
+      date.getDay() === 6,
   }
 }
 
 function getEmployeeName(employee) {
+  if (!employee) {
+    return 'Unknown Employee'
+  }
+
   if (employee.name) {
     return employee.name
   }
@@ -97,321 +162,547 @@ function getEmployeeName(employee) {
     employee.lastName,
   ]
     .filter(Boolean)
-    .join(' ')
+    .join(' ') || 'Unknown Employee'
 }
 
-function getEmployeeId(employee, index) {
+function getEmployeeId(employee, index = 0) {
   return (
-    employee.employeeId ||
-    employee.id ||
+    employee?.employeeId ||
+    employee?.id ||
     `EMP-${String(index + 1).padStart(3, '0')}`
   )
 }
 
 function getInitials(name) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('')
+  return (
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) =>
+        part[0]?.toUpperCase(),
+      )
+      .join('') || '?'
+  )
+}
+
+function getStatusStyle(status) {
+  return (
+    STATUS_STYLES[status] || {
+      label: status || 'No Record',
+      className:
+        'border-slate-200 bg-slate-50 text-slate-500',
+    }
+  )
+}
+
+function formatTime(value) {
+  if (!value) {
+    return '—'
+  }
+
+  if (
+    typeof value === 'string' &&
+    /^\d{1,2}:\d{2}/.test(value)
+  ) {
+    const [hourText, minuteText] =
+      value.split(':')
+
+    let hour = Number(hourText)
+
+    const minute = String(
+      minuteText || '00',
+    ).slice(0, 2)
+
+    const suffix =
+      hour >= 12 ? 'PM' : 'AM'
+
+    hour = hour % 12 || 12
+
+    return `${hour}:${minute} ${suffix}`
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleTimeString(
+    'en-US',
+    {
+      hour: 'numeric',
+      minute: '2-digit',
+    },
+  )
+}
+
+function formatDate(value) {
+  if (!value) {
+    return '—'
+  }
+
+  const date = new Date(
+    `${value}T00:00:00`,
+  )
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleDateString(
+    'en-US',
+    {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    },
+  )
+}
+
+function getLocationStatus(record) {
+  return (
+    record?.checkInLocationStatus ||
+    record?.checkOutLocationStatus ||
+    ''
+  )
+}
+
+function isLocationVerified(record) {
+  const status =
+    getLocationStatus(record)
+
+  return (
+    status === 'VERIFIED' ||
+    status === 'INSIDE' ||
+    status === 'VALID' ||
+    Boolean(
+      record?.checkInLatitude !==
+        null &&
+        record?.checkInLatitude !==
+          undefined &&
+        record?.checkInLongitude !==
+          null &&
+        record?.checkInLongitude !==
+          undefined,
+    )
+  )
+}
+
+function getRecordForDate(
+  records,
+  employee,
+  dateKey,
+) {
+  const employeeKeys = [
+    employee?.id,
+    employee?.employeeId,
+  ].filter(Boolean)
+
+  return (
+    records.find(
+      (record) =>
+        record.date === dateKey &&
+        employeeKeys.includes(
+          record.employeeId,
+        ),
+    ) || null
+  )
+}
+
+function buildEmployeeRows(
+  employees,
+  records,
+  year,
+  month,
+) {
+  return employees.map(
+    (employee, index) => {
+      const attendance = {}
+
+      const days =
+        getDaysInMonth(
+          year,
+          month,
+        )
+
+      for (
+        let day = 1;
+        day <= days;
+        day += 1
+      ) {
+        const dateKey =
+          getDateKey(
+            year,
+            month,
+            day,
+          )
+
+        const record =
+          getRecordForDate(
+            records,
+            employee,
+            dateKey,
+          )
+
+        attendance[dateKey] =
+          record
+      }
+
+      return {
+        employeeKey:
+          employee.id ||
+          employee.employeeId ||
+          index,
+
+        employeeId:
+          getEmployeeId(
+            employee,
+            index,
+          ),
+
+        name:
+          getEmployeeName(
+            employee,
+          ),
+
+        department:
+          employee.department ||
+          'Unassigned',
+
+        employee,
+
+        attendance,
+      }
+    },
+  )
 }
 
 function calculateSummary(
-  employee,
-  attendanceMap,
+  row,
   year,
-  monthIndex,
+  month,
 ) {
-  const daysInMonth = getDaysInMonth(year, monthIndex)
+  const days =
+    getDaysInMonth(
+      year,
+      month,
+    )
 
-  let workingDays = 0
   let present = 0
   let absent = 0
   let leave = 0
+  let pendingReview = 0
+  let checkedIn = 0
   let overtime = 0
   let lateMinutes = 0
 
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const key = getDateKey(year, monthIndex, day)
-    const record = attendanceMap[key]
+  for (
+    let day = 1;
+    day <= days;
+    day += 1
+  ) {
+    const dateKey =
+      getDateKey(
+        year,
+        month,
+        day,
+      )
 
-    const code = record?.code || ''
+    const record =
+      row.attendance[
+        dateKey
+      ]
 
-    /*
-     * Working days are days that have a recorded
-     * attendance status other than weekend/public holiday.
-     */
-    if (code && code !== 'WK' && code !== 'PH') {
-      workingDays += 1
+    if (!record) {
+      continue
     }
 
-    if (code === 'P') {
+    const status =
+      record.status || ''
+
+    if (status === 'PRESENT') {
       present += 1
     }
 
-    if (code === 'HD') {
-      present += 0.5
-    }
-
-    if (code === 'A') {
+    if (
+      status === 'ABSENT' ||
+      status === 'A'
+    ) {
       absent += 1
     }
 
-    if (['SL', 'AL', 'ML', 'OL'].includes(code)) {
+    if (
+      [
+        'SL',
+        'AL',
+        'ML',
+        'OL',
+      ].includes(status)
+    ) {
       leave += 1
     }
 
-    overtime += Number(record?.overtime || 0)
-    lateMinutes += Number(record?.late || 0)
+    if (
+      status ===
+        'PENDING_REVIEW' ||
+      status === 'LATE'
+    ) {
+      pendingReview += 1
+    }
+
+    if (
+      status === 'CHECKED_IN' ||
+      status ===
+        'PENDING_CHECKOUT'
+    ) {
+      checkedIn += 1
+    }
+
+    overtime += Number(
+      record.overtime || 0,
+    )
+
+    lateMinutes += Number(
+      record.late || 0,
+    )
   }
 
   return {
-    employee,
-    workingDays,
     present,
     absent,
     leave,
+    pendingReview,
+    checkedIn,
     overtime,
     lateMinutes,
   }
 }
 
-function getDefaultCode(year, monthIndex, day) {
-  const { isWeekend } = getDayInfo(
-    year,
-    monthIndex,
-    day,
-  )
-
-  if (isWeekend) {
-    return 'WK'
-  }
-
-  return ''
-}
-
-function createEmployeeRow(
-  employee,
-  index,
-  year,
-  monthIndex,
-) {
-  const daysInMonth = getDaysInMonth(
-    year,
-    monthIndex,
-  )
-
-  const attendance = {}
-
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const key = getDateKey(
-      year,
-      monthIndex,
-      day,
-    )
-
-    attendance[key] = {
-      code: getDefaultCode(
-        year,
-        monthIndex,
-        day,
-      ),
-      overtime: 0,
-      late: 0,
-      id: null,
-    }
-  }
-
-  return {
-    employeeKey:
-      employee.id ||
-      employee.employeeId ||
-      index,
-
-    employeeId: getEmployeeId(
-      employee,
-      index,
-    ),
-
-    name: getEmployeeName(employee),
-
-    department:
-      employee.department ||
-      'Unassigned',
-
-    employee,
-
-    attendance,
-  }
-}
-
-function buildRowsFromDatabase(
-  employees,
-  databaseRecords,
-  year,
-  monthIndex,
-) {
-  const rows = employees.map(
-    (employee, index) =>
-      createEmployeeRow(
-        employee,
-        index,
-        year,
-        monthIndex,
-      ),
-  )
-
-  const employeeMap = new Map(
-    rows.map((row) => [
-      row.employeeKey,
-      row,
-    ]),
-  )
-
-  const employeeIdMap = new Map(
-    rows.map((row) => [
-      row.employeeId,
-      row,
-    ]),
-  )
-
-  for (const record of databaseRecords) {
-    if (!record.date) {
-      continue
-    }
-
-    const date = new Date(
-      `${record.date}T00:00:00`,
-    )
-
-    if (
-      date.getFullYear() !== year ||
-      date.getMonth() !== monthIndex
-    ) {
-      continue
-    }
-
-    /*
-     * Support both:
-     * - Employee database id
-     * - Employee business ID
-     */
-    const row =
-      employeeMap.get(record.employeeId) ||
-      employeeIdMap.get(record.employeeId)
-
-    if (!row) {
-      continue
-    }
-
-    row.attendance[record.date] = {
-      code: record.status || '',
-      overtime: Number(
-        record.overtime || 0,
-      ),
-      late: Number(record.late || 0),
-      id: record.id || null,
-    }
-  }
-
-  return rows
-}
-
-function CodePicker({
-  value,
-  onChange,
-  disabled,
-}) {
-  const [open, setOpen] = useState(false)
+function StatusBadge({ status }) {
+  const style =
+    getStatusStyle(status)
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() =>
-          setOpen(
-            (current) => !current,
-          )
-        }
-        className={`flex h-9 min-w-12 items-center justify-center rounded-lg border px-2 text-xs font-bold transition ${
-          value
-            ? CODE_CLASSES[value] ||
-              'border-slate-200 bg-white text-slate-600'
-            : 'border-dashed border-slate-300 bg-white text-slate-400 hover:border-slate-400'
-        } ${
-          disabled
-            ? 'cursor-not-allowed opacity-50'
-            : ''
-        }`}
-        title={
-          value
-            ? CODE_LABELS[value]
-            : 'Select attendance code'
-        }
-      >
-        {value || '—'}
-      </button>
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${style.className}`}
+    >
+      {style.label}
+    </span>
+  )
+}
 
-      {open && !disabled && (
-        <>
-          <button
-            type="button"
-            aria-label="Close attendance code menu"
-            className="fixed inset-0 z-20 cursor-default"
-            onClick={() =>
-              setOpen(false)
-            }
-          />
+function LocationBadge({ record }) {
+  if (!record) {
+    return (
+      <span className="text-xs text-slate-400">
+        —
+      </span>
+    )
+  }
 
-          <div className="absolute left-1/2 top-11 z-30 w-44 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-            <div className="mb-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Attendance Code
+  const verified =
+    isLocationVerified(record)
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold ${
+        verified
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          : 'border-red-200 bg-red-50 text-red-700'
+      }`}
+    >
+      <MapPin size={11} />
+
+      {verified
+        ? 'Verified'
+        : 'Not Verified'}
+    </span>
+  )
+}
+
+function AttendanceReviewCard({
+  record,
+  employees,
+  onAccept,
+  acceptingId,
+}) {
+  const employee =
+    employees.find(
+      (item) =>
+        item.id ===
+          record.employeeId ||
+        item.employeeId ===
+          record.employeeId,
+    )
+
+  const employeeName =
+    record.employeeName ||
+    getEmployeeName(employee)
+
+  const employeeBusinessId =
+    employee?.employeeId ||
+    record.employeeId ||
+    '—'
+
+  const accepting =
+    acceptingId === record.id
+
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100 text-sm font-bold text-amber-700">
+            {getInitials(
+              employeeName,
+            )}
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-bold text-slate-900">
+                {employeeName}
+              </h3>
+
+              <span className="text-xs text-slate-400">
+                {employeeBusinessId}
+              </span>
+
+              <StatusBadge
+                status={
+                  record.status
+                }
+              />
             </div>
 
-            {ATTENDANCE_CODES.map(
-              (item) => (
-                <button
-                  key={item.code}
-                  type="button"
-                  onClick={() => {
-                    onChange(item.code)
-                    setOpen(false)
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs hover:bg-slate-50"
-                >
-                  <span
-                    className={`flex h-7 w-9 items-center justify-center rounded-md border font-bold ${
-                      CODE_CLASSES[
-                        item.code
-                      ]
-                    }`}
-                  >
-                    {item.code}
-                  </span>
-
-                  <span className="text-slate-600">
-                    {item.label}
-                  </span>
-                </button>
-              ),
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                onChange('')
-                setOpen(false)
-              }}
-              className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-500 hover:bg-slate-50"
-            >
-              <X size={14} />
-              Clear
-            </button>
+            <p className="mt-1 text-xs text-slate-500">
+              {record.department ||
+                employee?.department ||
+                'Unassigned'}
+            </p>
           </div>
-        </>
-      )}
+        </div>
+
+        <button
+          type="button"
+          disabled={accepting}
+          onClick={() =>
+            onAccept(record)
+          }
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {accepting ? (
+            <Loader2
+              size={15}
+              className="animate-spin"
+            />
+          ) : (
+            <CheckCircle2 size={15} />
+          )}
+
+          {accepting
+            ? 'Accepting...'
+            : 'Accept Late'}
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Date
+          </p>
+
+          <p className="mt-1 text-sm font-semibold text-slate-800">
+            {formatDate(
+              record.date,
+            )}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Required Check In
+          </p>
+
+          <p className="mt-1 text-sm font-semibold text-slate-800">
+            {formatTime(
+              record.requiredCheckInTime,
+            )}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Actual Check In
+          </p>
+
+          <p className="mt-1 text-sm font-semibold text-amber-700">
+            {formatTime(
+              record.checkIn,
+            )}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Late Minutes
+          </p>
+
+          <p className="mt-1 text-sm font-semibold text-red-600">
+            {Number(
+              record.late || 0,
+            )}{' '}
+            minutes
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Check Out
+          </p>
+
+          <p className="mt-1 text-sm font-semibold text-slate-800">
+            {formatTime(
+              record.checkOut,
+            )}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Location
+          </p>
+
+          <div className="mt-1">
+            <LocationBadge
+              record={record}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Review Status
+          </p>
+
+          <p className="mt-1 text-sm font-semibold text-slate-800">
+            {record.reviewStatus ||
+              'Pending'}
+          </p>
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Approval
+          </p>
+
+          <p className="mt-1 text-sm font-semibold text-slate-800">
+            {record.reviewedBy
+              ? `Accepted by ${record.reviewedBy}`
+              : 'Awaiting HR review'}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -438,7 +729,7 @@ function Attendance() {
   const [loading, setLoading] =
     useState(true)
 
-  const [saving, setSaving] =
+  const [refreshing, setRefreshing] =
     useState(false)
 
   const [apiError, setApiError] =
@@ -446,6 +737,9 @@ function Attendance() {
 
   const [successMessage, setSuccessMessage] =
     useState('')
+
+  const [acceptingId, setAcceptingId] =
+    useState(null)
 
   const daysInMonth =
     getDaysInMonth(
@@ -467,16 +761,18 @@ function Attendance() {
       daysInMonth,
     )
 
-  /*
-   * Load employees and attendance
-   * whenever month/year changes.
-   */
-  useEffect(() => {
-    async function loadData() {
+  const loadData = useCallback(
+    async (
+      showLoader = true,
+    ) => {
       try {
-        setLoading(true)
+        if (showLoader) {
+          setLoading(true)
+        } else {
+          setRefreshing(true)
+        }
+
         setApiError('')
-        setSuccessMessage('')
 
         const [
           employeesResponse,
@@ -491,15 +787,27 @@ function Attendance() {
           ),
         ])
 
-        if (!employeesResponse.ok) {
+        if (
+          !employeesResponse.ok
+        ) {
           throw new Error(
-            'Unable to load employees from the database',
+            'Unable to load employees from the database.',
           )
         }
 
-        if (!attendanceResponse.ok) {
+        if (
+          !attendanceResponse.ok
+        ) {
+          const errorData =
+            await attendanceResponse
+              .json()
+              .catch(
+                () => ({}),
+              )
+
           throw new Error(
-            'Unable to load attendance from the database',
+            errorData.message ||
+              'Unable to load attendance from the database.',
           )
         }
 
@@ -510,13 +818,17 @@ function Attendance() {
           await attendanceResponse.json()
 
         setEmployees(
-          Array.isArray(employeeData)
+          Array.isArray(
+            employeeData,
+          )
             ? employeeData
             : [],
         )
 
         setDatabaseRecords(
-          Array.isArray(attendanceData)
+          Array.isArray(
+            attendanceData,
+          )
             ? attendanceData
             : [],
         )
@@ -528,35 +840,55 @@ function Attendance() {
 
         setApiError(
           error.message ||
-            'Unable to load attendance from the database',
+            'Unable to load attendance from the database.',
         )
       } finally {
         setLoading(false)
+        setRefreshing(false)
       }
-    }
+    },
+    [
+      monthStart,
+      monthEnd,
+    ],
+  )
 
-    loadData()
-  }, [monthStart, monthEnd])
+  useEffect(() => {
+    loadData(true)
+  }, [loadData])
 
-  const departments = useMemo(() => {
-    return [
-      'All Departments',
-      ...Array.from(
-        new Set(
-          employees
-            .map(
-              (employee) =>
-                employee.department,
-            )
-            .filter(Boolean),
+  useEffect(() => {
+    const interval =
+      window.setInterval(() => {
+        loadData(false)
+      }, 30000)
+
+    return () =>
+      window.clearInterval(
+        interval,
+      )
+  }, [loadData])
+
+  const departments =
+    useMemo(() => {
+      return [
+        'All Departments',
+        ...Array.from(
+          new Set(
+            employees
+              .map(
+                (employee) =>
+                  employee.department,
+              )
+              .filter(Boolean),
+          ),
         ),
-      ),
-    ]
-  }, [employees])
+      ]
+    }, [employees])
 
   const rows = useMemo(
     () =>
-      buildRowsFromDatabase(
+      buildEmployeeRows(
         employees,
         databaseRecords,
         year,
@@ -570,58 +902,59 @@ function Attendance() {
     ],
   )
 
-  const filteredRows = useMemo(() => {
-    const query =
-      search
-        .trim()
-        .toLowerCase()
+  const filteredRows =
+    useMemo(() => {
+      const query =
+        search
+          .trim()
+          .toLowerCase()
 
-    return rows.filter(
-      (row) => {
-        const matchesSearch =
-          !query ||
-          row.name
-            .toLowerCase()
-            .includes(query) ||
-          row.employeeId
-            .toLowerCase()
-            .includes(query)
+      return rows.filter(
+        (row) => {
+          const matchesSearch =
+            !query ||
+            row.name
+              .toLowerCase()
+              .includes(query) ||
+            row.employeeId
+              .toLowerCase()
+              .includes(query)
 
-        const matchesDepartment =
-          department ===
-            'All Departments' ||
-          row.department ===
-            department
+          const matchesDepartment =
+            department ===
+              'All Departments' ||
+            row.department ===
+              department
 
-        return (
-          matchesSearch &&
-          matchesDepartment
-        )
-      },
+          return (
+            matchesSearch &&
+            matchesDepartment
+          )
+        },
+      )
+    }, [
+      rows,
+      search,
+      department,
+    ])
+
+  const summaries =
+    useMemo(
+      () =>
+        filteredRows.map(
+          (row) =>
+            calculateSummary(
+              row,
+              year,
+              month,
+            ),
+        ),
+      [
+        filteredRows,
+        year,
+        month,
+      ],
     )
-  }, [
-    rows,
-    search,
-    department,
-  ])
-
-  const summaries = useMemo(
-    () =>
-      filteredRows.map(
-        (row) =>
-          calculateSummary(
-            row.employee,
-            row.attendance,
-            year,
-            month,
-          ),
-      ),
-    [
-      filteredRows,
-      year,
-      month,
-    ],
-  )
 
   const totals = useMemo(() => {
     return summaries.reduce(
@@ -641,6 +974,14 @@ function Attendance() {
           result.leave +
           summary.leave,
 
+        pendingReview:
+          result.pendingReview +
+          summary.pendingReview,
+
+        checkedIn:
+          result.checkedIn +
+          summary.checkedIn,
+
         overtime:
           result.overtime +
           summary.overtime,
@@ -654,6 +995,8 @@ function Attendance() {
         present: 0,
         absent: 0,
         leave: 0,
+        pendingReview: 0,
+        checkedIn: 0,
         overtime: 0,
         lateMinutes: 0,
       },
@@ -661,492 +1004,179 @@ function Attendance() {
   }, [summaries])
 
   /*
-   * Update an attendance code locally.
-   *
-   * The database is only changed when
-   * Save Attendance is pressed.
+   * Dashboard-style employee totals.
+   * These use the complete employee list,
+   * not the current search/department filter.
    */
-  function updateAttendanceCode(
-    employeeKey,
-    dateKey,
-    code,
+  const totalEmployees =
+    employees.length
+
+  const activeEmployees =
+    employees.filter(
+      (employee) =>
+        employee.employmentStatus ===
+          'Active' ||
+        employee.status === 'Active',
+    ).length
+
+  const pendingReviews =
+    useMemo(() => {
+      return databaseRecords
+        .filter(
+          (record) =>
+            record.status ===
+              'PENDING_REVIEW' ||
+            record.status ===
+              'LATE',
+        )
+        .sort((a, b) =>
+          String(
+            b.date || '',
+          ).localeCompare(
+            String(
+              a.date || '',
+            ),
+          ),
+        )
+    }, [databaseRecords])
+
+  const todayKey =
+    new Date()
+      .toISOString()
+      .slice(0, 10)
+
+  const todayRecords =
+    useMemo(() => {
+      return databaseRecords.filter(
+        (record) =>
+          record.date ===
+          todayKey,
+      )
+    }, [
+      databaseRecords,
+      todayKey,
+    ])
+
+  const todayPresent =
+    todayRecords.filter(
+      (record) =>
+        record.status ===
+        'PRESENT',
+    ).length
+
+  const todayCheckedIn =
+    todayRecords.filter(
+      (record) =>
+        record.status ===
+          'CHECKED_IN' ||
+        record.status ===
+          'PENDING_CHECKOUT',
+    ).length
+
+  const todayPending =
+    todayRecords.filter(
+      (record) =>
+        record.status ===
+          'PENDING_REVIEW' ||
+        record.status === 'LATE',
+    ).length
+
+  const todayAbsent =
+    todayRecords.filter(
+      (record) =>
+        record.status ===
+          'ABSENT' ||
+        record.status === 'A',
+    ).length
+
+  async function acceptLateAttendance(
+    record,
   ) {
-    setDatabaseRecords(
-      (currentRecords) => {
-        const rowsForUpdate =
-          buildRowsFromDatabase(
-            employees,
-            currentRecords,
-            year,
-            month,
-          )
-
-        const row =
-          rowsForUpdate.find(
-            (item) =>
-              item.employeeKey ===
-              employeeKey,
-          )
-
-        if (!row) {
-          return currentRecords
-        }
-
-        const existing =
-          row.attendance[dateKey]
-
-        /*
-         * Clearing an existing record:
-         * keep it in local state with an empty
-         * status so saveAttendance can delete it.
-         */
-        if (!code) {
-          if (!existing?.id) {
-            return currentRecords.filter(
-              (record) =>
-                !(
-                  record.employeeId ===
-                    employeeKey &&
-                  record.date ===
-                    dateKey
-                ),
-            )
-          }
-
-          return currentRecords.map(
-            (record) =>
-              record.id ===
-              existing.id
-                ? {
-                    ...record,
-                    status: '',
-                  }
-                : record,
-          )
-        }
-
-        /*
-         * Update existing local record.
-         */
-        if (existing?.id) {
-          return currentRecords.map(
-            (record) =>
-              record.id ===
-              existing.id
-                ? {
-                    ...record,
-                    status: code,
-                  }
-                : record,
-          )
-        }
-
-        /*
-         * Create a temporary local record.
-         * id remains null until the backend
-         * creates the real database ID.
-         */
-        return [
-          ...currentRecords,
-          {
-            id: null,
-            employeeId:
-              row.employeeKey,
-            employeeName: row.name,
-            department:
-              row.department,
-            date: dateKey,
-            status: code,
-            checkIn: null,
-            checkOut: null,
-            late: 0,
-            earlyDeparture: 0,
-            regular:
-              code === 'P' ||
-              code === 'HD'
-                ? 8
-                : 0,
-            overtime: 0,
-          },
-        ]
-      },
-    )
-  }
-
-  /*
-   * Update overtime/late values locally.
-   */
-  function updateAttendanceExtra(
-    employeeKey,
-    dateKey,
-    field,
-    value,
-  ) {
-    const numericValue =
-      Number(value) || 0
-
-    setDatabaseRecords(
-      (currentRecords) => {
-        const existing =
-          currentRecords.find(
-            (record) =>
-              record.employeeId ===
-                employeeKey &&
-              record.date ===
-                dateKey,
-          )
-
-        if (existing) {
-          return currentRecords.map(
-            (record) =>
-              record.employeeId ===
-                employeeKey &&
-              record.date ===
-                dateKey
-                ? {
-                    ...record,
-                    [field]:
-                      numericValue,
-                  }
-                : record,
-          )
-        }
-
-        const row =
-          rows.find(
-            (item) =>
-              item.employeeKey ===
-              employeeKey,
-          )
-
-        if (!row) {
-          return currentRecords
-        }
-
-        return [
-          ...currentRecords,
-          {
-            id: null,
-            employeeId:
-              row.employeeKey,
-            employeeName:
-              row.name,
-            department:
-              row.department,
-            date: dateKey,
-            status: '',
-            late:
-              field === 'late'
-                ? numericValue
-                : 0,
-            overtime:
-              field ===
-              'overtime'
-                ? numericValue
-                : 0,
-            checkIn: null,
-            checkOut: null,
-            earlyDeparture: 0,
-            regular: 0,
-          },
-        ]
-      },
-    )
-  }
-
-  /*
-   * Save the entire visible month.
-   *
-   * Existing records:
-   *   PUT
-   *
-   * New records:
-   *   POST
-   *
-   * Cleared records:
-   *   DELETE
-   */
-  async function saveAttendance() {
     try {
-      setSaving(true)
+      setAcceptingId(record.id)
       setApiError('')
       setSuccessMessage('')
 
-      /*
-       * Get fresh rows from the current
-       * databaseRecords state.
-       */
-      const currentRows =
-        buildRowsFromDatabase(
-          employees,
-          databaseRecords,
-          year,
-          month,
+      const userRaw =
+        localStorage.getItem(
+          'user',
         )
 
-      for (const row of currentRows) {
-        for (
-          let day = 1;
-          day <= daysInMonth;
-          day += 1
-        ) {
-          const dateKey =
-            getDateKey(
-              year,
-              month,
-              day,
+      let reviewedBy =
+        'HR Administrator'
+
+      if (userRaw) {
+        try {
+          const user =
+            JSON.parse(
+              userRaw,
             )
 
-          const record =
-            row.attendance[dateKey]
-
-          if (!record) {
-            continue
-          }
-
-          /*
-           * Never store automatic weekends.
-           */
-          if (
-            record.code === 'WK'
-          ) {
-            continue
-          }
-
-          /*
-           * If the user cleared an existing
-           * record, delete it.
-           */
-          if (
-            record.id &&
-            !record.code &&
-            Number(
-              record.overtime || 0,
-            ) === 0 &&
-            Number(
-              record.late || 0,
-            ) === 0
-          ) {
-            const response =
-              await fetch(
-                `${API_URL}/attendance/${record.id}`,
-                {
-                  method: 'DELETE',
-                },
-              )
-
-            if (!response.ok) {
-              const errorData =
-                await response
-                  .json()
-                  .catch(
-                    () => ({}),
-                  )
-
-              throw new Error(
-                errorData.message ||
-                  `Failed to delete attendance for ${row.name}`,
-              )
-            }
-
-            continue
-          }
-
-          /*
-           * Completely empty new cells
-           * do not need a database record.
-           */
-          if (
-            !record.id &&
-            !record.code &&
-            Number(
-              record.overtime || 0,
-            ) === 0 &&
-            Number(
-              record.late || 0,
-            ) === 0
-          ) {
-            continue
-          }
-
-          const payload = {
-            employeeId:
-              row.employeeKey,
-
-            employeeName:
-              row.name,
-
-            department:
-              row.department,
-
-            date: dateKey,
-
-            /*
-             * If overtime/late was entered without
-             * a status, use Present as the default.
-             */
-            status:
-              record.code || 'P',
-
-            checkIn:
-              record.checkIn ||
-              null,
-
-            checkOut:
-              record.checkOut ||
-              null,
-
-            late:
-              Number(
-                record.late || 0,
-              ),
-
-            earlyDeparture:
-              Number(
-                record.earlyDeparture ||
-                  0,
-              ),
-
-            regular:
-              record.regular !==
-              undefined
-                ? Number(
-                    record.regular,
-                  ) || 0
-                : record.code ===
-                      'P' ||
-                    record.code ===
-                      'HD'
-                  ? 8
-                  : 0,
-
-            overtime:
-              Number(
-                record.overtime || 0,
-              ),
-          }
-
-          /*
-           * Existing record -> UPDATE
-           */
-          if (record.id) {
-            const response =
-              await fetch(
-                `${API_URL}/attendance/${record.id}`,
-                {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type':
-                      'application/json',
-                  },
-                  body: JSON.stringify(
-                    payload,
-                  ),
-                },
-              )
-
-            if (!response.ok) {
-              const errorData =
-                await response
-                  .json()
-                  .catch(
-                    () => ({}),
-                  )
-
-              throw new Error(
-                errorData.message ||
-                  `Failed to update attendance for ${row.name}`,
-              )
-            }
-
-            continue
-          }
-
-          /*
-           * New record -> CREATE
-           */
-          const response =
-            await fetch(
-              `${API_URL}/attendance`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type':
-                    'application/json',
-                },
-                body: JSON.stringify(
-                  payload,
-                ),
-              },
-            )
-
-          if (!response.ok) {
-            const errorData =
-              await response
-                .json()
-                .catch(
-                  () => ({}),
-                )
-
-            throw new Error(
-              errorData.message ||
-                `Failed to create attendance for ${row.name}`,
-            )
-          }
+          reviewedBy =
+            user.name ||
+            user.email ||
+            reviewedBy
+        } catch {
+          // Keep fallback reviewer name.
         }
       }
 
-      /*
-       * Reload the month from the database
-       * after every successful save.
-       */
-      const refreshedResponse =
+      const response =
         await fetch(
-          `${API_URL}/attendance?startDate=${monthStart}&endDate=${monthEnd}`,
+          `${API_URL}/attendance/${record.id}/accept-late`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              reviewedBy,
+              reviewRemarks:
+                'Late attendance accepted by HR.',
+            }),
+          },
         )
 
-      if (!refreshedResponse.ok) {
+      const data =
+        await response
+          .json()
+          .catch(() => ({}))
+
+      if (!response.ok) {
         throw new Error(
-          'Attendance was saved, but the updated records could not be reloaded',
+          data.message ||
+            'Failed to accept late attendance.',
         )
       }
 
-      const refreshedData =
-        await refreshedResponse.json()
-
-      setDatabaseRecords(
-        Array.isArray(
-          refreshedData,
-        )
-          ? refreshedData
-          : [],
-      )
-
       setSuccessMessage(
-        'Attendance saved successfully.',
+        'Late attendance accepted successfully. The original check-in and check-out times were preserved.',
       )
+
+      await loadData(false)
 
       window.setTimeout(() => {
         setSuccessMessage('')
-      }, 3000)
+      }, 5000)
     } catch (error) {
       console.error(
-        'Save attendance error:',
+        'Accept late attendance error:',
         error,
       )
 
       setApiError(
         error.message ||
-          'Failed to save attendance',
+          'Failed to accept late attendance.',
       )
     } finally {
-      setSaving(false)
+      setAcceptingId(null)
     }
   }
 
   function previousMonth() {
-    setSuccessMessage('')
     setApiError('')
+    setSuccessMessage('')
 
     if (month === 0) {
       setMonth(11)
@@ -1164,8 +1194,8 @@ function Attendance() {
   }
 
   function nextMonth() {
-    setSuccessMessage('')
     setApiError('')
+    setSuccessMessage('')
 
     if (month === 11) {
       setMonth(0)
@@ -1185,64 +1215,301 @@ function Attendance() {
   return (
     <div className="min-h-full bg-slate-50">
       <div className="mx-auto max-w-[1800px] p-4 sm:p-6">
-        {/* Header */}
-        <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-500">
-              <CalendarDays size={16} />
-              HR Management
-              <span>/</span>
-              Attendance
-            </div>
 
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Attendance Management
-            </h1>
+        {/* Shared Page Title */}
+        <PageTitle
+          eyebrow="Attendance Management"
+          title="Track Your Team's Attendance"
+          description="Attendance is automatically recorded from employee check-in and check-out activity. HR reviews exceptions only."
+          action={
+            <button
+              type="button"
+              onClick={() =>
+                loadData(false)
+              }
+              disabled={refreshing}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {refreshing ? (
+                <Loader2
+                  size={17}
+                  className="animate-spin"
+                />
+              ) : (
+                <RefreshCw
+                  size={17}
+                />
+              )}
 
-            <p className="mt-1 text-sm text-slate-500">
-              Manage daily attendance using the
-              company attendance codes.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={
-              saveAttendance
-            }
-            disabled={
-              saving || loading
-            }
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? (
-              <Loader2
-                size={17}
-                className="animate-spin"
-              />
-            ) : (
-              <Save size={17} />
-            )}
-
-            {saving
-              ? 'Saving...'
-              : 'Save Attendance'}
-          </button>
-        </div>
+              Refresh
+            </button>
+          }
+          className="mb-8"
+        />
 
         {/* Messages */}
         {apiError && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            {apiError}
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            <AlertCircle
+              size={18}
+              className="mt-0.5 shrink-0"
+            />
+
+            <div>
+              <p>
+                {apiError}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setApiError('')
+              }
+              className="ml-auto"
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
 
         {successMessage && (
-          <div className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-            <Check size={17} />
-            {successMessage}
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+            <CheckCircle2
+              size={18}
+              className="mt-0.5 shrink-0"
+            />
+
+            <p>
+              {successMessage}
+            </p>
           </div>
         )}
+
+        {/* Today's automatic attendance */}
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-bold text-slate-900">
+                Today's Attendance
+              </h2>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Automatically updated from
+                employee attendance activity.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Auto refresh every 30 seconds
+            </div>
+          </div>
+
+          {/* Dashboard employee statistics + today's attendance */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+
+            {/* Total Employees */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Total Employees
+                </p>
+
+                <Users
+                  size={18}
+                  className="text-slate-500"
+                />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {totalEmployees}
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Employees in the company
+              </p>
+            </div>
+
+            {/* Active Employees */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">
+                  Active Employees
+                </p>
+
+                <UserCheck
+                  size={18}
+                  className="text-emerald-600"
+                />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {activeEmployees}
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Currently active
+              </p>
+            </div>
+
+            {/* Total Present */}
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">
+                  Total Present
+                </p>
+
+                <UserCheck
+                  size={18}
+                  className="text-emerald-600"
+                />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {todayPresent}
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Completed attendance today
+              </p>
+            </div>
+
+            {/* Checked In */}
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
+                  Checked In
+                </p>
+
+                <Clock3
+                  size={18}
+                  className="text-blue-600"
+                />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {todayCheckedIn}
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Currently checked in
+              </p>
+            </div>
+
+            {/* Pending Review */}
+            <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-600">
+                  Pending Review
+                </p>
+
+                <AlertCircle
+                  size={18}
+                  className="text-amber-600"
+                />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {todayPending}
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                Requires HR review
+              </p>
+            </div>
+
+            {/* Absent */}
+            <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wide text-red-600">
+                  Absent
+                </p>
+
+                <UserX
+                  size={18}
+                  className="text-red-600"
+                />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {todayAbsent}
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-500">
+                No attendance recorded
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Late review queue */}
+        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/40 p-5">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <AlertCircle
+                  size={19}
+                  className="text-amber-600"
+                />
+
+                <h2 className="font-bold text-slate-900">
+                  New Late Attendance Review
+                </h2>
+
+                {pendingReviews.length > 0 && (
+                  <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                    {pendingReviews.length}
+                  </span>
+                )}
+              </div>
+
+              <p className="mt-1 text-xs text-slate-500">
+                HR action is required only for
+                late attendance exceptions.
+              </p>
+            </div>
+          </div>
+
+          {pendingReviews.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-amber-200 bg-white/70 px-5 py-6 text-center">
+              <CheckCircle2
+                size={25}
+                className="mx-auto text-emerald-500"
+              />
+
+              <p className="mt-2 text-sm font-semibold text-slate-700">
+                No late attendance reviews
+                pending.
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Normal completed attendance
+                does not require HR action.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingReviews.map(
+                (record) => (
+                  <AttendanceReviewCard
+                    key={record.id}
+                    record={record}
+                    employees={
+                      employees
+                    }
+                    onAccept={
+                      acceptLateAttendance
+                    }
+                    acceptingId={
+                      acceptingId
+                    }
+                  />
+                ),
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Month / Year controls */}
         <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1278,7 +1545,9 @@ function Attendance() {
                           index
                         }
                       >
-                        {monthName}
+                        {
+                          monthName
+                        }
                       </option>
                     ),
                   )}
@@ -1306,10 +1575,7 @@ function Attendance() {
                     {
                       length: 11,
                     },
-                    (
-                      _,
-                      index,
-                    ) =>
+                    (_, index) =>
                       getCurrentYear() -
                       5 +
                       index,
@@ -1325,7 +1591,9 @@ function Attendance() {
                           yearValue
                         }
                       >
-                        {yearValue}
+                        {
+                          yearValue
+                        }
                       </option>
                     ),
                   )}
@@ -1359,26 +1627,13 @@ function Attendance() {
               </button>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {ATTENDANCE_CODES.map(
-                (item) => (
-                  <div
-                    key={
-                      item.code
-                    }
-                    className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold ${
-                      CODE_CLASSES[
-                        item.code
-                      ]
-                    }`}
-                    title={
-                      item.label
-                    }
-                  >
-                    {item.code}
-                  </div>
-                ),
-              )}
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <ShieldCheck
+                size={15}
+                className="text-emerald-600"
+              />
+
+              Attendance is database-driven
             </div>
           </div>
         </div>
@@ -1395,8 +1650,7 @@ function Attendance() {
               value={search}
               onChange={(event) =>
                 setSearch(
-                  event.target
-                    .value,
+                  event.target.value,
                 )
               }
               placeholder="Search employee ID or name..."
@@ -1405,13 +1659,10 @@ function Attendance() {
           </div>
 
           <select
-            value={
-              department
-            }
+            value={department}
             onChange={(event) =>
               setDepartment(
-                event.target
-                  .value,
+                event.target.value,
               )
             }
             className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
@@ -1429,8 +1680,8 @@ function Attendance() {
           </select>
         </div>
 
-        {/* KPI cards */}
-        <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {/* Monthly KPI */}
+        <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Employees
@@ -1451,6 +1702,26 @@ function Attendance() {
             </p>
           </div>
 
+          <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+              Checked In
+            </p>
+
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {totals.checkedIn}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+              Pending Review
+            </p>
+
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {totals.pendingReview}
+            </p>
+          </div>
+
           <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-red-600">
               Absent
@@ -1458,16 +1729,6 @@ function Attendance() {
 
             <p className="mt-2 text-2xl font-bold text-slate-900">
               {totals.absent}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
-              Leave
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {totals.leave}
             </p>
           </div>
 
@@ -1492,12 +1753,12 @@ function Attendance() {
           </div>
         </div>
 
-        {/* Attendance grid */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        {/* Automatic attendance records */}
+        <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-bold text-slate-900">
-                Daily Attendance Grid
+                Attendance Records
               </h2>
 
               <p className="mt-1 text-xs text-slate-500">
@@ -1508,9 +1769,10 @@ function Attendance() {
               </p>
             </div>
 
-            <div className="hidden items-center gap-2 text-xs text-slate-500 md:flex">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Database connected
+
+              Automatic attendance
             </div>
           </div>
 
@@ -1521,10 +1783,12 @@ function Attendance() {
                   size={20}
                   className="animate-spin"
                 />
+
                 Loading attendance...
               </div>
             </div>
-          ) : filteredRows.length === 0 ? (
+          ) : filteredRows.length ===
+            0 ? (
             <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center">
               <CalendarDays
                 size={36}
@@ -1599,11 +1863,11 @@ function Attendance() {
                     )}
 
                     <th className="min-w-24 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Working
+                      Present
                     </th>
 
-                    <th className="min-w-20 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Present
+                    <th className="min-w-24 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Pending
                     </th>
 
                     <th className="min-w-20 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
@@ -1611,14 +1875,10 @@ function Attendance() {
                     </th>
 
                     <th className="min-w-20 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Leave
-                    </th>
-
-                    <th className="min-w-20 border-b border-r border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
                       OT
                     </th>
 
-                    <th className="min-w-20 border-b border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    <th className="min-w-24 border-b border-slate-200 bg-slate-50 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">
                       Late
                     </th>
                   </tr>
@@ -1629,8 +1889,7 @@ function Attendance() {
                     (row) => {
                       const summary =
                         calculateSummary(
-                          row.employee,
-                          row.attendance,
+                          row,
                           year,
                           month,
                         )
@@ -1705,87 +1964,50 @@ function Attendance() {
 
                               return (
                                 <td
-                                  key={dateKey}
+                                  key={
+                                    dateKey
+                                  }
                                   className={`border-b border-r border-slate-200 px-1 py-2 text-center ${
                                     info.isWeekend
                                       ? 'bg-slate-50'
                                       : ''
                                   }`}
                                 >
-                                  <div className="flex min-w-[58px] flex-col items-center gap-1">
-                                    <CodePicker
-                                      value={
-                                        record?.code ||
-                                        ''
-                                      }
-                                      disabled={info.isWeekend}
-                                      onChange={(code) =>
-                                        updateAttendanceCode(
-                                          row.employeeKey,
-                                          dateKey,
-                                          code,
-                                        )
-                                      }
-                                    />
+                                  {record ? (
+                                    <div className="flex min-w-[58px] flex-col items-center gap-1">
+                                      <StatusBadge
+                                        status={
+                                          record.status
+                                        }
+                                      />
 
-                                    {!info.isWeekend && (
-                                      <>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max="24"
-                                          step="0.5"
-                                          value={
-                                            record?.overtime ??
-                                            ''
-                                          }
-                                          onChange={(event) =>
-                                            updateAttendanceExtra(
-                                              row.employeeKey,
-                                              dateKey,
-                                              'overtime',
-                                              event.target.value,
-                                            )
-                                          }
-                                          placeholder="OT"
-                                          aria-label={`Overtime hours for ${row.name} on ${dateKey}`}
-                                          className="h-7 w-14 rounded-md border border-slate-200 bg-white px-1 text-center text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400"
-                                        />
+                                      {record.checkIn && (
+                                        <span className="text-[9px] font-medium text-slate-500">
+                                          In{' '}
+                                          {formatTime(
+                                            record.checkIn,
+                                          )}
+                                        </span>
+                                      )}
 
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max="1440"
-                                          step="1"
-                                          value={
-                                            record?.late ??
-                                            ''
-                                          }
-                                          onChange={(event) =>
-                                            updateAttendanceExtra(
-                                              row.employeeKey,
-                                              dateKey,
-                                              'late',
-                                              event.target.value,
-                                            )
-                                          }
-                                          placeholder="Late"
-                                          aria-label={`Late minutes for ${row.name} on ${dateKey}`}
-                                          className="h-7 w-14 rounded-md border border-slate-200 bg-white px-1 text-center text-[10px] font-semibold text-slate-700 outline-none focus:border-slate-400"
-                                        />
-                                      </>
-                                    )}
-                                  </div>
+                                      {record.checkOut && (
+                                        <span className="text-[9px] font-medium text-slate-500">
+                                          Out{' '}
+                                          {formatTime(
+                                            record.checkOut,
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-slate-300">
+                                      —
+                                    </span>
+                                  )}
                                 </td>
                               )
                             },
                           )}
-
-                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700">
-                            {
-                              summary.workingDays
-                            }
-                          </td>
 
                           <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-emerald-700">
                             {
@@ -1793,15 +2015,15 @@ function Attendance() {
                             }
                           </td>
 
-                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-red-700">
+                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-amber-700">
                             {
-                              summary.absent
+                              summary.pendingReview
                             }
                           </td>
 
-                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-amber-700">
+                          <td className="border-b border-r border-slate-200 px-2 py-3 text-center text-xs font-semibold text-red-700">
                             {
-                              summary.leave
+                              summary.absent
                             }
                           </td>
 
@@ -1814,7 +2036,8 @@ function Attendance() {
                           <td className="border-b border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700">
                             {
                               summary.lateMinutes
-                            }
+                            }{' '}
+                            min
                           </td>
                         </tr>
                       )
@@ -1826,41 +2049,231 @@ function Attendance() {
           )}
         </div>
 
-        {/* Workbook terminology */}
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-slate-900">
-            Attendance Codes
-          </h3>
+        {/* Today's detailed records */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h2 className="font-bold text-slate-900">
+              Today's Check In / Check Out
+            </h2>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {ATTENDANCE_CODES.map(
-              (item) => (
-                <div
-                  key={
-                    item.code
-                  }
-                  className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2"
-                >
-                  <span
-                    className={`flex h-7 w-10 items-center justify-center rounded-md border text-xs font-bold ${
-                      CODE_CLASSES[
-                        item.code
-                      ]
-                    }`}
-                  >
-                    {
-                      item.code
-                    }
-                  </span>
+            <p className="mt-1 text-xs text-slate-500">
+              Actual attendance times recorded
+              automatically by the employee
+              attendance system.
+            </p>
+          </div>
 
-                  <span className="text-xs text-slate-600">
-                    {
-                      item.label
-                    }
-                  </span>
-                </div>
-              ),
-            )}
+          {todayRecords.length ===
+          0 ? (
+            <div className="px-5 py-10 text-center">
+              <Clock3
+                size={30}
+                className="mx-auto text-slate-300"
+              />
+
+              <p className="mt-3 text-sm font-semibold text-slate-700">
+                No attendance activity
+                recorded today.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-[1000px] w-full">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Employee
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Department
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Check In
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Check Out
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Status
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Location
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Late
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {todayRecords.map(
+                    (record) => {
+                      const employee =
+                        employees.find(
+                          (item) =>
+                            item.id ===
+                              record.employeeId ||
+                            item.employeeId ===
+                              record.employeeId,
+                        )
+
+                      const name =
+                        record.employeeName ||
+                        getEmployeeName(
+                          employee,
+                        )
+
+                      return (
+                        <tr
+                          key={
+                            record.id
+                          }
+                          className="border-b border-slate-100 hover:bg-slate-50/70"
+                        >
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
+                                {getInitials(
+                                  name,
+                                )}
+                              </div>
+
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  {name}
+                                </p>
+
+                                <p className="text-[11px] text-slate-400">
+                                  {employee?.employeeId ||
+                                    record.employeeId}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 text-xs text-slate-500">
+                            {record.department ||
+                              employee?.department ||
+                              'Unassigned'}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span className="text-sm font-semibold text-slate-800">
+                              {formatTime(
+                                record.checkIn,
+                              )}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span className="text-sm font-semibold text-slate-800">
+                              {formatTime(
+                                record.checkOut,
+                              )}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <StatusBadge
+                              status={
+                                record.status
+                              }
+                            />
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <LocationBadge
+                              record={
+                                record
+                              }
+                            />
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span
+                              className={`text-xs font-semibold ${
+                                Number(
+                                  record.late ||
+                                    0,
+                                ) > 0
+                                  ? 'text-amber-700'
+                                  : 'text-slate-400'
+                              }`}
+                            >
+                              {Number(
+                                record.late ||
+                                  0,
+                              )}{' '}
+                              min
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    },
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* System explanation */}
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <UserCheck
+                size={17}
+              />
+
+              Automatic Present
+            </div>
+
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              When an employee successfully
+              checks in and checks out on time,
+              the backend records the attendance
+              as PRESENT automatically.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <AlertCircle
+                size={17}
+              />
+
+              HR Exception Review
+            </div>
+
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              Late attendance remains pending
+              until HR accepts the exception.
+              HR does not manually mark normal
+              completed attendance.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <MapPin
+                size={17}
+              />
+
+              Location Verification
+            </div>
+
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              Employee check-in and check-out
+              location verification is performed
+              by the attendance backend and
+              displayed here for HR monitoring.
+            </p>
           </div>
         </div>
       </div>

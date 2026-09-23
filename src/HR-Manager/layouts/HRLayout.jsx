@@ -6,15 +6,23 @@ import HRTopbar from '../components/HRTopbar'
 
 function HRLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   return (
     <div className="min-h-screen bg-[#F3F4F6]">
       <HRSidebar
         mobileOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((current) => !current)}
       />
 
-      <div className="min-h-screen lg:pl-64">
+      <div
+        className={[
+          'min-h-screen transition-[padding] duration-300 ease-in-out',
+          sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64',
+        ].join(' ')}
+      >
         <HRTopbar
           onMenuClick={() => setSidebarOpen(true)}
         />

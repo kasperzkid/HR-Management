@@ -9,7 +9,6 @@ import {
 
 import {
   getDashboard,
-
   getEmployees,
   getEmployee,
   createEmployee,
@@ -21,6 +20,10 @@ import {
   createAttendance,
   updateAttendance,
   deleteAttendance,
+
+  employeeCheckIn,
+  employeeCheckOut,
+  acceptLateAttendance,
 
   getLeaveRequests,
   getLeaveRequest,
@@ -62,10 +65,23 @@ router.get('/reports', getHRReports)
 // ============================================================
 
 router.get('/attendance', getAttendance)
+
 router.get('/attendance/:id', getAttendanceRecord)
+
+// Existing HR attendance CRUD
 router.post('/attendance', createAttendance)
+
 router.put('/attendance/:id', updateAttendance)
+
 router.delete('/attendance/:id', deleteAttendance)
+
+// Automatic employee attendance
+router.post('/attendance/check-in', employeeCheckIn)
+
+router.post('/attendance/check-out', employeeCheckOut)
+
+// HR late-attendance review
+router.put('/attendance/:id/accept-late', acceptLateAttendance)
 
 // ============================================================
 // LEAVE MANAGEMENT

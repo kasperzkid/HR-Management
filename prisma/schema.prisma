@@ -59,23 +59,55 @@ model Employee {
 }
 
 model Attendance {
-  id               String   @id
-  employeeId       String
-  employeeName     String
-  department       String
-  date             String
-  status            String
-  checkIn          String?
-  checkOut         String?
-  late             Int      @default(0)
-  earlyDeparture   Int      @default(0)
-  regular          Float    @default(0)
-  overtime         Float    @default(0)
-  createdAt        DateTime @default(now())
+  id                    String   @id
+  employeeId            String
+  employeeName          String
+  department            String
+  date                  String
 
-  employee         Employee @relation(fields: [employeeId], references: [id])
+  // Attendance status:
+  // PRESENT
+  // LATE
+  // PENDING_REVIEW
+  // ABSENT
+  // LEAVE
+  // WEEKEND
+  status                String
+
+  // Actual employee times
+  checkIn               String?
+  checkOut              String?
+
+  // Late information
+  late                  Int      @default(0)
+  earlyDeparture        Int      @default(0)
+
+  // Working/overtime hours
+  regular                Float    @default(0)
+  overtime               Float    @default(0)
+
+  // Location verification
+  checkInLatitude       Float?
+  checkInLongitude      Float?
+  checkInLocationStatus String?   // VERIFIED / REJECTED
+
+  checkOutLatitude      Float?
+  checkOutLongitude     Float?
+  checkOutLocationStatus String?  // VERIFIED / REJECTED
+
+  // Required check-in time used when calculating lateness
+  requiredCheckInTime   String?
+
+  // Late-review workflow
+  reviewStatus           String?  // PENDING / ACCEPTED / REJECTED
+  reviewedBy             String?
+  reviewedAt             String?
+  reviewRemarks          String?
+
+  createdAt             DateTime @default(now())
+
+  employee              Employee @relation(fields: [employeeId], references: [id])
 }
-
 model LeaveRequest {
   id             String   @id
   employeeId     String

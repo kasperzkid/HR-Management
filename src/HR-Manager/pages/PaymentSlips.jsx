@@ -9,6 +9,8 @@ import {
   X,
 } from 'lucide-react'
 
+import { PageTitle } from '../../components/ui'
+
 const API_URL = 'http://localhost:4000/api/hr-manager'
 
 const PENSION_RATE = 0.07
@@ -272,20 +274,21 @@ function PaymentSlips() {
   return (
     <div className="min-h-full bg-[#F3F4F6] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">HR Management</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Payment Slips</h1>
-            <p className="mt-2 text-sm text-slate-500">View and print payment slips generated from payroll records.</p>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <CalendarDays className="h-5 w-5 text-slate-500" />
-            <div>
-              <p className="text-xs text-slate-400">Payroll Period</p>
-              <input type="month" value={payrollMonth} onChange={(event) => setPayrollMonth(event.target.value)} className="bg-transparent text-sm font-semibold text-slate-800 outline-none" />
+        <PageTitle
+          eyebrow="Payment Slips"
+          title="Employee Payment Slips"
+          description="View and print payment slips generated from payroll records."
+          action={
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <CalendarDays className="h-5 w-5 text-slate-500" />
+              <div>
+                <p className="text-xs text-slate-400">Payroll Period</p>
+                <input type="month" value={payrollMonth} onChange={(event) => setPayrollMonth(event.target.value)} className="bg-transparent text-sm font-semibold text-slate-800 outline-none" />
+              </div>
             </div>
-          </div>
-        </div>
+          }
+          className="mb-8"
+        />
 
         <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_240px]">
           <div className="relative">

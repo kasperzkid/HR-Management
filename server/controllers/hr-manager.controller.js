@@ -450,6 +450,220 @@ export async function deleteEmployee(req, res) {
 // ATTENDANCE
 // ============================================================
 
+function parseStoredSetting(value) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value !== 'string') {
+    return value
+  }
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
+
+async function getAttendanceConfiguration() {
+  const defaults = {
+    requiredCheckInTime: '08:30',
+    officeLatitude: null,
+    officeLongitude: null,
+    allowedRadiusMeters: 100,
+  }
+
+  try {
+    const settings = await prisma.setting.findMany({
+      where: {
+        key: {
+          in: [
+            'attendance.requiredCheckInTime',
+            'attendance.officeLatitude',
+            'attendance.officeLongitude',
+            'attendance.allowedRadiusMeters',
+          ],
+        },
+      },
+    })
+
+    const values = {}
+
+    for (const setting of settings) {
+      values[setting.key] = parseStoredSetting(setting.value)
+    }
+
+    const latitude = Number(
+      values['attendance.officeLatitude'],
+    )
+
+    const longitude = Number(
+      values['attendance.officeLongitude'],
+    )
+
+    const radius = Number(
+      values['attendance.allowedRadiusMeters'],
+    )
+
+    return {
+      requiredCheckInTime:
+        values['attendance.requiredCheckInTime'] ||
+        defaults.requiredCheckInTime,
+
+      officeLatitude:
+        Number.isFinite(latitude)
+          ? latitude
+          : defaults.officeLatitude,
+
+      officeLongitude:
+        Number.isFinite(longitude)
+          ? longitude
+          : defaults.officeLongitude,
+
+      allowedRadiusMeters:
+        Number.isFinite(radius) && radius > 0
+          ? radius
+          : defaults.allowedRadiusMeters,
+    }
+  } catch (error) {
+    console.error(
+      'Load attendance configuration error:',
+      error,
+    )
+
+    return defaults
+  }
+}
+
+function calculateDistanceMeters(
+  latitude1,
+  longitude1,
+  latitude2,
+  longitude2,
+) {
+  const earthRadius = 6371000
+
+  const toRadians = (degrees) =>
+    (degrees * Math.PI) / 180
+
+  const lat1 = toRadians(latitude1)
+  const lat2 = toRadians(latitude2)
+
+  const deltaLatitude = toRadians(
+    latitude2 - latitude1,
+  )
+
+  const deltaLongitude = toRadians(
+    longitude2 - longitude1,
+  )
+
+  const a =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLongitude / 2) ** 2
+
+  const c =
+    2 *
+    Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a),
+    )
+
+  return earthRadius * c
+}
+
+function isInsideOffice(
+  latitude,
+  longitude,
+  configuration,
+) {
+  const userLatitude = Number(latitude)
+  const userLongitude = Number(longitude)
+
+  if (
+    !Number.isFinite(userLatitude) ||
+    !Number.isFinite(userLongitude)
+  ) {
+    return {
+      verified: false,
+      distanceMeters: null,
+    }
+  }
+
+  if (
+    configuration.officeLatitude === null ||
+    configuration.officeLongitude === null
+  ) {
+    return {
+      verified: false,
+      distanceMeters: null,
+      configurationMissing: true,
+    }
+  }
+
+  const distanceMeters = calculateDistanceMeters(
+    userLatitude,
+    userLongitude,
+    configuration.officeLatitude,
+    configuration.officeLongitude,
+  )
+
+  return {
+    verified:
+      distanceMeters <=
+      configuration.allowedRadiusMeters,
+
+    distanceMeters,
+  }
+}
+
+function calculateLateMinutes(
+  checkInTime,
+  requiredCheckInTime,
+) {
+  if (
+    !checkInTime ||
+    !requiredCheckInTime
+  ) {
+    return 0
+  }
+
+  const checkInParts =
+    String(checkInTime).split(':')
+
+  const requiredParts =
+    String(requiredCheckInTime).split(':')
+
+  if (
+    checkInParts.length < 2 ||
+    requiredParts.length < 2
+  ) {
+    return 0
+  }
+
+  const checkInMinutes =
+    Number(checkInParts[0]) * 60 +
+    Number(checkInParts[1])
+
+  const requiredMinutes =
+    Number(requiredParts[0]) * 60 +
+    Number(requiredParts[1])
+
+  if (
+    !Number.isFinite(checkInMinutes) ||
+    !Number.isFinite(requiredMinutes)
+  ) {
+    return 0
+  }
+
+  return Math.max(
+    0,
+    checkInMinutes - requiredMinutes,
+  )
+}
+
 export async function getAttendance(req, res) {
   try {
     const {
@@ -498,15 +712,22 @@ export async function getAttendance(req, res) {
 
     res.json(attendance)
   } catch (error) {
-    console.error('Get attendance error:', error)
+    console.error(
+      'Get attendance error:',
+      error,
+    )
 
     res.status(500).json({
-      message: 'Failed to load attendance records',
+      message:
+        'Failed to load attendance records',
     })
   }
 }
 
-export async function getAttendanceRecord(req, res) {
+export async function getAttendanceRecord(
+  req,
+  res,
+) {
   try {
     const { id } = req.params
 
@@ -519,7 +740,8 @@ export async function getAttendanceRecord(req, res) {
 
     if (!attendance) {
       return res.status(404).json({
-        message: 'Attendance record not found',
+        message:
+          'Attendance record not found',
       })
     }
 
@@ -537,7 +759,461 @@ export async function getAttendanceRecord(req, res) {
   }
 }
 
-export async function createAttendance(req, res) {
+// ------------------------------------------------------------
+// EMPLOYEE CHECK IN
+// ------------------------------------------------------------
+
+export async function employeeCheckIn(
+  req,
+  res,
+) {
+  try {
+    const {
+      employeeId,
+      latitude,
+      longitude,
+      checkIn,
+    } = req.body
+
+    if (!employeeId) {
+      return res.status(400).json({
+        message: 'Employee ID is required',
+      })
+    }
+
+    if (
+      latitude === undefined ||
+      longitude === undefined
+    ) {
+      return res.status(400).json({
+        message:
+          'Current device location is required',
+      })
+    }
+
+    const employee =
+      await prisma.employee.findUnique({
+        where: {
+          id: employeeId,
+        },
+      })
+
+    if (!employee) {
+      return res.status(404).json({
+        message: 'Employee not found',
+      })
+    }
+
+    const configuration =
+      await getAttendanceConfiguration()
+
+    const location =
+      isInsideOffice(
+        latitude,
+        longitude,
+        configuration,
+      )
+
+    if (location.configurationMissing) {
+      return res.status(503).json({
+        message:
+          'YanolTech office location has not been configured yet.',
+      })
+    }
+
+    if (!location.verified) {
+      return res.status(403).json({
+        message:
+          'You are outside the YanolTech office location. Check In/Check Out is not available.',
+        distanceMeters:
+          location.distanceMeters,
+      })
+    }
+
+    const now = new Date()
+
+    const date =
+      now.toISOString().slice(0, 10)
+
+    const actualCheckIn =
+      checkIn ||
+      now.toTimeString().slice(0, 5)
+
+    const lateMinutes =
+      calculateLateMinutes(
+        actualCheckIn,
+        configuration.requiredCheckInTime,
+      )
+
+    const existing =
+      await prisma.attendance.findFirst({
+        where: {
+          employeeId: employee.id,
+          date,
+        },
+      })
+
+    if (existing?.checkIn) {
+      return res.status(409).json({
+        message:
+          'You have already checked in today.',
+        record: existing,
+      })
+    }
+
+    const status =
+      lateMinutes > 0
+        ? 'PENDING_REVIEW'
+        : 'CHECKED_IN'
+
+    const data = {
+      employeeName: employee.name,
+      department: employee.department,
+
+      status,
+
+      checkIn: actualCheckIn,
+
+      late: lateMinutes,
+
+      requiredCheckInTime:
+        configuration.requiredCheckInTime,
+
+      checkInLatitude:
+        Number(latitude),
+
+      checkInLongitude:
+        Number(longitude),
+
+      checkInLocationStatus:
+        'VERIFIED',
+
+      reviewStatus:
+        lateMinutes > 0
+          ? 'PENDING'
+          : null,
+    }
+
+    const attendance = existing
+      ? await prisma.attendance.update({
+          where: {
+            id: existing.id,
+          },
+          data,
+        })
+      : await prisma.attendance.create({
+          data: {
+            id: crypto.randomUUID(),
+
+            employeeId:
+              employee.id,
+
+            employeeName:
+              employee.name,
+
+            department:
+              employee.department,
+
+            date,
+
+            ...data,
+          },
+        })
+
+    res.status(201).json({
+      message:
+        lateMinutes > 0
+          ? 'Check-in recorded. Late attendance is pending HR review.'
+          : 'Check-in recorded successfully.',
+
+      attendance,
+
+      location: {
+        verified: true,
+        distanceMeters:
+          location.distanceMeters,
+      },
+    })
+  } catch (error) {
+    console.error(
+      'Employee check-in error:',
+      error,
+    )
+
+    res.status(500).json({
+      message:
+        'Failed to record employee check-in',
+    })
+  }
+}
+
+// ------------------------------------------------------------
+// EMPLOYEE CHECK OUT
+// ------------------------------------------------------------
+
+export async function employeeCheckOut(
+  req,
+  res,
+) {
+  try {
+    const {
+      employeeId,
+      latitude,
+      longitude,
+      checkOut,
+    } = req.body
+
+    if (!employeeId) {
+      return res.status(400).json({
+        message: 'Employee ID is required',
+      })
+    }
+
+    if (
+      latitude === undefined ||
+      longitude === undefined
+    ) {
+      return res.status(400).json({
+        message:
+          'Current device location is required',
+      })
+    }
+
+    const employee =
+      await prisma.employee.findUnique({
+        where: {
+          id: employeeId,
+        },
+      })
+
+    if (!employee) {
+      return res.status(404).json({
+        message: 'Employee not found',
+      })
+    }
+
+    const configuration =
+      await getAttendanceConfiguration()
+
+    const location =
+      isInsideOffice(
+        latitude,
+        longitude,
+        configuration,
+      )
+
+    if (location.configurationMissing) {
+      return res.status(503).json({
+        message:
+          'YanolTech office location has not been configured yet.',
+      })
+    }
+
+    if (!location.verified) {
+      return res.status(403).json({
+        message:
+          'You are outside the YanolTech office location. Check In/Check Out is not available.',
+        distanceMeters:
+          location.distanceMeters,
+      })
+    }
+
+    const now = new Date()
+
+    const date =
+      now.toISOString().slice(0, 10)
+
+    const actualCheckOut =
+      checkOut ||
+      now.toTimeString().slice(0, 5)
+
+    const attendance =
+      await prisma.attendance.findFirst({
+        where: {
+          employeeId: employee.id,
+          date,
+        },
+      })
+
+    if (!attendance) {
+      return res.status(404).json({
+        message:
+          'You must check in before checking out.',
+      })
+    }
+
+    if (!attendance.checkIn) {
+      return res.status(400).json({
+        message:
+          'You must check in before checking out.',
+      })
+    }
+
+    if (attendance.checkOut) {
+      return res.status(409).json({
+        message:
+          'You have already checked out today.',
+        record: attendance,
+      })
+    }
+
+    const updated =
+      await prisma.attendance.update({
+        where: {
+          id: attendance.id,
+        },
+
+        data: {
+          checkOut:
+            actualCheckOut,
+
+          checkOutLatitude:
+            Number(latitude),
+
+          checkOutLongitude:
+            Number(longitude),
+
+          checkOutLocationStatus:
+            'VERIFIED',
+
+          status:
+            attendance.status ===
+            'PENDING_REVIEW'
+              ? 'PENDING_REVIEW'
+              : 'PRESENT',
+        },
+      })
+
+    res.json({
+      message:
+        attendance.status ===
+        'PENDING_REVIEW'
+          ? 'Check-out recorded. Attendance is pending HR review because the check-in was late.'
+          : 'Check-out recorded successfully.',
+
+      attendance: updated,
+
+      location: {
+        verified: true,
+        distanceMeters:
+          location.distanceMeters,
+      },
+    })
+  } catch (error) {
+    console.error(
+      'Employee check-out error:',
+      error,
+    )
+
+    res.status(500).json({
+      message:
+        'Failed to record employee check-out',
+    })
+  }
+}
+
+// ------------------------------------------------------------
+// HR ACCEPT LATE ATTENDANCE
+// ------------------------------------------------------------
+
+export async function acceptLateAttendance(
+  req,
+  res,
+) {
+  try {
+    const { id } = req.params
+
+    const {
+      reviewedBy,
+      reviewRemarks,
+    } = req.body
+
+    const attendance =
+      await prisma.attendance.findUnique({
+        where: {
+          id,
+        },
+      })
+
+    if (!attendance) {
+      return res.status(404).json({
+        message:
+          'Attendance record not found',
+      })
+    }
+
+    if (
+      attendance.status !==
+      'PENDING_REVIEW'
+    ) {
+      return res.status(400).json({
+        message:
+          'This attendance record is not pending late review.',
+      })
+    }
+
+    if (!attendance.checkIn) {
+      return res.status(400).json({
+        message:
+          'Cannot approve attendance without a check-in time.',
+      })
+    }
+
+    const updated =
+      await prisma.attendance.update({
+        where: {
+          id,
+        },
+
+        data: {
+          status:
+            attendance.checkOut
+              ? 'PRESENT'
+              : 'CHECKED_IN',
+
+          reviewStatus:
+            'ACCEPTED',
+
+          reviewedBy:
+            reviewedBy ||
+            'HR Administrator',
+
+          reviewedAt:
+            new Date().toISOString(),
+
+          reviewRemarks:
+            reviewRemarks ||
+            null,
+        },
+      })
+
+    res.json({
+      message:
+        'Late attendance accepted successfully.',
+
+      attendance: updated,
+    })
+  } catch (error) {
+    console.error(
+      'Accept late attendance error:',
+      error,
+    )
+
+    res.status(500).json({
+      message:
+        'Failed to accept late attendance',
+    })
+  }
+}
+
+// ------------------------------------------------------------
+// EXISTING HR MANUAL ATTENDANCE CREATION
+// ------------------------------------------------------------
+
+export async function createAttendance(
+  req,
+  res,
+) {
   try {
     const {
       employeeId,
@@ -553,11 +1229,7 @@ export async function createAttendance(req, res) {
       overtime,
     } = req.body
 
-    if (
-      !employeeId ||
-      !date ||
-      !status
-    ) {
+    if (!employeeId || !date || !status) {
       return res.status(400).json({
         message:
           'Employee, date, and status are required',
@@ -631,7 +1303,10 @@ export async function createAttendance(req, res) {
   }
 }
 
-export async function updateAttendance(req, res) {
+export async function updateAttendance(
+  req,
+  res,
+) {
   try {
     const { id } = req.params
 
@@ -649,11 +1324,7 @@ export async function updateAttendance(req, res) {
       overtime,
     } = req.body
 
-    if (
-      !employeeId ||
-      !date ||
-      !status
-    ) {
+    if (!employeeId || !date || !status) {
       return res.status(400).json({
         message:
           'Employee, date, and status are required',
@@ -745,7 +1416,10 @@ export async function updateAttendance(req, res) {
   }
 }
 
-export async function deleteAttendance(req, res) {
+export async function deleteAttendance(
+  req,
+  res,
+) {
   try {
     const { id } = req.params
 
@@ -785,7 +1459,6 @@ export async function deleteAttendance(req, res) {
     })
   }
 }
-
 // ============================================================
 // PAYROLL
 // ============================================================
@@ -837,24 +1510,7 @@ const PAYE_BRACKETS = [
   },
 ]
 
-function parseStoredSetting(value) {
-  if (
-    value === null ||
-    value === undefined
-  ) {
-    return null
-  }
 
-  if (typeof value !== 'string') {
-    return value
-  }
-
-  try {
-    return JSON.parse(value)
-  } catch {
-    return value
-  }
-}
 
 async function getPayrollConfiguration() {
   try {

@@ -14,6 +14,8 @@ import {
   X,
 } from 'lucide-react'
 
+import { PageTitle, Table } from '../../components/ui'
+
 const API_BASE = 'http://localhost:4000/api/hr-manager'
 
 const DEFAULT_PAYROLL_CONFIGURATION = {
@@ -2005,111 +2007,31 @@ export default function Payroll() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <CircleDollarSign
-                size={24}
-                className="text-slate-700"
-              />
-
-              <h1 className="text-2xl font-bold text-slate-900">
-                Payroll Management
-              </h1>
+        <PageTitle
+          eyebrow="Payroll Management"
+          title="Manage Employee Payroll"
+          description="Manage monthly salary calculations, deductions, net pay and employer cost."
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => moveMonth(-1)} className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50" title="Previous month">
+                <ChevronLeft size={18} />
+              </button>
+              <input type="month" value={payrollMonth} onChange={(event) => setPayrollMonth(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-slate-500" />
+              <button type="button" onClick={() => moveMonth(1)} className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50" title="Next month">
+                <ChevronRight size={18} />
+              </button>
+              <button type="button" onClick={refreshPayroll} disabled={loading || payrollLoading} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                <RefreshCw size={16} className={payrollLoading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+              <button type="button" onClick={generateAllPayroll} disabled={generating || payrollLoading || loading} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
+                {generating ? <Loader2 size={17} className="animate-spin" /> : <Calculator size={17} />}
+                {generating ? 'Generating...' : 'Generate Payroll'}
+              </button>
             </div>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Manage monthly salary calculations,
-              deductions, net pay and employer cost.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                moveMonth(-1)
-              }
-              className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50"
-              title="Previous month"
-            >
-              <ChevronLeft size={18} />
-            </button>
-
-            <input
-              type="month"
-              value={payrollMonth}
-              onChange={(event) =>
-                setPayrollMonth(
-                  event.target.value,
-                )
-              }
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-slate-500"
-            />
-
-            <button
-              type="button"
-              onClick={() =>
-                moveMonth(1)
-              }
-              className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50"
-              title="Next month"
-            >
-              <ChevronRight size={18} />
-            </button>
-
-            <button
-              type="button"
-              onClick={
-                refreshPayroll
-              }
-              disabled={
-                loading ||
-                payrollLoading
-              }
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              <RefreshCw
-                size={16}
-                className={
-                  payrollLoading
-                    ? 'animate-spin'
-                    : ''
-                }
-              />
-
-              Refresh
-            </button>
-
-            <button
-              type="button"
-              onClick={
-                generateAllPayroll
-              }
-              disabled={
-                generating ||
-                payrollLoading ||
-                loading
-              }
-              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {generating ? (
-                <Loader2
-                  size={17}
-                  className="animate-spin"
-                />
-              ) : (
-                <Calculator
-                  size={17}
-                />
-              )}
-
-              {generating
-                ? 'Generating...'
-                : 'Generate Payroll'}
-            </button>
-          </div>
-        </div>
+          }
+          className="mb-8"
+        />
 
         {error && (
           <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -2294,34 +2216,34 @@ export default function Payroll() {
           </div>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[700px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">
+            <Table className="w-full min-w-[700px] text-left text-sm">
+              <Table.Header>
+                <Table.Row className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                  <Table.Head className="px-3 py-2">
                     Taxable Income
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-3 py-2">
+                  <Table.Head className="px-3 py-2">
                     Rate
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-3 py-2">
+                  <Table.Head className="px-3 py-2">
                     Subtraction
-                  </th>
-                </tr>
-              </thead>
+                  </Table.Head>
+                </Table.Row>
+              </Table.Header>
 
-              <tbody>
+              <Table.Body>
                 {PAYE_BRACKETS.map(
                   (
                     bracket,
                     index,
                   ) => (
-                    <tr
+                    <Table.Row
                       key={`${bracket.min}-${index}`}
                       className="border-b border-slate-100 last:border-0"
                     >
-                      <td className="px-3 py-2 text-slate-700">
+                      <Table.Cell className="px-3 py-2 text-slate-700">
                         {bracket.max ===
                         Infinity
                           ? `${formatCurrency(
@@ -2332,24 +2254,24 @@ export default function Payroll() {
                             )} – ${formatCurrency(
                               bracket.max,
                             )}`}
-                      </td>
+                      </Table.Cell>
 
-                      <td className="px-3 py-2 font-medium text-slate-900">
+                      <Table.Cell className="px-3 py-2 font-medium text-slate-900">
                         {bracket.rate *
                           100}
                         %
-                      </td>
+                      </Table.Cell>
 
-                      <td className="px-3 py-2 text-slate-700">
+                      <Table.Cell className="px-3 py-2 text-slate-700">
                         {formatCurrency(
                           bracket.subtraction,
                         )}
-                      </td>
-                    </tr>
+                      </Table.Cell>
+                    </Table.Row>
                   ),
                 )}
-              </tbody>
-            </table>
+              </Table.Body>
+            </Table>
           </div>
         </div>
 
@@ -2384,68 +2306,68 @@ export default function Payroll() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1450px] text-left text-sm">
-              <thead className="bg-slate-50">
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3">
+            <Table className="w-full min-w-[1450px] text-left text-sm">
+              <Table.Header className="bg-slate-50">
+                <Table.Row className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                  <Table.Head className="px-4 py-3">
                     Employee
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3">
+                  <Table.Head className="px-4 py-3">
                     Department
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Basic
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Allowances
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     OT Hours
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Gross
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Pension
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Tax
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Deductions
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Net Salary
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Employer Cost
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3">
+                  <Table.Head className="px-4 py-3">
                     Status
-                  </th>
+                  </Table.Head>
 
-                  <th className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right">
                     Actions
-                  </th>
-                </tr>
-              </thead>
+                  </Table.Head>
+                </Table.Row>
+              </Table.Header>
 
-              <tbody>
+              <Table.Body>
                 {loading ||
                 payrollLoading ? (
-                  <tr>
-                    <td
+                  <Table.Row>
+                    <Table.Cell
                       colSpan={13}
                       className="px-6 py-12 text-center"
                     >
@@ -2457,12 +2379,12 @@ export default function Payroll() {
 
                         Loading payroll records...
                       </div>
-                    </td>
-                  </tr>
+                    </Table.Cell>
+                  </Table.Row>
                 ) : rows.length ===
                   0 ? (
-                  <tr>
-                    <td
+                  <Table.Row>
+                    <Table.Cell
                       colSpan={13}
                       className="px-6 py-14 text-center"
                     >
@@ -2499,8 +2421,8 @@ export default function Payroll() {
                           Generate Payroll
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </Table.Cell>
+                  </Table.Row>
                 ) : (
                   rows.map(
                     (row) => {
@@ -2530,11 +2452,11 @@ export default function Payroll() {
                         )
 
                       return (
-                        <tr
+                        <Table.Row
                           key={row.id}
                           className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
                         >
-                          <td className="px-4 py-4">
+                          <Table.Cell className="px-4 py-4">
                             <div className="font-medium text-slate-900">
                               {getEmployeeName(
                                 employee,
@@ -2546,26 +2468,26 @@ export default function Payroll() {
                                 row.employeeId ||
                                 '-'}
                             </div>
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-slate-600">
+                          <Table.Cell className="px-4 py-4 text-slate-600">
                             {employee?.department ||
                               '-'}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right font-medium text-slate-700">
+                          <Table.Cell className="px-4 py-4 text-right font-medium text-slate-700">
                             {formatCurrency(
                               row.basicSalary,
                             )}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right text-slate-700">
+                          <Table.Cell className="px-4 py-4 text-right text-slate-700">
                             {formatCurrency(
                               allowanceTotal,
                             )}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right text-slate-700">
+                          <Table.Cell className="px-4 py-4 text-right text-slate-700">
                             <div className="inline-flex items-center gap-1">
                               <Clock3
                                 size={14}
@@ -2579,51 +2501,51 @@ export default function Payroll() {
                                 2,
                               )}
                             </div>
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right font-semibold text-slate-900">
+                          <Table.Cell className="px-4 py-4 text-right font-semibold text-slate-900">
                             {formatCurrency(
                               row.grossSalary,
                             )}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right text-slate-700">
+                          <Table.Cell className="px-4 py-4 text-right text-slate-700">
                             {formatCurrency(
                               row.pensionDeduction,
                             )}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right text-slate-700">
+                          <Table.Cell className="px-4 py-4 text-right text-slate-700">
                             {formatCurrency(
                               row.incomeTax,
                             )}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right text-slate-700">
+                          <Table.Cell className="px-4 py-4 text-right text-slate-700">
                             {formatCurrency(
                               row.totalDeductions,
                             )}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right font-bold text-slate-900">
+                          <Table.Cell className="px-4 py-4 text-right font-bold text-slate-900">
                             {formatCurrency(
                               row.netSalary,
                             )}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4 text-right font-semibold text-slate-700">
+                          <Table.Cell className="px-4 py-4 text-right font-semibold text-slate-700">
                             {formatCurrency(
                               row.employerCost,
                             )}
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4">
+                          <Table.Cell className="px-4 py-4">
                             <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                               Saved
                             </span>
-                          </td>
+                          </Table.Cell>
 
-                          <td className="px-4 py-4">
+                          <Table.Cell className="px-4 py-4">
                             <div className="flex justify-end gap-1">
                               <button
                                 type="button"
@@ -2667,14 +2589,14 @@ export default function Payroll() {
                                 )}
                               </button>
                             </div>
-                          </td>
-                        </tr>
+                          </Table.Cell>
+                        </Table.Row>
                       )
                     },
                   )
                 )}
-              </tbody>
-            </table>
+              </Table.Body>
+            </Table>
           </div>
         </div>
 

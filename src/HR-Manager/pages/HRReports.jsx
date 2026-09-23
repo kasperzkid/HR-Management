@@ -9,6 +9,8 @@ import {
   Users,
 } from 'lucide-react'
 
+import { PageTitle } from '../../components/ui'
+
 const API_URL = 'http://localhost:4000/api/hr-manager'
 
 const EMPLOYMENT_TYPES = [
@@ -425,33 +427,18 @@ function HRReports() {
   return (
     <div className="min-h-full bg-[#F3F4F6] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-slate-900 p-3">
-              <BarChart3 className="h-6 w-6 text-white" />
-            </div>
-
-            <div>
-              <h1 className="text-2xl font-bold text-slate-950 sm:text-3xl">
-                HR Reports
-              </h1>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Database-backed workforce, attendance and payroll analytics for Yanol Tech.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={loading || filteredRows.length === 0}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Download className="h-4 w-4" />
-            Export Report
-          </button>
-        </div>
+        <PageTitle
+          eyebrow="HR Reports"
+          title="Workforce Reports"
+          description="Database-backed workforce, attendance and payroll analytics for Yanol Tech."
+          action={
+            <button type="button" onClick={handleExport} disabled={loading || filteredRows.length === 0} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+              <Download className="h-4 w-4" />
+              Export Report
+            </button>
+          }
+          className="mb-8"
+        />
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">

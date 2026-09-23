@@ -1,0 +1,51 @@
+@keyframes statCardClick { 0%{transform:translateY(0) scale(1)} 35%{transform:translateY(-7px) scale(1.012)} 65%{transform:translateY(-4px) scale(1.006)} 100%{transform:translateY(0) scale(1)} }
+@keyframes pageTitleIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+
+  60% {
+    opacity: 1;
+    transform: translateY(2px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pageTitleActionIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.01);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-page-title {
+  animation: pageTitleIn 480ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.animate-page-title-action {
+  animation: pageTitleActionIn 500ms cubic-bezier(.22, 1, .36, 1) 120ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-page-title,
+  .animate-page-title-action {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

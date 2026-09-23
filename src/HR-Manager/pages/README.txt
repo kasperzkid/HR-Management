@@ -1,0 +1,1 @@
+Replaces the shared Table component and applies it to Employee Directory, Attendance records, Leave Review Inbox, and the Payroll Rules PAYE table. Existing data, actions, and business logic are preserved.
