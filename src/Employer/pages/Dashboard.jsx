@@ -30,7 +30,7 @@ import { Link } from 'react-router-dom'
 import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import { leaveBalance, activeLeave, formatDate } from '../lib/leave'
 import { SETTINGS } from '../data/settingsData'
-import AddEmployeeModal from '../components/AddEmployeeModal'
+import AddEmployeeModal from '../../HR-Manager/components/AddEmployeeModal'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
 import { attendanceTotals } from '../lib/attendanceUtils'
@@ -655,11 +655,12 @@ function Dashboard() {
       )}
 
       {/* Add Employee Modal (available if needed) */}
-    <AddEmployeeModal
-  isOpen={isAddModalOpen}
-  onClose={() => setIsAddModalOpen(false)}
-  onAdd={(newEmp) => setEmployees((prev) => [newEmp, ...prev])}
-/>
+      <AddEmployeeModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSave={(newEmp) => setEmployees((prev) => [newEmp, ...prev])}
+        existingEmployees={employees}
+      />
     </div>
   )
 }

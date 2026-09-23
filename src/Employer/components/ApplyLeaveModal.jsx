@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, CalendarCheck, User, Building, Calendar, Hash, FileText, Paperclip, CheckCircle2, Clock, ShieldCheck } from 'lucide-react'
 import { SETTINGS } from '../data/settingsData'
 import { networkdays, formatDate } from '../lib/leave'
-import LuxuryDatePicker from "./add-employee-modal/LuxuryDatePicker";
+import LuxuryDatePicker from '../../HR-Manager/components/add-employee-modal/LuxuryDatePicker'
 
 // Per-type guidance so employees know what to submit for each leave category
 const REMARK_HINTS = {
