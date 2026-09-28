@@ -10,6 +10,7 @@ import Payroll from './pages/Payroll'
 import PaymentSlips from './pages/PaymentSlips'
 import HRReports from './pages/HRReports'
 import HRSettings from './pages/HRSettings'
+import Inbox from '../Employer/pages/Inbox'
 
 function ComingSoon({ title }) {
   return (
@@ -36,6 +37,8 @@ function HRManagerApp() {
           index
           element={<HRDashboard />}
         />
+        <Route path="inbox" element={<Inbox basePath="/hr-manager/inbox" canStartChat />} />
+        <Route path="inbox/:contactId" element={<Inbox basePath="/hr-manager/inbox" canStartChat />} />
 
         {/* Future HR modules */}
       <Route

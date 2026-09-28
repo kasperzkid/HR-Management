@@ -4,14 +4,12 @@ import {
   Check,
   CircleDollarSign,
   Clock3,
-  FileText,
   Globe,
   ListChecks,
   LocateFixed,
   MapPin,
   Plus,
   Save,
-  ShieldAlert,
   ShieldCheck,
   Trash2,
   UserRound,
@@ -60,6 +58,15 @@ const EMPTY_SETTINGS = {
     email: '',
     logo: '',
   },
+
+  accessPermissions: {
+    'Employee Management': true,
+    'Attendance Management': true,
+    'Leave Management': true,
+    'Payroll Management': true,
+    'Payment Slips': true,
+    'HR Reports': true,
+  },
 }
 
 const LIST_CONFIG = [
@@ -81,7 +88,6 @@ function cloneSettings(value) {
 function SettingsCard({
   icon: Icon,
   title,
-  description,
   children,
 }) {
   return (
@@ -92,13 +98,9 @@ function SettingsCard({
         </div>
 
         <div>
-          <h2 className="text-base font-bold text-slate-950">
+          <h2 className="text-base font-bold text-[#0092B8]">
             {title}
           </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            {description}
-          </p>
         </div>
       </div>
 
@@ -410,6 +412,10 @@ function HRSettings() {
               ...EMPTY_SETTINGS.companyInformation,
               ...(data.companyInformation || {}),
             },
+            accessPermissions: {
+              ...EMPTY_SETTINGS.accessPermissions,
+              ...(data.accessPermissions || {}),
+            },
           })
         }
       } catch (requestError) {
@@ -526,6 +532,10 @@ function HRSettings() {
         companyInformation: {
           ...EMPTY_SETTINGS.companyInformation,
           ...(data.companyInformation || {}),
+        },
+        accessPermissions: {
+          ...EMPTY_SETTINGS.accessPermissions,
+          ...(data.accessPermissions || {}),
         },
       })
 
@@ -763,24 +773,13 @@ function HRSettings() {
             />
           </div>
 
-          <div className="mt-5 rounded-xl bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Workbook Defaults
-            </p>
-
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              Overtime multiplier: 1.5× · Standard monthly
-              working hours: 208 · Taxable allowances: 100% ·
-              Employee pension: 7% · Employer pension: 11%.
-            </p>
-          </div>
         </SettingsCard>
 
         {/* Attendance & Location */}
         <SettingsCard
           icon={MapPin}
-          title="Attendance, Work Hours & Office Geofence"
-          description="Control employee check-in & check-out time windows, late cutoff times, and office geofence restriction."
+          title="Check-In & Check-Out Schedule"
+          description="Set employee check-in and check-out windows and late arrival cutoff times."
         >
           {/* Work Hours & Punch Times */}
           <div className="mb-6">
@@ -839,9 +838,15 @@ function HRSettings() {
               Employees can check in starting at the window start. Check-ins after the required time are recorded with late minutes and flagged for HR review. Check-out unlocks at the required check-out time.
             </p>
           </div>
+        </SettingsCard>
 
+        <SettingsCard
+          icon={Globe}
+          title="Geo-Restriction & Office Location"
+          description="Configure whether employees must be inside the office geofence to record attendance."
+        >
           {/* Geo Restriction & Office Geofence */}
-          <div className="border-t border-slate-100 pt-5">
+          <div>
             <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
               <div>
                 <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -849,9 +854,6 @@ function HRSettings() {
                   Office Geofence & Location Restriction
                 </h3>
 
-                <p className="mt-1 text-xs text-slate-500">
-                  Enforce whether employees must be physically present inside the office radius to punch.
-                </p>
               </div>
 
               {/* Toggle Geo Restriction */}
@@ -962,11 +964,6 @@ function HRSettings() {
                     </span>
                   </div>
 
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    {settings.attendanceConfiguration?.geoRestrictionEnabled !== false
-                      ? `Employees must be within ${settings.attendanceConfiguration?.allowedRadiusMeters ?? 100} meters of the configured office coordinates to Check In or Check Out.`
-                      : 'Geofencing is currently disabled. Employees can Check In and Check Out remotely from anywhere without GPS restriction.'}
-                  </p>
                 </div>
               </div>
 
@@ -1003,44 +1000,6 @@ function HRSettings() {
               </div>
             </div>
 
-            {/* Attendance Rule Banner */}
-            <div
-              className={`mt-4 rounded-xl border px-4 py-3 ${
-                settings.attendanceConfiguration?.geoRestrictionEnabled !== false
-                  ? 'border-indigo-200 bg-indigo-50/60'
-                  : 'border-amber-200 bg-amber-50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {settings.attendanceConfiguration?.geoRestrictionEnabled !== false ? (
-                  <ShieldCheck className="h-4 w-4 text-indigo-700" />
-                ) : (
-                  <ShieldAlert className="h-4 w-4 text-amber-700" />
-                )}
-
-                <p
-                  className={`text-xs font-semibold uppercase tracking-wide ${
-                    settings.attendanceConfiguration?.geoRestrictionEnabled !== false
-                      ? 'text-indigo-800'
-                      : 'text-amber-800'
-                  }`}
-                >
-                  Live Policy Enforcement
-                </p>
-              </div>
-
-              <p
-                className={`mt-1 text-sm leading-6 ${
-                  settings.attendanceConfiguration?.geoRestrictionEnabled !== false
-                    ? 'text-indigo-900'
-                    : 'text-amber-900'
-                }`}
-              >
-                {settings.attendanceConfiguration?.geoRestrictionEnabled !== false
-                  ? `Check-in opens at ${settings.attendanceConfiguration?.checkInStartTime || '08:00'}. Cutoff is ${settings.attendanceConfiguration?.requiredCheckInTime || '08:30'} (late check-ins recorded with late minutes and sent to HR). Check-out unlocks at ${settings.attendanceConfiguration?.checkOutStartTime || '17:30'}. Punches outside ${settings.attendanceConfiguration?.allowedRadiusMeters ?? 100}m radius are blocked.`
-                  : `Check-in opens at ${settings.attendanceConfiguration?.checkInStartTime || '08:00'}. Cutoff is ${settings.attendanceConfiguration?.requiredCheckInTime || '08:30'}. Check-out unlocks at ${settings.attendanceConfiguration?.checkOutStartTime || '17:30'}. Geofence is bypassed — remote employees can punch from anywhere.`}
-              </p>
-            </div>
           </div>
         </SettingsCard>
 
@@ -1081,84 +1040,32 @@ function HRSettings() {
           />
         </SettingsCard>
 
-        {/* Leave */}
-        <SettingsCard
-          icon={FileText}
-          title="Leave Configuration"
-          description="Leave types and approval statuses are managed from the configurable HR lists."
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-800">
-                Leave Types
-              </p>
-
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Annual, sick, maternity, paternity,
-                compassionate, unpaid, and other leave types
-                can be maintained above.
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-800">
-                Approval Status
-              </p>
-
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Pending, approved, and rejected values are
-                database-backed and editable.
-              </p>
-            </div>
-          </div>
-        </SettingsCard>
-
         {/* Security */}
         <SettingsCard
           icon={ShieldCheck}
           title="HR Access & Security"
           description="Current role structure for the HR management area."
         >
-          <div className="rounded-xl border border-slate-100 p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-slate-100 p-2">
-                <UserRound className="h-5 w-5 text-slate-700" />
-              </div>
-
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  HR Manager
-                </p>
-
-                <p className="text-xs text-slate-500">
-                  HR management workspace
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {[
-                'Employee Management',
-                'Attendance Management',
-                'Leave Management',
-                'Payroll Management',
-                'Payment Slips',
-                'HR Reports',
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="rounded-lg bg-slate-50 p-3"
-                >
-                  <p className="text-xs text-slate-400">
-                    {item}
-                  </p>
-
-                  <p className="mt-1 text-sm font-semibold text-slate-700">
-                    Enabled
-                  </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {Object.keys(EMPTY_SETTINGS.accessPermissions).map((item) => {
+              const enabled = settings.accessPermissions?.[item] !== false
+              return (
+                <div key={item} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-100">
+                      <UserRound className="h-4 w-4 text-[#0092B8]" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{item}</p>
+                      <p className={`mt-0.5 text-xs font-semibold ${enabled ? 'text-emerald-600' : 'text-slate-400'}`}>{enabled ? 'Enabled' : 'Disabled'}</p>
+                    </div>
+                  </div>
+                  <button type="button" role="switch" aria-checked={enabled} aria-label={`${enabled ? 'Disable' : 'Enable'} ${item}`} onClick={() => updateSetting('accessPermissions', { ...settings.accessPermissions, [item]: !enabled })} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${enabled ? 'bg-[#0092B8]' : 'bg-slate-300'}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
                 </div>
-              ))}
-            </div>
+              )
+            })}
           </div>
         </SettingsCard>
 

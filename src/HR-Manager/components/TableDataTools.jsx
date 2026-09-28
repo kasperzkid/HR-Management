@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Download, Upload } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
-export default function TableDataTools({ rows = [], filename = 'table-data', onImport }) {
+export default function TableDataTools({ rows = [], filename = 'table-data', onImport, showStatus = true }) {
   const fileRef = useRef(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -40,16 +40,16 @@ export default function TableDataTools({ rows = [], filename = 'table-data', onI
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={exportRows} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+      <button type="button" onClick={exportRows} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0092B8] hover:bg-slate-50 hover:text-[#007A99]">
         <Download size={14} /> Export
       </button>
       {onImport && <>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importFile} className="hidden" />
-        <button type="button" disabled={busy} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600 disabled:opacity-50">
+        <button type="button" disabled={busy} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0092B8] hover:bg-slate-50 hover:text-[#007A99] disabled:opacity-50">
           <Upload size={14} /> {busy ? 'Importing…' : 'Import'}
         </button>
       </>}
-      {message && <span role="status" className="text-xs text-slate-500">{message}</span>}
+      {showStatus && message && <span role="status" className="text-xs text-slate-500">{message}</span>}
     </div>
   )
 }

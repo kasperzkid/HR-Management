@@ -20,6 +20,7 @@ import {
   Check,
   ChevronLeft,
   Download,
+  MessageSquare,
 } from 'lucide-react'
 import { useMessaging } from '../context/messagingStore'
 import { fetchUsersApi } from '../../lib/messagesApi'
@@ -312,7 +313,7 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
     if (hiddenContacts.has(String(c.id))) return false
     if (canStartChat) return true
     const thread = threads[String(c.id)] || []
-    return thread.length > 0 || c.lastMessage !== null
+    return c.isHR || thread.length > 0 || c.lastMessage !== null
   })
 
   // Track screen size for responsive layout: mobile = stacked/routing, desktop = side-by-side
@@ -486,7 +487,7 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
               )}
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Real-time synchronized messaging between HR and employee workforce
+              {canStartChat ? 'Real-time messaging with employees' : 'Message HR Admin with a question or workplace concern'}
             </p>
           </div>
         </div>
@@ -500,6 +501,12 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
             <Plus size={14} />
             <span>New conversation</span>
           </button>
+        )}
+        {!canStartChat && (
+          <div className="flex items-center gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-indigo-950">
+            <MessageSquare className="h-5 w-5 shrink-0 text-indigo-600" />
+            <p className="text-xs leading-5"><span className="font-bold">Need help?</span> Select HR Admin to start a private conversation. You can flag a message as a complaint or question.</p>
+          </div>
         )}
       </div>
 
@@ -531,7 +538,7 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">
                   {canStartChat
                     ? 'Click "New conversation" to message an employee.'
-                    : 'Messages sent from HR will appear here in real time.'}
+                    : 'Choose HR Admin to ask a question or report a concern.'}
                 </p>
               </div>
             ) : (
@@ -575,7 +582,7 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
                       </div>
                       <div className="flex items-center justify-between gap-1 mt-0.5">
                         <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                          {last ? `${last.from === 'me' ? 'You: ' : ''}${last.text || (last.attachment ? '📎 Attachment' : '')}` : 'No messages yet'}
+                          {last ? `${last.from === 'me' ? 'You: ' : ''}${last.text || (last.attachment ? '📎 Attachment' : '')}` : contact.isHR ? 'HR Admin · start a conversation' : 'No messages yet'}
                         </p>
                         {unread > 0 && (
                           <span className="shrink-0 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-emerald-500 text-white">
@@ -948,9 +955,9 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
                 className="p-3 sm:p-4 border-t border-gray-100 dark:border-[#262b31] bg-white dark:bg-[#15181d] flex items-center gap-2 shrink-0"
               >
                 {!canStartChat && (
-                  <label className="flex shrink-0 items-center gap-1 text-[10px] font-semibold text-gray-500" title="Flag this message for HR follow-up">
+                  <label className="flex shrink-0 items-center gap-1 text-[10px] font-semibold text-gray-500" title="Flag this as a complaint or question for HR follow-up">
                     <input type="checkbox" checked={flagAsComplaint} onChange={(event) => setFlagAsComplaint(event.target.checked)} className="accent-indigo-600" />
-                    Request
+                    Complaint / question
                   </label>
                 )}
                 <input

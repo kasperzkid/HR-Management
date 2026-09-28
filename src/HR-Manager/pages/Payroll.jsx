@@ -9,6 +9,7 @@ import {
   Clock3,
   Edit3,
   Loader2,
+  MoreHorizontal,
   MinusCircle,
   Save,
   Trash2,
@@ -1270,6 +1271,7 @@ export default function Payroll() {
     deletingId,
     setDeletingId,
   ] = useState(null)
+  const [actionMenuId, setActionMenuId] = useState(null)
 
   async function loadEmployees() {
     try {
@@ -2497,48 +2499,16 @@ export default function Payroll() {
                           </Table.Cell>
 
                           <Table.Cell className="px-4 py-4">
-                            <div className="flex justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openEditModal(
-                                    row,
-                                  )
-                                }
-                                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                                title="Edit payroll"
-                              >
-                                <Edit3
-                                  size={16}
-                                />
+                            <div className="relative flex justify-end">
+                              <button type="button" onClick={() => setActionMenuId((current) => current === row.id ? null : row.id)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900" aria-label={`Actions for payroll record ${row.employeeId || ''}`} aria-expanded={actionMenuId === row.id}>
+                                <MoreHorizontal size={16} />
                               </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDelete(
-                                    row,
-                                  )
-                                }
-                                disabled={
-                                  deletingId ===
-                                  row.id
-                                }
-                                className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50"
-                                title="Delete payroll"
-                              >
-                                {deletingId ===
-                                row.id ? (
-                                  <Loader2
-                                    size={16}
-                                    className="animate-spin"
-                                  />
-                                ) : (
-                                  <Trash2
-                                    size={16}
-                                  />
-                                )}
-                              </button>
+                              {actionMenuId === row.id && (
+                                <div className="absolute right-0 top-10 z-20 w-36 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+                                  <button type="button" onClick={() => { setActionMenuId(null); openEditModal(row) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"><Edit3 size={14} /> Edit payroll</button>
+                                  <button type="button" onClick={() => { setActionMenuId(null); handleDelete(row) }} disabled={deletingId === row.id} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">{deletingId === row.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Delete payroll</button>
+                                </div>
+                              )}
                             </div>
                           </Table.Cell>
                         </Table.Row>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BadgeDollarSign,
   BarChart3,
@@ -65,6 +65,7 @@ const EMPLOYER_SEARCH_ENTRIES = [
 
 function EmployerLayout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { totalUnread } = useMessaging()
   const [isHovered, setIsHovered] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)

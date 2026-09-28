@@ -3,12 +3,14 @@ import { Outlet } from 'react-router-dom'
 
 import HRSidebar from '../components/HRSidebar'
 import HRTopbar from '../components/HRTopbar'
+import { MessagingProvider } from '../../Employer/context/MessagingContext'
 
 function HRLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   return (
+    <MessagingProvider portalType="hr">
     <div className="h-screen overflow-hidden bg-[#F3F4F6]">
       <HRSidebar
         mobileOpen={sidebarOpen}
@@ -32,6 +34,7 @@ function HRLayout() {
         </main>
       </div>
     </div>
+    </MessagingProvider>
   )
 }
 

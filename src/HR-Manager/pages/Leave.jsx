@@ -2255,7 +2255,7 @@ function Leave() {
             LEAVE REQUEST INBOX
         ====================================================== */}
 
-        <section id="leave-review-inbox" className="mt-6">
+        <section id="leave-review-inbox" className="mt-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_8px_28px_rgba(15,23,42,0.05)]">
           <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center">
             <div>
               <div className="flex items-center gap-2">
@@ -2270,30 +2270,13 @@ function Leave() {
                 )}
               </div>
 
-              <h2 className="mt-1 text-lg font-bold">
+              <h2 className="mt-1 text-lg font-bold text-[#0092B8]">
                 Leave Review Inbox
               </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Employee-submitted requests awaiting HR review.
-              </p>
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <TableDataTools filename="leave-requests" rows={requests} onImport={importLeaveRequests} />
-              <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                Automatically checking for new requests
-              </div>
-
-              <p className="text-sm text-slate-500">
-                {filteredRequests.length}{' '}
-                request
-                {filteredRequests.length ===
-                1
-                  ? ''
-                  : 's'}
-              </p>
+              <TableDataTools filename="leave-requests" rows={requests} onImport={importLeaveRequests} showStatus={false} />
             </div>
           </div>
 
@@ -2323,35 +2306,36 @@ function Leave() {
               </p>
             </div>
           ) : (
+            <div className="border-t border-slate-100">
             <div className="overflow-x-auto">
-              <Table className="w-full min-w-[1280px]">
+              <Table className="w-full min-w-[1280px] text-left text-sm" containerClassName="rounded-none border-0 shadow-none">
                 <Table.Header>
-                  <Table.Row className="border-b border-slate-100 bg-slate-50/60 text-left">
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  <Table.Row className="bg-slate-50/90">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Request
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Employee
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Leave Type
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Dates
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Days
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Status
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       HR Action
                     </Table.Head>
                   </Table.Row>
@@ -2370,13 +2354,13 @@ function Leave() {
                           key={
                             request.id
                           }
-                          className={`border-b border-slate-50 transition ${
+                          className={`border-t border-slate-100 transition-colors ${
                             isNew
                               ? 'bg-indigo-50/40 hover:bg-indigo-50/70'
                               : 'hover:bg-slate-50/60'
                           }`}
                         >
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <div className="flex items-start gap-2">
                               {isNew && (
                                 <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />
@@ -2404,7 +2388,7 @@ function Leave() {
                             </div>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <div className="flex items-center gap-3">
                               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-[#4755AE]">
                                 {getEmployeeInitials(
@@ -2451,7 +2435,7 @@ function Leave() {
                             </div>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <span
                               className={`inline-flex rounded-lg px-2.5 py-1.5 text-xs font-semibold ${getLeaveTypeClasses(
                                 request.leaveType,
@@ -2463,7 +2447,7 @@ function Leave() {
                             </span>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <p className="text-sm font-medium text-slate-700">
                               {
                                 request.startDate
@@ -2478,7 +2462,7 @@ function Leave() {
                             </p>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <span className="text-sm font-bold text-slate-900">
                               {formatNumber(
                                 request.days,
@@ -2490,7 +2474,7 @@ function Leave() {
                             </span>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <span
                               className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
                                 request.approvalStatus,
@@ -2502,7 +2486,7 @@ function Leave() {
                             </span>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <div className="flex justify-end gap-2">
                               {request.approvalStatus ===
                               'Pending' ? (
@@ -2561,6 +2545,7 @@ function Leave() {
                 </Table.Body>
               </Table>
             </div>
+            </div>
           )}
         </section>
 
@@ -2569,19 +2554,19 @@ function Leave() {
             KEEPING THE BOTTOM SECTION
         ====================================================== */}
 
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-6">
+        <section className="mt-6">
+          <div className="mb-5 p-1">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
                 <Users size={18} />
               </div>
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#0092B8]">
                   Employee Leave Balance
                 </p>
 
-                <h2 className="mt-1 text-lg font-bold">
+                <h2 className="mt-1 text-lg font-bold text-[#0092B8]">
                   Balance Summary
                 </h2>
 
@@ -2592,7 +2577,7 @@ function Leave() {
             </div>
           </div>
 
-          <div className="p-6">
+          <div>
             <div className="mb-5 max-w-md">
               <Field label="Select Employee">
                 <SelectField

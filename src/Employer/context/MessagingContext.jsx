@@ -143,11 +143,12 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
           color: AVATAR_COLORS[i % AVATAR_COLORS.length],
         }))
 
-        // For Employer: only show contacts with messages
+        // Employees always have an HR Admin contact available, even before
+        // starting a conversation. Other contacts appear after a message exists.
         if (!isHR) {
           const filtered = colored.filter((c) => {
             const t = (store.threads && store.threads[c.id]) || []
-            return c.lastMessage !== null || t.length > 0
+            return c.isHR || c.lastMessage !== null || t.length > 0
           })
           setContacts(filtered)
         } else {
@@ -232,8 +233,9 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
           id: cId,
           name: isHR ? (message.senderName || 'Employer') : 'Sarah Jenkins (HR)',
           email: isHR ? 'employer@yanol.com' : 'hr@yanol.com',
-          role: 'EMPLOYER',
+          role: isHR ? 'EMPLOYER' : 'HR_MANAGER',
           roleLabel: isHR ? 'Employer' : 'HR Manager',
+          isHR: !isHR,
           initials: isHR ? 'AJ' : 'SJ',
           color: 'bg-sky-500',
           online: true,

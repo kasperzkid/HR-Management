@@ -23,7 +23,8 @@ import {
   Download,
 } from 'lucide-react'
 
-import { Table } from '../../components/ui'
+import { PageTitle, Table } from '../../components/ui'
+import { useSearchParams } from 'react-router-dom'
 import { downloadEmployeeResume } from '../../lib/hrApi'
 import TableDataTools from '../components/TableDataTools'
 
@@ -372,6 +373,21 @@ function inputClassName() {
     'focus:border-[#4755AE]',
     'focus:ring-2 focus:ring-[#4755AE]/10',
   ].join(' ')
+}
+
+function PhoneFieldInput({ name = 'phone', value, onChange, className }) {
+  const [operator, setOperator] = useState(() => (/^(09|\+2519)/.test(value || '') ? 'ethio' : 'safaricom'))
+  const placeholder = operator === 'ethio' ? '09XXXXXXXX or +2519XXXXXXXX' : '07XXXXXXXX or +2517XXXXXXXX'
+
+  return (
+    <div className="flex gap-2">
+      <select aria-label="Phone network" value={operator} onChange={(event) => setOperator(event.target.value)} className="w-36 shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-[#4755AE]">
+        <option value="safaricom">Safaricom</option>
+        <option value="ethio">Ethio Telecom</option>
+      </select>
+      <input className={className || inputClassName()} name={name} value={value} onChange={onChange} placeholder={placeholder} inputMode="tel" />
+    </div>
+  )
 }
 
 function SectionTitle({
@@ -814,13 +830,7 @@ function EmployeeModal({
                 </Field>
 
                 <Field label="Phone">
-                  <input
-                    className={inputClassName()}
-                    name="phone"
-                    value={form.phone}
-                    onChange={handleChange}
-                    placeholder="+251 9..."
-                  />
+                  <PhoneFieldInput value={form.phone} onChange={handleChange} />
                 </Field>
 
                 <Field label="Address">
@@ -1807,14 +1817,7 @@ function AddEmployeeDrawer({
                   </Field>
 
                   <Field label="Phone">
-                    <input
-                      className={inputClassName()}
-                      name="phone"
-                      value={form.phone}
-                      onChange={handleChange}
-                      placeholder="07XXXXXXXX / 09XXXXXXXX / +251..."
-                      inputMode="tel"
-                    />
+                    <PhoneFieldInput value={form.phone} onChange={handleChange} />
                   </Field>
 
                   <Field label="Address">
@@ -3270,6 +3273,7 @@ function EmployeeTable({
 ========================================================= */
 
 export default function Employees() {
+  const [searchParams] = useSearchParams()
   const [employees, setEmployees] =
     useState([])
 
@@ -3289,6 +3293,11 @@ export default function Employees() {
 
   const [search, setSearch] =
     useState('')
+
+  useEffect(() => {
+    const query = searchParams.get('search')
+    setSearch(query || '')
+  }, [searchParams])
 
   const [departmentFilter, setDepartmentFilter] =
     useState('All')
@@ -3908,22 +3917,12 @@ async function handleSave(employeeData) {
 
       <main className="mx-auto max-w-[1600px] px-5 py-6 sm:px-8">
 
-        {/* Header */}
-        <header className="animate-employee-hero mb-8 flex flex-col justify-between gap-5 bg-[#F3F4F6] px-6 py-2 sm:px-10 sm:py-3 lg:flex-row lg:items-center">
-          <div className="flex items-center gap-4">
-            <div>
-              <p className="text-base font-medium tracking-normal text-cyan-600">
-                Employee Management
-              </p>
-              <h1 className="mt-1 text-[36px] font-bold leading-tight tracking-[-0.035em] text-slate-950 sm:text-[40px]">
-                Manage Your Team
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                View, add, edit and manage all employees in your organization.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
+        <PageTitle
+          eyebrow="Employee Management"
+          title="Manage Your Team"
+          description="View, add, edit and manage all employees in your organization."
+          className="animate-employee-hero mb-8 px-6 py-2 sm:px-10 sm:py-3"
+          action={(
             <button
               type="button"
               onClick={openAddModal}
@@ -3932,8 +3931,8 @@ async function handleSave(employeeData) {
               <UserPlus size={18} />
               Add Employee
             </button>
-          </div>
-        </header>
+          )}
+        />
 
         {/* Summary */}
         <section className="animate-employee-summary mb-9 grid gap-4 bg-[#F3F4F6] p-0 sm:grid-cols-2 lg:grid-cols-4">

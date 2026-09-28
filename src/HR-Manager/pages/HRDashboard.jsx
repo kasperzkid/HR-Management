@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import {
   ArrowUpRight,
@@ -23,6 +24,7 @@ import {
 const API_URL = '/api/hr-manager'
 
 function HRDashboard() {
+  const navigate = useNavigate()
   const [employees, setEmployees] = useState([])
   const [employeesLoading, setEmployeesLoading] = useState(true)
   const [attendanceRecords, setAttendanceRecords] = useState([])
@@ -1337,11 +1339,13 @@ function HRDashboard() {
                             <td className="px-4 py-4">
                               <button
                                 type="button"
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 opacity-0 transition-all hover:bg-white hover:text-slate-600 group-hover:opacity-100"
-                                aria-label={`More options for ${
+                                onClick={() => navigate('/hr-manager/employees')}
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition-colors hover:bg-white hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0092B8]/30"
+                                aria-label={`Open employee directory for ${
                                   employee.name ||
                                   'employee'
                                 }`}
+                                title="Open employee directory"
                               >
                                 <MoreHorizontal
                                   size={17}

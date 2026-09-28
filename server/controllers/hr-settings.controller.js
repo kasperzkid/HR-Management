@@ -135,6 +135,15 @@ const DEFAULT_SETTINGS = {
     email: 'hr@yourcompany.com',
     logo: '[Insert Company Logo Here]',
   },
+
+  accessPermissions: {
+    'Employee Management': true,
+    'Attendance Management': true,
+    'Leave Management': true,
+    'Payroll Management': true,
+    'Payment Slips': true,
+    'HR Reports': true,
+  },
 }
 
 function cloneDefaults() {

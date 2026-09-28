@@ -7,7 +7,6 @@ import {
   FileBarChart,
   FileText,
   LayoutDashboard,
-  MessageSquare,
   Moon,
   Settings,
   Sun,
@@ -38,11 +37,6 @@ const navigation = [
     label: 'Leave Management',
     path: '/hr-manager/leave',
     icon: ClipboardList,
-  },
-  {
-    label: 'Notifications & Inbox',
-    path: '/hr-manager/inbox',
-    icon: MessageSquare,
   },
   {
     label: 'Payroll',
