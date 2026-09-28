@@ -13,6 +13,11 @@ dist-ssr
 *.local
 storage/resumes/
 
+# Server runtime data
+prisma/dev.db
+prisma/dev.db-journal
+server/uploads
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
