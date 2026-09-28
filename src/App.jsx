@@ -1,54 +1,128 @@
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
-import Login from './pages/Login'
-import EmployerApp from './Employer/EmployerApp'
-import HRManagerApp from './HR-Manager/HRManagerApp'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
-function ProtectedRoute({ children, allowedRole }) {
-  const raw = localStorage.getItem('user')
-  if (!raw) {
-    // Seamlessly allow previewing during development and review
-    return children
+import Login from './pages/Login'
+import HRManagerApp from './HR-Manager/HRManagerApp'
+import EmployerApp from './Employer/EmployerApp'
+
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem('user')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function normalizeRole(role) {
+  const value = String(role || '').trim().toUpperCase()
+
+  if (value === 'EMPLOYER' || value === 'EMPLOYEE') {
+    return 'EMPLOYEE'
   }
 
-  try {
-    const user = JSON.parse(raw)
-    if (allowedRole && user.role && user.role !== allowedRole) {
-      return children
-    }
-  } catch {
-    // fallback
+  if (
+    value === 'ADMIN' ||
+    value === 'HR' ||
+    value === 'HR_ADMIN' ||
+    value === 'HR_MANAGER'
+  ) {
+    return 'HR_MANAGER'
+  }
+
+  return value
+}
+
+function ProtectedRoute({ children, allowedRole, loginPath }) {
+  const user = getStoredUser()
+
+  if (!user?.token) {
+    return <Navigate to={loginPath} replace />
+  }
+
+  if (normalizeRole(user.role) !== allowedRole) {
+    return <Navigate to={loginPath} replace />
   }
 
   return children
 }
 
-function App() {
+export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/employer" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Navigate to="/login" replace />} />
+
+        {/* HR ADMIN LOGIN */}
         <Route
-          path="/employer/*"
+          path="/hr-manager/login"
+          element={<Login />}
+        />
+
+        {/* EMPLOYEE LOGIN */}
+        <Route
+          path="/employer/login"
+          element={<Login />}
+        />
+
+        {/* KEEP OLD LOGIN URL WORKING */}
+        <Route
+          path="/login"
           element={
-            <ProtectedRoute allowedRole="EMPLOYER">
-              <EmployerApp />
-            </ProtectedRoute>
+            <Navigate
+              to="/hr-manager/login"
+              replace
+            />
           }
         />
+
+        {/* HR MANAGER / HR DASHBOARD */}
         <Route
           path="/hr-manager/*"
           element={
-            <ProtectedRoute allowedRole="HR_MANAGER">
+            <ProtectedRoute
+              allowedRole="HR_MANAGER"
+              loginPath="/hr-manager/login"
+            >
               <HRManagerApp />
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/employer" replace />} />
+
+        {/* EMPLOYEE PORTAL */}
+        <Route
+          path="/employer/*"
+          element={
+            <ProtectedRoute
+              allowedRole="EMPLOYEE"
+              loginPath="/employer/login"
+            >
+              <EmployerApp />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* MAIN ROUTE → HR DASHBOARD */}
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to="/hr-manager"
+              replace
+            />
+          }
+        />
+
+        {/* UNKNOWN ROUTES → HR DASHBOARD */}
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/hr-manager"
+              replace
+            />
+          }
+        />
+
       </Routes>
     </BrowserRouter>
   )
 }
-
-export default App

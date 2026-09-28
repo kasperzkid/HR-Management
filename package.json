@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node server/index.js",
+    "server": "node --watch server/index.js",
     "db:push": "npx prisma db push",
     "db:seed": "node prisma/seed.js",
     "build": "vite build",
@@ -13,13 +13,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.46.0",
+    "multer": "^2.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4",
     "recharts": "^2.15.4",
+    "socket.io": "^4.8.4",
     "socket.io-client": "^4.8.3",
     "xlsx": "^0.18.5"
   },

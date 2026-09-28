@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FileSpreadsheet, FileText, X } from 'lucide-react'
+import { Table } from '../../../components/ui'
 
 // ─────────────────────────────────────────────────────────────
 // EXPORT MODAL (Qirb-Alga Hub Style)
@@ -72,7 +73,7 @@ export default function ExportModal({ open, onClose, rows = [], filename = 'Atte
             <body>
               <h2>${filename.replace(/_/g, ' ')}</h2>
               <p>Exported on ${new Date().toLocaleString()} • Total Records: ${rows.length}</p>
-              <table>
+              <Table>
                 <thead>
                   <tr>
                     <th>#</th>
@@ -107,7 +108,7 @@ export default function ExportModal({ open, onClose, rows = [], filename = 'Atte
                     )
                     .join('')}
                 </tbody>
-              </table>
+              </Table>
               <script>
                 window.onload = function() { window.print(); window.close(); }
               </script>

@@ -11,16 +11,14 @@ import {
   Building2,
   Calendar,
 } from 'lucide-react'
-import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import PaymentSlip, { formatSlipAmount } from '../../components/PaymentSlip'
 import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
-import { attendanceTotals } from '../lib/attendanceUtils'
-import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
+import { fetchEmployees, fetchPayrollRecords } from '../lib/employerApi'
 import useRealtimeRefetch from '../hooks/useRealtimeRefetch'
 
 export default function Payslips() {
   const [employees, setEmployees] = useState([])
-  const [attendance, setAttendance] = useState([])
+  const [payrollRecords, setPayrollRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const me = resolveEmployee(employees, getCurrentUser())
 
@@ -33,42 +31,37 @@ export default function Payslips() {
 
   useEffect(() => {
     let cancelled = false
-    fetchEmployees()
-      .then((emps) => {
-        if (!cancelled) setEmployees(Array.isArray(emps) ? emps : [])
+    setLoading(true)
+
+    Promise.all([fetchEmployees(), fetchPayrollRecords()])
+      .then(([emps, payroll]) => {
+        if (cancelled) return
+        setEmployees(Array.isArray(emps) ? emps : [])
+        setPayrollRecords(Array.isArray(payroll) ? payroll : [])
       })
-      .catch(() => {})
+      .catch((error) => {
+        console.error('Load payslips error:', error)
+        if (!cancelled) {
+          setEmployees([])
+          setPayrollRecords([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
     return () => {
       cancelled = true
     }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    setAttendance([])
-    fetchAttendance({ month, year })
-      .then((att) => {
-        if (!cancelled) setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
-      })
-      .catch(() => {
-        if (!cancelled) setAttendance([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [month, year])
+  const reloadPayroll = useCallback(() => {
+    fetchPayrollRecords()
+      .then((records) => setPayrollRecords(Array.isArray(records) ? records : []))
+      .catch((error) => console.error('Refresh payslips error:', error))
+  }, [])
 
-  // Live refresh: today's punch instantly updates the current month's
-  // slip figures (OT pay changes as soon as check-out is recorded).
-  const reloadAttendance = useCallback(() => {
-    fetchAttendance({ month, year })
-      .then((att) => setAttendance(Array.isArray(att) ? att : (att?.attendance || [])))
-      .catch(() => {})
-  }, [month, year])
-  useRealtimeRefetch(`${month}-${year}`, reloadAttendance)
+  useRealtimeRefetch('employee-payslips', reloadPayroll)
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -76,49 +69,68 @@ export default function Payslips() {
   ]
   const periodLabel = `${monthNames[month - 1] || ''} ${year}`
 
-  // Calculate computed payroll slip data for all employees
+  // Use only payroll records that actually exist in the database.
+  // No calculated/fallback/mock payroll is created here.
   const slipsData = useMemo(() => {
-    const attTotals = attendanceTotals(attendance)
-    return employees.map((emp) => {
-      const att = attTotals[emp.id] || attTotals[emp.employeeId] || { totalOtHours: 0 }
-      const row = calcPayroll(emp, att)
-
-      const earnings = {
-        basicSalary: row.basicSalary,
-        transport: row.transportAllowance,
-        housing: row.housingAllowance,
-        mealOther: row.mealAllowance + row.otherAllowance,
-        otPay: row.otPay,
-        grossSalary: row.gross,
-      }
-
-      const deductions = {
-        incomeTax: row.incomeTax,
-        pension: row.pensionEmployee,
-        otherDeduct: row.otherDeductions || 0,
-        loanDeduct: row.loanDeductions || 0,
-        totalDeduct: row.incomeTax + row.pensionEmployee + (row.otherDeductions || 0) + (row.loanDeductions || 0),
-        netSalary: row.netSalary,
-      }
-
-      return {
-        employee: {
-          employeeId: emp.employeeId,
-          name: emp.name,
-          department: emp.department,
-          jobTitle: emp.jobTitle,
-          tin: emp.tin || '',
-          bankAccount: emp.bankAccount || '',
-        },
-        earnings,
-        deductions,
-      }
+    const employeeById = new Map()
+    employees.forEach((emp) => {
+      employeeById.set(String(emp.id), emp)
+      employeeById.set(String(emp.employeeId), emp)
     })
-  }, [employees, attendance])
 
-  // Filtered employees list
+    return payrollRecords
+      .filter((record) => {
+        const period = String(record.payrollMonth || '')
+        return period === `${year}-${String(month).padStart(2, '0')}`
+      })
+      .map((record) => {
+        const emp = employeeById.get(String(record.employeeId)) || {}
+        const earnings = {
+          basicSalary: Number(record.basicSalary) || 0,
+          transport: Number(record.transportAllowance) || 0,
+          housing: Number(record.housingAllowance) || 0,
+          mealOther: (Number(record.mealAllowance) || 0) + (Number(record.otherAllowance) || 0),
+          otPay: Number(record.overtimePay) || 0,
+          grossSalary: Number(record.grossSalary) || 0,
+        }
+
+        const deductions = {
+          incomeTax: Number(record.incomeTax) || 0,
+          pension: Number(record.pensionDeduction) || 0,
+          otherDeduct: Number(record.otherDeduction) || 0,
+          loanDeduct: Number(record.loanDeduction) || 0,
+          totalDeduct: Number(record.totalDeductions) || 0,
+          netSalary: Number(record.netSalary) || 0,
+        }
+
+        return {
+          employee: {
+            employeeId: emp.employeeId || record.employeeId || '',
+            name: emp.name || record.employeeName || 'Employee',
+            department: emp.department || record.department || '',
+            jobTitle: emp.jobTitle || '',
+            tin: emp.tin || '',
+            bankAccount: emp.bankAccount || '',
+          },
+          earnings,
+          deductions,
+          payrollRecord: record,
+        }
+      })
+  }, [employees, payrollRecords, month, year])
+
+  // This page is employee-self-service: only the currently logged-in employee's
+  // real payroll records are allowed to appear here.
+  const employeeSlips = useMemo(() => {
+    if (!me?.employeeId) return []
+    return slipsData.filter(
+      (item) => String(item.employee.employeeId) === String(me.employeeId),
+    )
+  }, [slipsData, me?.employeeId])
+
+  // Filtered slips for the currently logged-in employee only.
   const filteredSlips = useMemo(() => {
-    return slipsData.filter((item) => {
+    return employeeSlips.filter((item) => {
       const matchesSearch =
         searchQuery.trim() === '' ||
         item.employee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -129,22 +141,20 @@ export default function Payslips() {
       const matchesDept = selectedDept === 'All' || item.employee.department === selectedDept
       return matchesSearch && matchesDept
     })
-  }, [slipsData, searchQuery, selectedDept])
+  }, [employeeSlips, searchQuery, selectedDept])
 
   const departments = useMemo(() => {
-    return ['All', ...new Set(slipsData.map((s) => s.employee.department))]
-  }, [slipsData])
+    return ['All', ...new Set(employeeSlips.map((s) => s.employee.department))]
+  }, [employeeSlips])
 
   // Default the focused slip to the logged-in employee once data arrives
   const currentFocusedSlip = useMemo(() => {
-    const id = selectedEmpId || me.employeeId
+    const id = me?.employeeId
     return (
-      filteredSlips.find((s) => s.employee.employeeId === id) ||
-      slipsData.find((s) => s.employee.employeeId === id) ||
-      filteredSlips[0] ||
-      slipsData[0]
+      filteredSlips.find((s) => String(s.employee.employeeId) === String(id)) ||
+      filteredSlips[0]
     )
-  }, [filteredSlips, slipsData, selectedEmpId, me.employeeId])
+  }, [filteredSlips, me?.employeeId])
 
   const handlePrev = () => {
     const idx = filteredSlips.findIndex((s) => s.employee.employeeId === currentFocusedSlip?.employee.employeeId)
@@ -154,6 +164,17 @@ export default function Payslips() {
   const handleNext = () => {
     const idx = filteredSlips.findIndex((s) => s.employee.employeeId === currentFocusedSlip?.employee.employeeId)
     if (idx < filteredSlips.length - 1) setSelectedEmpId(filteredSlips[idx + 1].employee.employeeId)
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6">
+          <p className="text-sm font-bold text-gray-900">Loading payroll slips...</p>
+          <p className="text-xs text-gray-500 mt-1">Loading recorded payroll data.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -240,7 +261,7 @@ export default function Payslips() {
             </div>
 
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-              Showing {filteredSlips.length} of {slipsData.length} slips
+              Showing {filteredSlips.length} of {employeeSlips.length} slips
             </span>
           </div>
 
@@ -284,6 +305,14 @@ export default function Payslips() {
           </div>
         </div>
       </div>
+
+      {filteredSlips.length === 0 && (
+        <div className="bg-white dark:bg-[#15181d] border border-gray-200 dark:border-[#262b31] rounded-2xl shadow-2xs p-8 text-center">
+          <FileText className="mx-auto text-gray-300" size={34} />
+          <h3 className="mt-3 text-sm font-bold text-gray-900 dark:text-gray-100">No payroll slip recorded</h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">There is no payroll record for {periodLabel}. A slip will appear here after payroll is created for this employee and month.</p>
+        </div>
+      )}
 
       {/* ── 1. SUMMARY TABLE VIEW (STRUCTURED DIRECTORY) ── */}
       {viewType === 'table' && (

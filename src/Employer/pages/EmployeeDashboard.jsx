@@ -1,37 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  CalendarCheck,
-  CalendarDays,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  Download,
-  FileText,
-  MapPin,
-  Plane,
-  User,
-  UserRound,
-  Wallet,
-  XCircle,
+  CalendarCheck, CalendarDays, CheckCircle2, ChevronRight, Clock, Download, FileText, KeyRound, MapPin, Plane, User, UserRound, Wallet, XCircle,
 } from 'lucide-react'
-import { INITIAL_EMPLOYEES } from '../data/employeeData'
-import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
-import { ALL_LEAVE } from '../data/leaveData'
-import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
+import { fetchEmployees, fetchAttendance, fetchLeaveRequests, fetchPayrollRecords } from '../lib/employerApi'
+import { changePasswordApi } from '../lib/userApi'
+import { getCurrentUser, matchEmployee, placeholderEmployee } from '../lib/currentUser'
+import { calcPayroll, formatETB } from '../lib/payroll'
 import { leaveBalance, formatDate } from '../lib/leave'
-import { SETTINGS } from '../data/settingsData'
-
-// The logged-in employee — scoped entirely to their own ID.
-// Every widget below is filtered by WHERE employeeId = CURRENT_EMPLOYEE.employeeId
-const CURRENT_EMPLOYEE = INITIAL_EMPLOYEES.find((e) => e.employeeId === 'EMP-0001') || INITIAL_EMPLOYEES[0]
-
-// Upcoming company holidays (displayed in the activity feed)
-const UPCOMING_HOLIDAYS = [
-  { day: '27', month: 'Sep', name: 'Meskel (Finding of the True Cross)' },
-  { day: '7', month: 'Jan', name: 'Ethiopian Christmas (Genna)' },
-  { day: '19', month: 'Jan', name: 'Timkat (Epiphany)' },
-]
 
 function tenure(joinDate) {
   const join = new Date(joinDate)
@@ -61,108 +37,115 @@ function Avatar({ src, name, size = 'h-20 w-20', text = 'text-2xl' }) {
 }
 
 function EmployeeDashboard() {
-  const emp = CURRENT_EMPLOYEE
+  const [employees, setEmployees] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [leaveRequests, setLeaveRequests] = useState([])
+  const [payrollRecords, setPayrollRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [passwordMessage, setPasswordMessage] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
 
-  const myLeave = useMemo(() => ALL_LEAVE.filter((r) => r.employeeId === emp.employeeId), [emp.employeeId])
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchEmployees(), fetchAttendance(), fetchLeaveRequests(), fetchPayrollRecords()])
+      .then(([employeeRows, attendanceRows, leaveRows, payrollRows]) => {
+        if (cancelled) return
+        setEmployees(Array.isArray(employeeRows) ? employeeRows : [])
+        setAttendance(Array.isArray(attendanceRows) ? attendanceRows : [])
+        setLeaveRequests(Array.isArray(leaveRows) ? leaveRows : [])
+        setPayrollRecords(Array.isArray(payrollRows) ? payrollRows : [])
+      })
+      .catch((error) => console.error('Employee dashboard load error:', error))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
-  // ── This month's pay (scoped to this employee only) ──
-  const attTotals = useMemo(() => attendanceTotals(ATTENDANCE), [])
-  const payRow = useMemo(
-    () => calcPayroll(emp, attTotals[emp.employeeId] || { totalOtHours: 0 }),
-    [emp, attTotals]
-  )
+  const user = getCurrentUser()
 
-  // ── Leave balance ──
+  async function handlePasswordChange(event) {
+    event.preventDefault()
+    setPasswordMessage('')
+    setPasswordError('')
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError('The new password must be at least 8 characters.')
+      return
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('The new passwords do not match.')
+      return
+    }
+    setSavingPassword(true)
+    try {
+      await changePasswordApi({ currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword })
+      const updatedUser = { ...user, mustChangePassword: false }
+      localStorage.setItem('user', JSON.stringify(updatedUser))
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      setPasswordMessage('Password updated successfully.')
+    } catch (error) {
+      setPasswordError(error.message || 'Could not update your password.')
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+  const emp = useMemo(() => matchEmployee(employees, user) || placeholderEmployee(user), [employees, user])
+  const myLeave = useMemo(() => leaveRequests.filter((r) => r.employeeId === emp.id || r.employeeId === emp.employeeId), [leaveRequests, emp.id, emp.employeeId])
+  const myAttendance = useMemo(() => attendance.filter((a) => a.employeeId === emp.id || a.employeeId === emp.employeeId), [attendance, emp.id, emp.employeeId])
+  const myPayroll = useMemo(() => payrollRecords.filter((r) => r.employeeId === emp.id || r.employeeId === emp.employeeId), [payrollRecords, emp.id, emp.employeeId])
+  const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+  const currentPayrollRecord = useMemo(() => myPayroll.find((r) => String(r.payrollMonth).startsWith(currentMonthKey)), [myPayroll, currentMonthKey])
+
+  const attTotals = useMemo(() => myAttendance.reduce((t, r) => ({
+    ...t, totalOtHours: t.totalOtHours + Number(r.overtime || 0),
+  }), { totalOtHours: 0 }), [myAttendance])
+  const calculatedPay = useMemo(() => calcPayroll(emp, attTotals), [emp, attTotals])
+  const payRow = useMemo(() => currentPayrollRecord ? {
+    ...calculatedPay,
+    gross: Number(currentPayrollRecord.grossSalary || 0),
+    netSalary: Number(currentPayrollRecord.netSalary || 0),
+    incomeTax: Number(currentPayrollRecord.incomeTax || 0),
+    pensionEmployee: Number(currentPayrollRecord.pensionDeduction || 0),
+  } : calculatedPay, [currentPayrollRecord, calculatedPay])
+
   const bal = useMemo(() => leaveBalance(emp.joinDate, myLeave), [emp.joinDate, myLeave])
-
-  // ── Attendance this month ──
-  const myAttendance = useMemo(() => {
-    const now = new Date()
-    return ATTENDANCE.filter((a) => {
-      const [y, m] = a.date.split('-').map(Number)
-      return a.employeeId === emp.employeeId && y === now.getFullYear() && m === now.getMonth() + 1
-    })
-  }, [emp.employeeId])
-
   const attAgg = useMemo(() => {
+    const now = new Date()
     const agg = { present: 0, absent: 0, late: 0, sick: 0, regular: 0, overtime: 0 }
     myAttendance.forEach((a) => {
-      agg.regular += a.regular || 0
-      agg.overtime += a.overtime || 0
-      if (a.status === 'Present') agg.present += 1
-      else if (a.status === 'Absent') agg.absent += 1
-      else if (a.status === 'Sick Leave') agg.sick += 1
-      if (a.late && a.late > 0) agg.late += 1
+      const d = new Date(a.date)
+      if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) return
+      agg.regular += Number(a.regular || 0); agg.overtime += Number(a.overtime || 0)
+      const status = String(a.status || '').toUpperCase()
+      if (['PRESENT','CHECKED_IN','PENDING_CHECKOUT'].includes(status)) agg.present += 1
+      else if (status === 'ABSENT') agg.absent += 1
+      else if (['SICK LEAVE','LEAVE'].includes(status)) agg.sick += 1
+      if (Number(a.late || 0) > 0 || status === 'LATE') agg.late += 1
     })
     return agg
   }, [myAttendance])
-
-  // ── Payslip history (last 6 months, this employee only) ──
-  const payHistory = useMemo(() => {
-    const months = []
-    for (let i = 5; i >= 0; i -= 1) {
-      const d = new Date()
-      d.setMonth(d.getMonth() - i)
-      const factor = 1 - i * 0.012 + (i === 2 ? 0.06 : 0)
-      months.push({
-        period: d.toLocaleString('en-ET', { month: 'short', year: 'numeric' }),
-        net: roundMoney(payRow.netSalary * factor),
-        gross: roundMoney(payRow.gross * factor),
-        status: i === 0 ? 'Pending' : 'Paid',
-      })
-    }
-    return months
-  }, [payRow])
-
-  // ── Recent activity feed ──
+  const monthAttendance = useMemo(() => {
+    const now = new Date()
+    return myAttendance.filter((a) => { const d = new Date(a.date); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() }).sort((a,b) => String(a.date).localeCompare(String(b.date)))
+  }, [myAttendance])
+  const payHistory = useMemo(() => [...myPayroll].sort((a,b) => String(b.payrollMonth).localeCompare(String(a.payrollMonth))).map((r) => ({ period: r.payrollMonth, net: Number(r.netSalary || 0), gross: Number(r.grossSalary || 0), status: 'Paid' })), [myPayroll])
   const activity = useMemo(() => {
     const items = []
-    myLeave.forEach((r) => {
-      if (r.approvalStatus === 'Approved') {
-        items.push({
-          id: `leave-${r.id}`,
-          type: 'approved',
-          title: 'Leave approved',
-          text: `${r.leaveType} leave ${formatDate(r.startDate)} – ${formatDate(r.endDate)} (${r.days} day${r.days === 1 ? '' : 's'})`,
-          time: r.approvalDate ? formatDate(r.approvalDate) : '',
-        })
-      } else if (r.approvalStatus === 'Pending') {
-        items.push({
-          id: `leave-${r.id}`,
-          type: 'pending',
-          title: 'Leave request awaiting decision',
-          text: `${r.leaveType} leave from ${formatDate(r.startDate)} to ${formatDate(r.endDate)}`,
-          time: r.requestDate ? formatDate(r.requestDate) : '',
-        })
-      }
-    })
-    items.push({
-      id: 'payslip',
-      type: 'payroll',
-      title: 'New payslip available',
-      text: `Your ${new Date().toLocaleString('en-ET', { month: 'long', year: 'numeric' })} payslip has been released.`,
-      time: 'This month',
-    })
-    UPCOMING_HOLIDAYS.forEach((h) => {
-      items.push({
-        id: `holiday-${h.name}`,
-        type: 'holiday',
-        title: `Public holiday · ${h.name}`,
-        text: `${h.month} ${h.day}`,
-        time: 'Upcoming',
-      })
-    })
-    return items.sort((a, b) => (a.time === 'Upcoming' ? 1 : b.time === 'Upcoming' ? -1 : 0))
-  }, [myLeave])
-
+    myLeave.forEach((r) => items.push({ id:`leave-${r.id}`, type:String(r.approvalStatus || '').toLowerCase()==='approved'?'approved':'pending', title:String(r.approvalStatus || '').toLowerCase()==='approved'?'Leave approved':'Leave request', text:`${r.leaveType || 'Leave'} from ${formatDate(r.startDate)} to ${formatDate(r.endDate)}`, time:r.approvedDate || r.requestDate || r.createdAt || '' }))
+    myPayroll.slice(0,3).forEach((r) => items.push({ id:`payroll-${r.id}`, type:'payroll', title:'Payroll record available', text:`${r.payrollMonth} · Net ${formatETB(Number(r.netSalary || 0))}`, time:r.payrollMonth || r.createdAt || '' }))
+    return items.sort((a,b) => String(b.time).localeCompare(String(a.time))).slice(0,8)
+  }, [myLeave, myPayroll])
   const quickActions = [
-    { label: 'Request Leave', icon: Plane, to: '/employer/leave' },
-    { label: 'Download Payslip', icon: Download, to: '/employer/payslips' },
-    { label: 'View Attendance Log', icon: CalendarDays, to: '/employer/attendance' },
-    { label: 'Update Profile Info', icon: UserRound, to: '/employer/profile' },
+    { label:'Request Leave', icon:Plane, to:'/employer/leave' },
+    { label:'Download Payslip', icon:Download, to:'/employer/payslips' },
+    { label:'View Attendance Log', icon:CalendarDays, to:'/employer/attendance' },
+    { label:'Update Profile Info', icon:UserRound, to:'/employer/profile' },
   ]
-
   const leftPct = bal.entitled > 0 ? Math.max(0, Math.min(100, (bal.taken / bal.entitled) * 100)) : 0
+
+  if (loading) {
+    return <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto"><div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs p-6"><p className="text-sm font-semibold text-gray-900">Loading your employee dashboard…</p><p className="text-xs text-gray-500 mt-1">Loading your live employee records.</p></div></div>
+  }
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto">
@@ -220,6 +203,43 @@ function EmployeeDashboard() {
           </Link>
         </div>
       </div>
+
+      <section className="bg-white rounded-2xl border border-amber-200 shadow-2xs p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+            <KeyRound size={17} />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-gray-950">Reset your password</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Use this section to replace your temporary or current password.</p>
+          </div>
+        </div>
+        <form onSubmit={handlePasswordChange} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            ['currentPassword', 'Current password'],
+            ['newPassword', 'New password'],
+            ['confirmPassword', 'Confirm new password'],
+          ].map(([field, label]) => (
+            <label key={field} className="text-xs font-semibold text-gray-700">
+              {label}
+              <input
+                type="password"
+                value={passwordForm[field]}
+                onChange={(event) => setPasswordForm((current) => ({ ...current, [field]: event.target.value }))}
+                className="mt-1.5 w-full rounded-lg border border-gray-200 px-3 py-2 text-xs font-normal focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                required
+              />
+            </label>
+          ))}
+          <div className="md:col-span-3 flex flex-wrap items-center gap-3">
+            <button type="submit" disabled={savingPassword} className="px-4 py-2 rounded-lg bg-gray-950 text-white text-xs font-semibold hover:bg-gray-800 disabled:opacity-50">
+              {savingPassword ? 'Updating...' : 'Update password'}
+            </button>
+            {passwordMessage && <span className="text-xs font-medium text-emerald-600">{passwordMessage}</span>}
+            {passwordError && <span className="text-xs font-medium text-rose-600">{passwordError}</span>}
+          </div>
+        </form>
+      </section>
 
       {/* Three stat cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -328,7 +348,7 @@ function EmployeeDashboard() {
 
           {/* Calendar strip */}
           <div className="mt-4 flex flex-wrap gap-1.5">
-            {myAttendance.slice(-14).map((a) => {
+            {monthAttendance.slice(-14).map((a) => {
               const day = Number(a.date.slice(8, 10))
               const isLate = (a.late || 0) > 0
               const isPresent = a.status === 'Present'
@@ -380,7 +400,9 @@ function EmployeeDashboard() {
           <h3 className="text-sm font-bold text-gray-950">Recent Activity & Notifications</h3>
         </div>
         <div className="divide-y divide-gray-50">
-          {activity.map((item) => {
+          {activity.length === 0 ? (
+            <div className="px-5 py-5 text-xs text-gray-500">No employee activity has been recorded yet.</div>
+          ) : activity.map((item) => {
             const Icon =
               item.type === 'approved'
                 ? CheckCircle2
@@ -409,7 +431,7 @@ function EmployeeDashboard() {
       <div className="bg-white rounded-2xl border border-gray-200/90 shadow-2xs overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-sm font-bold text-gray-950">Payslip History</h3>
-          <span className="text-[11px] text-gray-400">Last 6 months</span>
+          <span className="text-[11px] text-gray-400">Recorded payroll</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-[480px]">
@@ -423,7 +445,9 @@ function EmployeeDashboard() {
               </tr>
             </thead>
             <tbody>
-              {payHistory.map((h) => (
+              {payHistory.length === 0 ? (
+                <tr><td colSpan="5" className="px-5 py-6 text-center text-xs text-gray-500">No payroll records are available yet.</td></tr>
+              ) : payHistory.map((h) => (
                 <tr key={h.period} className="text-xs border-b border-gray-50 hover:bg-gray-50/50">
                   <td className="px-5 py-3 font-semibold text-gray-900">{h.period}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-600">{formatETB(h.gross)}</td>
@@ -453,7 +477,7 @@ function EmployeeDashboard() {
           </table>
         </div>
         <p className="px-5 py-3 text-[10px] text-gray-400 border-t border-gray-100">
-          Payroll reference: {SETTINGS.company.name} · TIN {SETTINGS.company.tin}
+          Payroll history shown from your recorded payroll records.
         </p>
       </div>
     </div>

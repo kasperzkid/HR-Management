@@ -17,9 +17,11 @@ import {
   CalendarCheck,
 } from 'lucide-react'
 import { HR_SETTINGS } from '../data/settingsData'
+import { Table } from '../../components/ui'
 import ExportModal from './daily-log/ExportModal'
 import RecordAttendanceModal from './daily-log/RecordAttendanceModal'
 import { getStatusBadge } from './daily-log/statusBadge'
+import { getAttendanceConfig } from '../../Employer/lib/workTime'
 
 // Format hours: show as days (÷8) when ≥8h, otherwise show hours
 function fmtHours(h) {
@@ -154,6 +156,10 @@ export default function DailyLogTable({
   }
 
   const handleStatusChange = (id, newStatus) => {
+    const config = getAttendanceConfig()
+    const defCheckIn = config?.checkInStartTime || '08:00'
+    const defCheckOut = config?.checkOutStartTime || '17:30'
+
     setLogs((prev) =>
       prev.map((l) => {
         if (l.id === id) {
@@ -162,8 +168,8 @@ export default function DailyLogTable({
             status: newStatus,
             regularHrs: newStatus === 'Present' ? 8 : 0,
             otHrs: newStatus === 'Present' ? l.otHrs || 0 : 0,
-            checkIn: newStatus === 'Present' ? l.checkIn || '08:00' : null,
-            checkOut: newStatus === 'Present' ? l.checkOut || '17:00' : null,
+            checkIn: newStatus === 'Present' ? l.checkIn || defCheckIn : null,
+            checkOut: newStatus === 'Present' ? l.checkOut || defCheckOut : null,
           }
         }
         return l
@@ -433,7 +439,7 @@ export default function DailyLogTable({
             3. VIEW MODE: TABLE VIEW (Qirb-Alga Exact Luxury Table)
            ───────────────────────────────────────────────────────────── */
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[900px]">
+          <Table className="w-full text-left text-xs border-collapse min-w-[900px]">
             <thead>
               <tr className="border-b-2 border-slate-100 dark:border-[#262b31] bg-slate-50/80 dark:bg-[#1c2026] text-slate-500 dark:text-slate-400">
                 {/* Sequential ID column # (1, 2, 3...) */}
@@ -585,10 +591,10 @@ export default function DailyLogTable({
                         )}
                       </td>
 
-                      {/* Late (min) */}
+                      {/* Late hours */}
                       <td className="py-3 px-3.5 text-right font-mono tabular-nums">
                         {log.late > 0 ? (
-                          <span className="text-amber-700 font-bold">{log.late}m</span>
+                          <span className="text-amber-700 font-bold">{(Number(log.late) / 60).toFixed(2)}h</span>
                         ) : (
                           <span className="text-slate-400">0</span>
                         )}
@@ -691,7 +697,7 @@ export default function DailyLogTable({
                 })
               )}
             </tbody>
-          </table>
+          </Table>
         </div>
       )}
 

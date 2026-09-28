@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Search,
   SlidersHorizontal,
@@ -18,6 +18,7 @@ import AddEmployeeModal from '../components/AddEmployeeModal'
 import EmployeeDetailsModal from '../components/EmployeeDetailsModal'
 import DirectoryView from '../components/DirectoryView'
 import OrgChartView from '../components/OrgChartView'
+import { fetchEmployees, createEmployee, resetEmployeePassword } from '../lib/employerApi'
 
 function Employees() {
   const [employees, setEmployees] = useState(INITIAL_EMPLOYEES)
@@ -38,6 +39,12 @@ function Employees() {
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [toastMessage, setToastMessage] = useState(null)
+
+  useEffect(() => {
+    fetchEmployees()
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
+      .catch((error) => showToast(error.message || 'Failed to load employees'))
+  }, [])
 
   const showToast = (msg) => {
     setToastMessage(msg)
@@ -88,15 +95,26 @@ function Employees() {
   const handleSelectRow = (id) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
 
-  const handleAddEmployee = (newEmp) => {
-    setEmployees([newEmp, ...employees])
-    showToast(`Added ${newEmp.name} to the team`)
+  const handleAddEmployee = async (newEmp) => {
+    const result = await createEmployee(newEmp)
+    const savedEmployee = result.employee || result
+    setEmployees((current) => [savedEmployee, ...current])
+    showToast(`Added ${savedEmployee.name} to the team`)
   }
 
   const handleUpdateStatus = (id, newStatus) => {
     setEmployees(employees.map((e) => (e.id === id ? { ...e, status: newStatus, employmentStatus: newStatus } : e)))
     if (selectedEmployee?.id === id) setSelectedEmployee((prev) => ({ ...prev, status: newStatus }))
     showToast(`Updated status to ${newStatus}`)
+  }
+
+  const handleResetPassword = async (id) => {
+    try {
+      return await resetEmployeePassword(id)
+    } catch (error) {
+      showToast(error.message || 'Failed to reset employee password')
+      throw error
+    }
   }
 
   const handleDeleteEmployee = (id) => {
@@ -496,6 +514,7 @@ function Employees() {
         onClose={() => { setIsDetailsModalOpen(false); setSelectedEmployee(null) }}
         onUpdateStatus={handleUpdateStatus}
         onDelete={handleDeleteEmployee}
+        onResetPassword={handleResetPassword}
       />
     </div>
   )

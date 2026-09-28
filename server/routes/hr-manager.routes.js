@@ -1,19 +1,25 @@
 import { Router } from 'express'
+import { requireAuth } from '../middleware/auth.middleware.js'
+
 import {
   getHRSettings,
   updateHRSettings,
 } from '../controllers/hr-settings.controller.js'
+
 import {
   getHRReports,
 } from '../controllers/hr-reports.controller.js'
 
 import {
   getDashboard,
+
   getEmployees,
   getEmployee,
+  downloadEmployeeResume,
   createEmployee,
   updateEmployee,
   deleteEmployee,
+  resetEmployeePassword,
 
   getAttendance,
   getAttendanceRecord,
@@ -51,13 +57,24 @@ router.get('/dashboard', getDashboard)
 // ============================================================
 
 router.get('/employees', getEmployees)
+router.get('/employees/:id/resume', requireAuth, downloadEmployeeResume)
 router.get('/employees/:id', getEmployee)
 router.post('/employees', createEmployee)
 router.put('/employees/:id', updateEmployee)
 router.delete('/employees/:id', deleteEmployee)
-// HR Settings
+router.post('/employees/:id/reset-password', resetEmployeePassword)
+
+// ============================================================
+// SETTINGS
+// ============================================================
+
 router.get('/settings', getHRSettings)
 router.put('/settings', updateHRSettings)
+
+// ============================================================
+// REPORTS
+// ============================================================
+
 router.get('/reports', getHRReports)
 
 // ============================================================
@@ -65,33 +82,48 @@ router.get('/reports', getHRReports)
 // ============================================================
 
 router.get('/attendance', getAttendance)
-
 router.get('/attendance/:id', getAttendanceRecord)
 
-// Existing HR attendance CRUD
 router.post('/attendance', createAttendance)
-
 router.put('/attendance/:id', updateAttendance)
-
 router.delete('/attendance/:id', deleteAttendance)
 
-// Automatic employee attendance
-router.post('/attendance/check-in', employeeCheckIn)
+router.post(
+  '/attendance/check-in',
+  employeeCheckIn,
+)
 
-router.post('/attendance/check-out', employeeCheckOut)
+router.post(
+  '/attendance/check-out',
+  employeeCheckOut,
+)
 
-// HR late-attendance review
-router.put('/attendance/:id/accept-late', acceptLateAttendance)
+router.put(
+  '/attendance/:id/accept-late',
+  acceptLateAttendance,
+)
 
 // ============================================================
-// LEAVE MANAGEMENT
+// LEAVE REQUESTS
 // ============================================================
 
 router.get('/leave', getLeaveRequests)
 router.get('/leave/:id', getLeaveRequest)
-router.post('/leave', createLeaveRequest)
-router.put('/leave/:id', updateLeaveRequest)
-router.delete('/leave/:id', deleteLeaveRequest)
+
+router.post(
+  '/leave',
+  createLeaveRequest,
+)
+
+router.put(
+  '/leave/:id',
+  updateLeaveRequest,
+)
+
+router.delete(
+  '/leave/:id',
+  deleteLeaveRequest,
+)
 
 // ============================================================
 // PAYROLL
@@ -99,8 +131,20 @@ router.delete('/leave/:id', deleteLeaveRequest)
 
 router.get('/payroll', getPayroll)
 router.get('/payroll/:id', getPayrollRecord)
-router.post('/payroll', createPayroll)
-router.put('/payroll/:id', updatePayroll)
-router.delete('/payroll/:id', deletePayroll)
+
+router.post(
+  '/payroll',
+  createPayroll,
+)
+
+router.put(
+  '/payroll/:id',
+  updatePayroll,
+)
+
+router.delete(
+  '/payroll/:id',
+  deletePayroll,
+)
 
 export default router

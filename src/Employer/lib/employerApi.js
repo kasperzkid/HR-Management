@@ -3,10 +3,11 @@ import { authHeaders } from '../../lib/hrApi'
 const API_BASE = '/api/employer'
 
 async function ef(path, options = {}) {
+  const isForm = options.body instanceof FormData
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: authHeaders(
-      options.body ? { 'Content-Type': 'application/json' } : {}
+      options.body && !isForm ? { 'Content-Type': 'application/json' } : {}
     ),
   })
   const data = await res.json().catch(() => ({}))
@@ -21,6 +22,32 @@ async function ef(path, options = {}) {
 
 // ── Employees ────────────────────────────────────────────────
 export const fetchEmployees = () => ef('/employees')
+export const fetchMyEmployeeProfile = () => ef('/profile')
+export const updateMyEmployeeProfile = (payload) =>
+  ef('/profile', { method: 'PUT', body: JSON.stringify(payload) })
+export const uploadMyResume = (file) => {
+  const form = new FormData()
+  form.append('resume', file)
+  return ef('/profile/resume', { method: 'POST', body: form })
+}
+export async function downloadMyResume() {
+  const response = await fetch(`${API_BASE}/profile/resume`, {
+    headers: authHeaders(),
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.message || 'Failed to download resume')
+  }
+  return response.blob()
+}
+export const createEmployee = (payload) =>
+  ef('/employees', { method: 'POST', body: JSON.stringify(payload) })
+export const updateEmployee = (id, payload) =>
+  ef(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
+export const deleteEmployee = (id) =>
+  ef(`/employees/${id}`, { method: 'DELETE' })
+export const resetEmployeePassword = (id) =>
+  ef(`/employees/${id}/reset-password`, { method: 'POST' })
 
 // ── Attendance ───────────────────────────────────────────────
 // Optional { month, year } limits the rows to that calendar month so

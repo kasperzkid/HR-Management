@@ -55,7 +55,7 @@ function saveLocalSharedStore(store) {
 
 export function MessagingProvider({ children, portalType = 'employer' }) {
   const isHR = portalType === 'hr'
-  const [currentUser, setCurrentUser] = useState(() => {
+  const [currentUser] = useState(() => {
     const authUser = getUser()
     if (isHR) {
       return {
@@ -84,10 +84,17 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
   const [notifications, setNotifications] = useState([])
 
   const contactsRef = useRef(contacts)
-  contactsRef.current = contacts
-
   const threadsRef = useRef(threads)
-  threadsRef.current = threads
+
+  // Refs are only read inside the callbacks below, so they are synced after
+  // each commit instead of being written during render.
+  useEffect(() => {
+    contactsRef.current = contacts
+  }, [contacts])
+
+  useEffect(() => {
+    threadsRef.current = threads
+  }, [threads])
 
   const channelRef = useRef(null)
 
@@ -120,7 +127,6 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
   }, [])
 
   const reloadContactsAndThreads = useCallback(async () => {
-    const authUser = getUser()
     const store = getLocalSharedStore()
 
     // Restore cached threads
@@ -291,6 +297,7 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
   )
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect — cached threads are restored synchronously on mount on purpose
     reloadContactsAndThreads()
 
     const socket = connectSocket()
@@ -349,10 +356,13 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
   }, [handleIncoming, handlePresence, handleMessageUpdated, handleMessageDeleted, removeMessages, upsertMessage, isHR, reloadContactsAndThreads])
 
   const sendMessage = useCallback(
-    async (contactId, text) => {
+    async (contactId, text, options = {}) => {
       const cId = String(contactId)
       const trimmed = String(text || '').trim()
       if (!trimmed) return
+      // `isComplain` marks Employee → HR Admin complaints so HR can flag
+      // them inside the thread (see Employer/lib/complaints.js).
+      const isComplain = Boolean(options.isComplain)
       const tempId = `pending-${Date.now()}`
       const nowTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       const nowIso = new Date().toISOString()
@@ -366,6 +376,7 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
         createdAt: nowIso,
         read: false,
         attachment: null,
+        isComplain,
         pending: true,
       }
 
@@ -405,13 +416,14 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
               createdAt: nowIso,
               read: false,
               attachment: null,
+              isComplain,
             },
           },
         })
       }
 
       try {
-        const { message } = await sendMessageApi(cId, trimmed)
+        const { message } = await sendMessageApi(cId, trimmed, { isComplain })
         upsertMessage(cId, message, tempId)
       } catch {
         upsertMessage(

@@ -1,67 +1,224 @@
 import { authHeaders } from '../../lib/hrApi'
-import { getAddisNow, applyPunchStatus } from './workTime'
 
-// Punch clock API — hits the employer backend which enforces all
-// work-time rules (check-in 08:00–14:00, check-out only at 17:30 UTC+3).
+const API_BASE = '/api/employer'
 
-async function punchFetch(path, options = {}) {
-  const res = await fetch(`/api/employer${path}`, {
+async function request(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: authHeaders(
-      options.body ? { 'Content-Type': 'application/json' } : {}
+      options.body
+        ? {
+            'Content-Type': 'application/json',
+          }
+        : {},
     ),
   })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    const err = new Error(data.message || `Request failed: ${res.status}`)
-    err.code = data.code
-    err.remainingMinutes = data.remainingMinutes
-    err.status = data
-    throw err
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    const error = new Error(
+      data?.message || `Request failed: ${response.status}`,
+    )
+
+    error.code = data?.code
+    error.distanceMeters = data?.distanceMeters
+    error.remainingMinutes = data?.remainingMinutes
+    error.allowedRadiusMeters = data?.allowedRadiusMeters
+
+    throw error
   }
+
   return data
 }
 
-export const fetchPunchStatusApi = () => punchFetch('/punch')
+/* =========================================================
+   EMPLOYEE CHECK-IN
+========================================================= */
 
-// Apply an attendance:update socket event. Only today's record for the
-// logged-in employee affects the punch widgets — everything else is HR
-// or another employee's row.
-export function applyAttendanceUpdate(record) {
-  if (!record) return
-  const { dateKey } = getAddisNow()
-  const isToday = record.date === dateKey
-  if (!isToday) return
-
-  // If the row belongs to another employee (HR pushed a full list),
-  // ignore it — /punch is keyed to the logged-in user's profile.
-  applyPunchStatus({
-    checkedIn: Boolean(record.checkIn),
-    checkIn: record.checkIn || null,
-    checkedOut: Boolean(record.checkOut),
-    checkOut: record.checkOut || null,
-    isEmergency: record.status === 'Emergency Departure',
-    employeeRemark: record.employeeRemark || null,
-    hrStatus: record.hrStatus || null,
-    hrNote: record.hrNote || null,
-    hrUpdatedAt: record.hrUpdatedAt || null,
+export async function employeeCheckIn({
+  latitude,
+  longitude,
+  checkIn,
+  date,
+} = {}) {
+  return request('/attendance/check-in', {
+    method: 'POST',
+    body: JSON.stringify({
+      latitude,
+      longitude,
+      checkIn,
+      date,
+    }),
   })
 }
 
-export const punchCheckInApi = (coords = {}) =>
-  punchFetch('/punch/check-in', {
-    method: 'POST',
-    body: JSON.stringify(coords),
-  })
+/* =========================================================
+   EMPLOYEE CHECK-OUT
+========================================================= */
 
-export const punchCheckOutApi = (coords = {}) =>
-  punchFetch('/punch/check-out', {
+export async function employeeCheckOut({
+  latitude,
+  longitude,
+  checkOut,
+  date,
+} = {}) {
+  return request('/attendance/check-out', {
     method: 'POST',
-    body: JSON.stringify(coords),
+    body: JSON.stringify({
+      latitude,
+      longitude,
+      checkOut,
+      date,
+    }),
   })
+}
 
-export const emergencyCheckOutApi = (remark, coords = {}) =>
-  punchFetch('/punch/check-out', {
-    method: 'POST',
-    body: JSON.stringify({ emergency: true, remark, ...coords }),
+/* =========================================================
+   PUNCH WIDGET - CHECK IN
+========================================================= */
+
+export async function punchCheckInApi(coords = {}) {
+  return employeeCheckIn({
+    latitude: coords?.latitude,
+    longitude: coords?.longitude,
+    checkIn: coords?.checkIn,
+    date: coords?.date,
   })
+}
+
+/* =========================================================
+   PUNCH WIDGET - CHECK OUT
+========================================================= */
+
+export async function punchCheckOutApi(coords = {}) {
+  return employeeCheckOut({
+    latitude: coords?.latitude,
+    longitude: coords?.longitude,
+    checkOut: coords?.checkOut,
+    date: coords?.date,
+  })
+}
+
+/* =========================================================
+   FETCH CURRENT EMPLOYEE ATTENDANCE
+========================================================= */
+
+export async function fetchMyAttendance(options = {}) {
+  const params = new URLSearchParams()
+
+  if (options.startDate) {
+    params.set('startDate', options.startDate)
+  }
+
+  if (options.endDate) {
+    params.set('endDate', options.endDate)
+  }
+
+  if (options.month) {
+    params.set('month', options.month)
+  }
+
+  if (options.year) {
+    params.set('year', options.year)
+  }
+
+  const query = params.toString()
+
+  return request(
+    `/attendance${query ? `?${query}` : ''}`,
+  )
+}
+
+export async function fetchAttendanceConfigApi() {
+  return request('/attendance/config')
+}
+
+/* =========================================================
+   FETCH TODAY'S PUNCH STATUS
+========================================================= */
+
+export async function fetchPunchStatusApi() {
+  const today = new Date().toISOString().slice(0, 10)
+
+  const [response, config] = await Promise.all([
+    fetchMyAttendance({
+      startDate: today,
+      endDate: today,
+    }).catch(() => []),
+    fetchAttendanceConfigApi().catch(() => null),
+  ])
+
+  const records = Array.isArray(response)
+    ? response
+    : response?.records ||
+      response?.attendance ||
+      []
+
+  const record =
+    records.find(
+      (item) => item?.date === today,
+    ) || null
+
+  return {
+    record,
+    attendance: record,
+    attendanceConfig: config,
+
+    checkedIn: Boolean(record?.checkIn),
+    checkedOut: Boolean(record?.checkOut),
+
+    checkIn: record?.checkIn || null,
+    checkOut: record?.checkOut || null,
+
+    hrStatus: record?.status || null,
+    hrNote: record?.reviewRemarks || null,
+    hrUpdatedAt: record?.reviewedAt || null,
+  }
+}
+
+/* =========================================================
+   EMERGENCY CHECK-OUT
+========================================================= */
+
+export async function emergencyCheckOutApi(
+  reason,
+  coords = {},
+) {
+  const date = new Date()
+    .toISOString()
+    .slice(0, 10)
+
+  const checkOut = new Date()
+    .toTimeString()
+    .slice(0, 5)
+
+  return request(
+    '/attendance/emergency-check-out',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        reason,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
+        distanceMeters: coords?.distanceMeters,
+        date,
+        checkOut,
+      }),
+    },
+  )
+}
+
+/* =========================================================
+   DEFAULT EXPORT
+========================================================= */
+
+export default {
+  employeeCheckIn,
+  employeeCheckOut,
+  punchCheckInApi,
+  punchCheckOutApi,
+  fetchPunchStatusApi,
+  fetchMyAttendance,
+  emergencyCheckOutApi,
+}

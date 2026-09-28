@@ -5,19 +5,21 @@ import {
   CircleDollarSign,
   Clock3,
   FileText,
+  Globe,
   ListChecks,
+  LocateFixed,
   MapPin,
   Plus,
   Save,
-  Settings,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
   UserRound,
 } from 'lucide-react'
 
-import { PageTitle } from '../../components/ui'
+import { Button, PageTitle } from '../../components/ui'
 
-const API_URL = 'http://localhost:4000/api/hr-manager'
+const API_URL = '/api/hr-manager'
 
 const EMPTY_SETTINGS = {
   departments: [],
@@ -41,7 +43,11 @@ const EMPTY_SETTINGS = {
   },
 
   attendanceConfiguration: {
+    checkInStartTime: '08:00',
     requiredCheckInTime: '08:30',
+    checkOutStartTime: '17:30',
+    checkOutEndTime: '19:00',
+    geoRestrictionEnabled: true,
     officeLatitude: 8.999654748138806,
     officeLongitude: 38.820610900000005,
     allowedRadiusMeters: 100,
@@ -79,10 +85,10 @@ function SettingsCard({
   children,
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-start gap-4 border-b border-slate-100 p-5">
-        <div className="rounded-xl bg-slate-100 p-3">
-          <Icon className="h-5 w-5 text-slate-700" />
+    <section className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.045)] transition-shadow duration-200 hover:shadow-[0_12px_36px_rgba(15,23,42,0.07)]">
+      <div className="flex items-start gap-4 border-b border-slate-100 bg-gradient-to-r from-white to-slate-50/70 p-6">
+        <div className="rounded-2xl bg-gradient-to-br from-indigo-50 to-white p-3.5 shadow-sm ring-1 ring-indigo-100/80">
+          <Icon className="h-5 w-5 text-[#4755AE]" />
         </div>
 
         <div>
@@ -96,7 +102,7 @@ function SettingsCard({
         </div>
       </div>
 
-      <div className="p-5">
+      <div className="p-6">
         {children}
       </div>
     </section>
@@ -127,7 +133,7 @@ function Field({
         min={min}
         max={max}
         step={step}
-        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#4755AE] focus:ring-4 focus:ring-[#4755AE]/10"
       />
     </label>
   )
@@ -154,7 +160,7 @@ function ListEditor({ title, items, onChange }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 p-4">
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-4">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-bold text-slate-900">
           {title}
@@ -179,13 +185,13 @@ function ListEditor({ title, items, onChange }) {
           placeholder={`Add ${title
             .toLowerCase()
             .replace(/s$/, '')}`}
-          className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+          className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-[#4755AE] focus:ring-4 focus:ring-[#4755AE]/10"
         />
 
         <button
           type="button"
           onClick={addItem}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-[#4755AE] px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#3d4998]"
         >
           <Plus className="h-4 w-4" />
           Add
@@ -196,7 +202,7 @@ function ListEditor({ title, items, onChange }) {
         {items.map((item) => (
           <div
             key={item}
-            className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"
+            className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-3.5 py-2.5 shadow-[0_1px_3px_rgba(15,23,42,0.03)]"
           >
             <span className="text-sm text-slate-700">
               {item}
@@ -340,6 +346,32 @@ function HRSettings() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [locationMessage, setLocationMessage] = useState('')
+
+  const handleDetectLocation = () => {
+    if (!('geolocation' in navigator)) {
+      setLocationMessage('Geolocation is not supported by your browser.')
+      return
+    }
+    setDetectingLocation(true)
+    setLocationMessage('')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setDetectingLocation(false)
+        updateAttendanceConfiguration('officeLatitude', Number(pos.coords.latitude.toFixed(6)))
+        updateAttendanceConfiguration('officeLongitude', Number(pos.coords.longitude.toFixed(6)))
+        setLocationMessage(`Detected location (${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}) successfully!`)
+        setTimeout(() => setLocationMessage(''), 4000)
+      },
+      (err) => {
+        setDetectingLocation(false)
+        setLocationMessage(`Location access failed: ${err.message}`)
+        setTimeout(() => setLocationMessage(''), 5000)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
 
   useEffect(() => {
     let active = true
@@ -514,8 +546,8 @@ function HRSettings() {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-[#F3F4F6] p-6 lg:p-8">
-        <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm">
+      <div className="min-h-full bg-gradient-to-br from-slate-50 via-[#F3F4F6] to-indigo-50/30 p-6 lg:p-8">
+        <div className="mx-auto max-w-7xl rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm">
           Loading HR settings from the database...
         </div>
       </div>
@@ -523,8 +555,8 @@ function HRSettings() {
   }
 
   return (
-    <div className="min-h-full bg-[#F3F4F6] p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl space-y-6">
+    <div className="min-h-full bg-gradient-to-br from-slate-50 via-[#F3F4F6] to-indigo-50/30 p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
 
         {/* Shared Page Title */}
         <PageTitle
@@ -532,10 +564,16 @@ function HRSettings() {
           title="Manage HR Settings"
           description="Database-backed configuration from the Ethiopia HR Payroll System workbook."
           action={
-            <button type="button" onClick={handleSave} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
-              {saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-              {saving ? 'Saving...' : saved ? 'Saved' : 'Save Settings'}
-            </button>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              icon={saved ? Check : Save}
+              loading={saving}
+              loadingText="Saving..."
+            >
+              {saved ? 'Saved' : 'Save Settings'}
+            </Button>
           }
           className="mb-8"
         />
@@ -741,149 +779,268 @@ function HRSettings() {
         {/* Attendance & Location */}
         <SettingsCard
           icon={MapPin}
-          title="Attendance & Office Location"
-          description="Configure automatic employee check-in/check-out and the YanolTech office geofence."
+          title="Attendance, Work Hours & Office Geofence"
+          description="Control employee check-in & check-out time windows, late cutoff times, and office geofence restriction."
         >
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label="Required Check-In Time"
-              type="time"
-              value={
-                settings.attendanceConfiguration
-                  ?.requiredCheckInTime || '08:30'
-              }
-              onChange={(value) =>
-                updateAttendanceConfiguration(
-                  'requiredCheckInTime',
-                  value,
-                )
-              }
-            />
+          {/* Work Hours & Punch Times */}
+          <div className="mb-6">
+            <h3 className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+              <Clock3 className="h-4 w-4 text-slate-600" />
+              Employee Check-In & Check-Out Hours
+            </h3>
 
-            <Field
-              label="Allowed Radius (Meters)"
-              type="number"
-              min="1"
-              max="10000"
-              step="1"
-              value={
-                settings.attendanceConfiguration
-                  ?.allowedRadiusMeters ?? 100
-              }
-              onChange={(value) =>
-                updateAttendanceConfiguration(
-                  'allowedRadiusMeters',
-                  value,
-                )
-              }
-            />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field
+                label="Check-In Window Start"
+                type="time"
+                value={
+                  settings.attendanceConfiguration?.checkInStartTime || '08:00'
+                }
+                onChange={(value) =>
+                  updateAttendanceConfiguration('checkInStartTime', value)
+                }
+              />
 
-            <Field
-              label="Office Latitude"
-              type="number"
-              step="any"
-              value={
-                settings.attendanceConfiguration
-                  ?.officeLatitude ?? ''
-              }
-              onChange={(value) =>
-                updateAttendanceConfiguration(
-                  'officeLatitude',
-                  value,
-                )
-              }
-            />
+              <Field
+                label="Required Check-In (Cutoff)"
+                type="time"
+                value={
+                  settings.attendanceConfiguration?.requiredCheckInTime || '08:30'
+                }
+                onChange={(value) =>
+                  updateAttendanceConfiguration('requiredCheckInTime', value)
+                }
+              />
 
-            <Field
-              label="Office Longitude"
-              type="number"
-              step="any"
-              value={
-                settings.attendanceConfiguration
-                  ?.officeLongitude ?? ''
-              }
-              onChange={(value) =>
-                updateAttendanceConfiguration(
-                  'officeLongitude',
-                  value,
-                )
-              }
-            />
+              <Field
+                label="Required Check-Out Time"
+                type="time"
+                value={
+                  settings.attendanceConfiguration?.checkOutStartTime || '17:30'
+                }
+                onChange={(value) =>
+                  updateAttendanceConfiguration('checkOutStartTime', value)
+                }
+              />
+
+              <Field
+                label="Check-Out Window End"
+                type="time"
+                value={
+                  settings.attendanceConfiguration?.checkOutEndTime || '19:00'
+                }
+                onChange={(value) =>
+                  updateAttendanceConfiguration('checkOutEndTime', value)
+                }
+              />
+            </div>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Employees can check in starting at the window start. Check-ins after the required time are recorded with late minutes and flagged for HR review. Check-out unlocks at the required check-out time.
+            </p>
           </div>
 
-          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-start gap-3">
-              <div className="rounded-lg bg-white p-2">
-                <MapPin className="h-5 w-5 text-slate-700" />
-              </div>
-
+          {/* Geo Restriction & Office Geofence */}
+          <div className="border-t border-slate-100 pt-5">
+            <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
               <div>
-                <p className="text-sm font-semibold text-slate-800">
-                  YanolTech Office Geofence
-                </p>
+                <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  <Globe className="h-4 w-4 text-slate-600" />
+                  Office Geofence & Location Restriction
+                </h3>
 
-                <p className="mt-1 text-sm leading-6 text-slate-600">
-                  Employees must be within the configured
-                  radius of this location to Check In or
-                  Check Out.
+                <p className="mt-1 text-xs text-slate-500">
+                  Enforce whether employees must be physically present inside the office radius to punch.
                 </p>
+              </div>
+
+              {/* Toggle Geo Restriction */}
+              <button
+                type="button"
+                onClick={() =>
+                  updateAttendanceConfiguration(
+                    'geoRestrictionEnabled',
+                    settings.attendanceConfiguration?.geoRestrictionEnabled === false
+                      ? true
+                      : false,
+                  )
+                }
+                className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-bold transition-all ${
+                  settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                      ? 'animate-pulse bg-emerald-500'
+                      : 'bg-amber-500'
+                  }`}
+                />
+                {settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                  ? 'Geofence Enforced (Active)'
+                  : 'Geofence Disabled (Remote Allowed)'}
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field
+                label="Allowed Radius (Meters)"
+                type="number"
+                min="1"
+                max="10000"
+                step="1"
+                value={settings.attendanceConfiguration?.allowedRadiusMeters ?? 100}
+                onChange={(value) =>
+                  updateAttendanceConfiguration('allowedRadiusMeters', value)
+                }
+              />
+
+              <Field
+                label="Office Latitude"
+                type="number"
+                step="any"
+                value={settings.attendanceConfiguration?.officeLatitude ?? ''}
+                onChange={(value) =>
+                  updateAttendanceConfiguration('officeLatitude', value)
+                }
+              />
+
+              <Field
+                label="Office Longitude"
+                type="number"
+                step="any"
+                value={settings.attendanceConfiguration?.officeLongitude ?? ''}
+                onChange={(value) =>
+                  updateAttendanceConfiguration('officeLongitude', value)
+                }
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleDetectLocation}
+                disabled={detectingLocation}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                <LocateFixed className="h-3.5 w-3.5 text-indigo-600" />
+                {detectingLocation ? 'Detecting Location...' : 'Use My Device Location as Office Coordinates'}
+              </button>
+
+              {locationMessage && (
+                <span className="text-xs font-medium text-emerald-600">
+                  {locationMessage}
+                </span>
+              )}
+            </div>
+
+            {/* Geofence Preview Card */}
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-white p-2">
+                  <MapPin className="h-5 w-5 text-slate-700" />
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">
+                      Office Geofence Status
+                    </p>
+
+                    <span
+                      className={`rounded px-2 py-0.5 text-[11px] font-bold ${
+                        settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                        ? 'Enforcing Geofence'
+                        : 'Bypassing Geofence'}
+                    </span>
+                  </div>
+
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    {settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                      ? `Employees must be within ${settings.attendanceConfiguration?.allowedRadiusMeters ?? 100} meters of the configured office coordinates to Check In or Check Out.`
+                      : 'Geofencing is currently disabled. Employees can Check In and Check Out remotely from anywhere without GPS restriction.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Latitude
+                  </p>
+
+                  <p className="mt-1 break-all text-sm font-semibold text-slate-700">
+                    {settings.attendanceConfiguration?.officeLatitude ?? 'Not Set'}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Longitude
+                  </p>
+
+                  <p className="mt-1 break-all text-sm font-semibold text-slate-700">
+                    {settings.attendanceConfiguration?.officeLongitude ?? 'Not Set'}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Radius
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-slate-700">
+                    {settings.attendanceConfiguration?.allowedRadiusMeters ?? 100} meters
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Latitude
-                </p>
+            {/* Attendance Rule Banner */}
+            <div
+              className={`mt-4 rounded-xl border px-4 py-3 ${
+                settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                  ? 'border-indigo-200 bg-indigo-50/60'
+                  : 'border-amber-200 bg-amber-50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {settings.attendanceConfiguration?.geoRestrictionEnabled !== false ? (
+                  <ShieldCheck className="h-4 w-4 text-indigo-700" />
+                ) : (
+                  <ShieldAlert className="h-4 w-4 text-amber-700" />
+                )}
 
-                <p className="mt-1 break-all text-sm font-semibold text-slate-700">
-                  {
-                    settings.attendanceConfiguration
-                      ?.officeLatitude
-                  }
+                <p
+                  className={`text-xs font-semibold uppercase tracking-wide ${
+                    settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                      ? 'text-indigo-800'
+                      : 'text-amber-800'
+                  }`}
+                >
+                  Live Policy Enforcement
                 </p>
               </div>
 
-              <div className="rounded-lg bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Longitude
-                </p>
-
-                <p className="mt-1 break-all text-sm font-semibold text-slate-700">
-                  {
-                    settings.attendanceConfiguration
-                      ?.officeLongitude
-                  }
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Radius
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-slate-700">
-                  {
-                    settings.attendanceConfiguration
-                      ?.allowedRadiusMeters
-                  }{' '}
-                  meters
-                </p>
-              </div>
+              <p
+                className={`mt-1 text-sm leading-6 ${
+                  settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                    ? 'text-indigo-900'
+                    : 'text-amber-900'
+                }`}
+              >
+                {settings.attendanceConfiguration?.geoRestrictionEnabled !== false
+                  ? `Check-in opens at ${settings.attendanceConfiguration?.checkInStartTime || '08:00'}. Cutoff is ${settings.attendanceConfiguration?.requiredCheckInTime || '08:30'} (late check-ins recorded with late minutes and sent to HR). Check-out unlocks at ${settings.attendanceConfiguration?.checkOutStartTime || '17:30'}. Punches outside ${settings.attendanceConfiguration?.allowedRadiusMeters ?? 100}m radius are blocked.`
+                  : `Check-in opens at ${settings.attendanceConfiguration?.checkInStartTime || '08:00'}. Cutoff is ${settings.attendanceConfiguration?.requiredCheckInTime || '08:30'}. Check-out unlocks at ${settings.attendanceConfiguration?.checkOutStartTime || '17:30'}. Geofence is bypassed — remote employees can punch from anywhere.`}
+              </p>
             </div>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-              Attendance Rule
-            </p>
-
-            <p className="mt-1 text-sm leading-6 text-amber-800">
-              Check In and Check Out will be rejected when
-              the employee's device is outside this office
-              radius. Late check-ins are automatically sent
-              to HR for review.
-            </p>
           </div>
         </SettingsCard>
 
@@ -1007,24 +1164,17 @@ function HRSettings() {
 
         {/* Bottom Save */}
         <div className="flex justify-end pb-4">
-          <button
+          <Button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            icon={saved ? Check : Save}
+            loading={saving}
+            loadingText="Saving..."
+            size="lg"
           >
-            {saved ? (
-              <Check className="h-4 w-4" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-
-            {saving
-              ? 'Saving...'
-              : saved
-                ? 'Settings Saved'
-                : 'Save Settings'}
-          </button>
+            {saved ? 'Settings Saved' : 'Save Settings'}
+          </Button>
         </div>
       </div>
     </div>

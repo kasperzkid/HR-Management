@@ -195,12 +195,6 @@ function PayslipPreview({ payslip, month, onClose }) {
             </div>
           </div>
 
-          <div className="mt-8 border-t border-slate-200 pt-5">
-            <p className="text-xs leading-5 text-slate-400">
-              This payment slip is generated directly from the finalized payroll record for the selected payroll period.
-              Overtime hours and overtime pay are sourced from Attendance through Payroll.
-            </p>
-          </div>
         </div>
       </div>
     </div>
@@ -352,17 +346,6 @@ function PaymentSlips() {
           </div>
         )}
 
-        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-4">
-          <div className="flex gap-3">
-            <FileText className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
-            <div>
-              <p className="text-sm font-semibold text-blue-900">Payment Slips — Payroll Connected</p>
-              <p className="mt-1 text-sm leading-6 text-blue-800">
-                Payment slips now read finalized payroll records for the selected month. Overtime hours and overtime pay come from Attendance through Payroll, so they are not entered separately here.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {selectedPayslip && <PayslipPreview payslip={selectedPayslip} month={payrollMonth} onClose={() => setSelectedPayslip(null)} />}

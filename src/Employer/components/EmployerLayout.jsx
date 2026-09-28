@@ -183,11 +183,7 @@ function EmployerLayout() {
           {/* Logo & Header */}
           <div className="h-16 px-4 flex items-center justify-between border-b border-gray-100 dark:border-[#262b31]">
             <div className={`flex items-center gap-2.5 overflow-hidden transition-all duration-200 ${collapsed ? 'justify-center w-full' : ''}`}>
-              <div className="w-8 h-8 rounded-lg bg-black dark:bg-[#3a4149] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 3.2L18 9l-6 3.8L6 9l6-3.8zm-6.5 5.5l5.5 3.5v7.2L5.5 18v-7.3zm13 0v7.3l-5.5 3.5v-7.2l5.5-3.6z" />
-                </svg>
-              </div>
+              <img src="/logo.png" alt="Yanol-HR" className="w-8 h-8 rounded-lg object-contain shrink-0 shadow-xs" />
               {!collapsed && (
                 <span className="font-extrabold tracking-tight text-gray-950 dark:text-gray-100 text-sm font-sans whitespace-nowrap">
                   Yanol-HR

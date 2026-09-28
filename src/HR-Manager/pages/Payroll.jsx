@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Banknote,
+  Building2,
   Calculator,
   ChevronLeft,
   ChevronRight,
@@ -7,14 +9,16 @@ import {
   Clock3,
   Edit3,
   Loader2,
-  RefreshCw,
+  MinusCircle,
   Save,
   Trash2,
+  Wallet,
   Users,
   X,
 } from 'lucide-react'
 
-import { PageTitle, Table } from '../../components/ui'
+import { Button, PageTitle, SummaryCard, Table } from '../../components/ui'
+import TableDataTools from '../components/TableDataTools'
 
 const API_BASE = 'http://localhost:4000/api/hr-manager'
 
@@ -1995,13 +1999,21 @@ export default function Payroll() {
     )
   }
 
-  async function refreshPayroll() {
-    await Promise.all([
-      loadEmployees(),
-      loadPayrollSettings(),
-      loadAttendance(),
-      loadSavedPayroll(),
-    ])
+  async function importPayrollRecords(records) {
+    let imported = 0
+    for (const record of records) {
+      if (!record.employeeId || !record.payrollMonth) continue
+      const response = await fetch(`${API_BASE}/payroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(`${record.employeeId} ${record.payrollMonth}: ${result.message || 'Import failed.'}`)
+      imported += 1
+    }
+    await loadSavedPayroll()
+    return `Imported ${imported} payroll record(s). Existing employee/month records are unchanged.`
   }
 
   return (
@@ -2013,21 +2025,17 @@ export default function Payroll() {
           description="Manage monthly salary calculations, deductions, net pay and employer cost."
           action={
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => moveMonth(-1)} className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50" title="Previous month">
-                <ChevronLeft size={18} />
-              </button>
-              <input type="month" value={payrollMonth} onChange={(event) => setPayrollMonth(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-slate-500" />
-              <button type="button" onClick={() => moveMonth(1)} className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50" title="Next month">
-                <ChevronRight size={18} />
-              </button>
-              <button type="button" onClick={refreshPayroll} disabled={loading || payrollLoading} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                <RefreshCw size={16} className={payrollLoading ? 'animate-spin' : ''} />
-                Refresh
-              </button>
-              <button type="button" onClick={generateAllPayroll} disabled={generating || payrollLoading || loading} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
-                {generating ? <Loader2 size={17} className="animate-spin" /> : <Calculator size={17} />}
-                {generating ? 'Generating...' : 'Generate Payroll'}
-              </button>
+              <Button
+                type="button"
+                onClick={generateAllPayroll}
+                disabled={generating || payrollLoading || loading}
+                icon={Calculator}
+                loading={generating}
+                loadingText="Generating..."
+                size="lg"
+              >
+                Generate Payroll
+              </Button>
             </div>
           }
           className="mb-8"
@@ -2046,73 +2054,28 @@ export default function Payroll() {
         )}
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-slate-500">
-                Payroll Employees
-              </div>
-
-              <Users
-                size={19}
-                className="text-slate-400"
-              />
-            </div>
-
-            <div className="mt-2 text-2xl font-bold text-slate-900">
-              {summary.employees}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-500">
-              Gross Payroll
-            </div>
-
-            <div className="mt-2 text-2xl font-bold text-slate-900">
-              {formatCurrency(
-                summary.totalGross,
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-500">
-              Total Deductions
-            </div>
-
-            <div className="mt-2 text-2xl font-bold text-slate-900">
-              {formatCurrency(
-                summary.totalDeductions,
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-500">
-              Net Payroll
-            </div>
-
-            <div className="mt-2 text-2xl font-bold text-slate-900">
-              {formatCurrency(
-                summary.totalNet,
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-500">
-              Employer Cost
-            </div>
-
-            <div className="mt-2 text-2xl font-bold text-slate-900">
-              {formatCurrency(
-                summary.totalEmployerCost,
-              )}
-            </div>
-          </div>
+          {[
+            { title: 'Payroll Employees', description: 'Employees with payroll records', value: summary.employees, icon: Users, iconVariant: 'blue', valueLabel: 'Employees' },
+            { title: 'Gross Payroll', description: 'Total gross payroll', value: formatCurrency(summary.totalGross), icon: Wallet, iconVariant: 'green', valueLabel: 'Amount' },
+            { title: 'Total Deductions', description: 'Total payroll deductions', value: formatCurrency(summary.totalDeductions), icon: MinusCircle, iconVariant: 'orange', valueLabel: 'Amount' },
+            { title: 'Net Payroll', description: 'Total net payroll', value: formatCurrency(summary.totalNet), icon: Banknote, iconVariant: 'violet', valueLabel: 'Amount' },
+            { title: 'Employer Cost', description: 'Total employer cost', value: formatCurrency(summary.totalEmployerCost), icon: Building2, iconVariant: 'slate', valueLabel: 'Amount' },
+          ].map((stat, statIndex) => (
+            <SummaryCard
+              key={stat.title}
+              {...stat}
+              animationDelay={statIndex * 100}
+            />
+          ))}
         </div>
 
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+          <button type="button" onClick={() => moveMonth(-1)} className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50" title="Previous month"><ChevronLeft size={18} /></button>
+          <input type="month" value={payrollMonth} onChange={(event) => setPayrollMonth(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-slate-500" aria-label="Payroll month" />
+          <button type="button" onClick={() => moveMonth(1)} className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50" title="Next month"><ChevronRight size={18} /></button>
+        </div>
+
+        <div className="mb-6 space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="font-semibold text-slate-900">
@@ -2275,14 +2238,14 @@ export default function Payroll() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
+        <section>
+          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="font-semibold text-slate-900">
+              <h2 className="text-lg font-bold text-slate-900">
                 Payroll Records
               </h2>
 
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-xs text-slate-400">
                 Saved payroll records for{' '}
                 <span className="font-medium text-slate-700">
                   {payrollMonth}
@@ -2290,74 +2253,66 @@ export default function Payroll() {
               </p>
             </div>
 
-            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  payrollLoading
-                    ? 'bg-amber-400'
-                    : 'bg-emerald-500'
-                }`}
-              />
-
-              {payrollLoading
-                ? 'Loading database...'
-                : 'Database connected'}
+            <div className="flex flex-wrap items-center justify-end gap-3">
+            <TableDataTools filename={`payroll-${payrollMonth}`} rows={payroll} onImport={importPayrollRecords} />
             </div>
           </div>
 
+          <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/70">
           <div className="overflow-x-auto">
             <Table className="w-full min-w-[1450px] text-left text-sm">
               <Table.Header className="bg-slate-50">
-                <Table.Row className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                  <Table.Head className="px-4 py-3">
+                <Table.Row className="bg-slate-50/90">
+                  <Table.Head className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">#</Table.Head>
+                  <Table.Head className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Employee
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3">
+                  <Table.Head className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Department
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Basic
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Allowances
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     OT Hours
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Gross
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Pension
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Tax
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Deductions
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Net Salary
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Employer Cost
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3">
+                  <Table.Head className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Status
                   </Table.Head>
 
-                  <Table.Head className="px-4 py-3 text-right">
+                  <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Actions
                   </Table.Head>
                 </Table.Row>
@@ -2368,7 +2323,7 @@ export default function Payroll() {
                 payrollLoading ? (
                   <Table.Row>
                     <Table.Cell
-                      colSpan={13}
+                      colSpan={14}
                       className="px-6 py-12 text-center"
                     >
                       <div className="inline-flex items-center gap-2 text-sm text-slate-500">
@@ -2385,7 +2340,7 @@ export default function Payroll() {
                   0 ? (
                   <Table.Row>
                     <Table.Cell
-                      colSpan={13}
+                      colSpan={14}
                       className="px-6 py-14 text-center"
                     >
                       <div className="mx-auto flex max-w-md flex-col items-center">
@@ -2404,28 +2359,23 @@ export default function Payroll() {
                           records.
                         </p>
 
-                        <button
+                        <Button
                           type="button"
-                          onClick={
-                            generateAllPayroll
-                          }
-                          disabled={
-                            generating
-                          }
-                          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                          onClick={generateAllPayroll}
+                          disabled={generating}
+                          icon={Calculator}
+                          loading={generating}
+                          loadingText="Generating..."
+                          className="mt-4"
                         >
-                          <Calculator
-                            size={16}
-                          />
-
                           Generate Payroll
-                        </button>
+                        </Button>
                       </div>
                     </Table.Cell>
                   </Table.Row>
                 ) : (
                   rows.map(
-                    (row) => {
+                    (row, index) => {
                       const employee =
                         row.employee
 
@@ -2452,10 +2402,11 @@ export default function Payroll() {
                         )
 
                       return (
-                        <Table.Row
+                      <Table.Row
                           key={row.id}
-                          className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+                          className="border-t border-slate-100 transition-colors hover:bg-slate-50/80"
                         >
+                          <Table.Cell className="px-4 py-4 text-xs font-semibold text-slate-400">{index + 1}</Table.Cell>
                           <Table.Cell className="px-4 py-4">
                             <div className="font-medium text-slate-900">
                               {getEmployeeName(
@@ -2599,47 +2550,8 @@ export default function Payroll() {
             </Table>
           </div>
         </div>
+        </section>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Clock3 size={17} />
-              Attendance
-            </div>
-
-            <p className="mt-2 text-sm text-slate-500">
-              Attendance overtime hours are pulled for
-              the selected month and used to calculate
-              overtime pay automatically.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Calculator size={17} />
-              Calculation
-            </div>
-
-            <p className="mt-2 text-sm text-slate-500">
-              Gross salary includes basic salary,
-              allowances and automatically calculated
-              overtime pay using the HR Settings rules.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Save size={17} />
-              Database
-            </div>
-
-            <p className="mt-2 text-sm text-slate-500">
-              Saved payroll records and HR Settings are
-              loaded from PostgreSQL whenever the page
-              is refreshed.
-            </p>
-          </div>
-        </div>
       </div>
 
       {modalOpen && (

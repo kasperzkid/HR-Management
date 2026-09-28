@@ -64,3 +64,14 @@ export async function uploadOrLocal(file) {
   if (!file) return null
   return uploadEmployeeFile(file)
 }
+
+export async function downloadEmployeeResume(employeeId) {
+  const res = await fetch(`${API_BASE}/employees/${encodeURIComponent(employeeId)}/resume`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.message || 'Failed to download employee resume')
+  }
+  return res.blob()
+}

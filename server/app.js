@@ -4,6 +4,7 @@ import cors from 'cors'
 import authRoutes      from './routes/auth.routes.js'
 import employerRoutes   from './routes/employer.routes.js'
 import hrManagerRoutes  from './routes/hr-manager.routes.js'
+import messagesRoutes    from './routes/messages.routes.js'
 
 const app = express()
 
@@ -16,6 +17,7 @@ app.use('/api/auth', authRoutes)
 // ─── Protected / dashboard routes ─────────────────────────────
 app.use('/api/employer',   employerRoutes)
 app.use('/api/hr-manager', hrManagerRoutes)
+app.use('/api/messages', messagesRoutes)
 
 // ─── 404 fallback ─────────────────────────────────────────────
 app.use((_req, res) => {

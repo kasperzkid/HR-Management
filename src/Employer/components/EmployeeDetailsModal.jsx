@@ -31,6 +31,8 @@ import {
   Contact,
   Home,
   Users,
+  KeyRound,
+  Copy,
 } from 'lucide-react'
 
 function getDefaultEmployee() {
@@ -166,7 +168,7 @@ function SectionHeader({ icon: Icon, title }) {
   )
 }
 
-function TabPanel({ employee, activeTab, status, setStatus }) {
+function TabPanel({ employee, activeTab, status, setStatus, onResetPassword, resetPassword, resetting }) {
   const e = employee
 
   if (activeTab === 'overview') {
@@ -180,6 +182,39 @@ function TabPanel({ employee, activeTab, status, setStatus }) {
           <DetailRow icon={Home} label="Address" value={e.address} />
           <DetailRow icon={Contact} label="Emergency Contact" value={e.emergencyContact} />
           <DetailRow icon={Users} label="Manager" value={e.manager} />
+        </div>
+
+        <div className="mt-4 p-4 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <SectionHeader icon={KeyRound} title="Employee Login Password" />
+          <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-3">
+            Reset the employee login if the temporary password was lost. The employee must change it after signing in.
+          </p>
+          <button
+            type="button"
+            disabled={resetting || !onResetPassword}
+            onClick={onResetPassword}
+            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-white bg-gray-900 hover:bg-gray-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <KeyRound size={13} />
+            {resetting ? 'Resetting...' : 'Reset Temporary Password'}
+          </button>
+          {resetPassword && (
+            <div className="mt-3 p-3 rounded-lg border border-amber-200 bg-white dark:border-amber-900/40 dark:bg-[#1c2026]">
+              <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">New temporary password</p>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono font-semibold text-gray-900 dark:text-gray-100 break-all">{resetPassword}</code>
+                <button
+                  type="button"
+                  title="Copy temporary password"
+                  onClick={() => navigator.clipboard?.writeText(resetPassword)}
+                  className="p-1.5 text-gray-500 hover:text-gray-900 dark:hover:text-white"
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] text-amber-700 dark:text-amber-400">Copy this password now. It will not be shown again.</p>
+            </div>
+          )}
         </div>
 
         <div className="mt-4">
@@ -566,13 +601,28 @@ function TabPanel({ employee, activeTab, status, setStatus }) {
   return null
 }
 
-function EmployeeDetailsModal({ employee, isOpen, onClose, onUpdateStatus, onDelete, onEdit }) {
+function EmployeeDetailsModal({ employee, isOpen, onClose, onUpdateStatus, onDelete, onEdit, onResetPassword }) {
   const defaultEmployee = getDefaultEmployee()
   const currentEmployee = employee || defaultEmployee
   const [activeTab, setActiveTab] = useState('overview')
   const [status, setStatus] = useState(
     currentEmployee.status || currentEmployee.employmentStatus || 'Active'
   )
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetting, setResetting] = useState(false)
+
+  const handleResetPassword = async () => {
+    if (!onResetPassword || resetting) return
+    if (!window.confirm(`Reset the login password for ${currentEmployee.name}?`)) return
+    setResetting(true)
+    setResetPassword('')
+    try {
+      const result = await onResetPassword(currentEmployee.id)
+      setResetPassword(result.temporaryPassword)
+    } finally {
+      setResetting(false)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -648,7 +698,7 @@ function EmployeeDetailsModal({ employee, isOpen, onClose, onUpdateStatus, onDel
 
         {/* Tab Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          <TabPanel employee={currentEmployee} activeTab={activeTab} status={status} setStatus={setStatus} />
+          <TabPanel employee={currentEmployee} activeTab={activeTab} status={status} setStatus={setStatus} onResetPassword={handleResetPassword} resetPassword={resetPassword} resetting={resetting} />
         </div>
 
         {/* Footer */}

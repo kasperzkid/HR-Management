@@ -15,9 +15,10 @@ import {
   Save,
 } from 'lucide-react'
 
-import { PageTitle, Table } from '../../components/ui'
+import { Button, PageTitle, SummaryCard, Table } from '../../components/ui'
+import TableDataTools from '../components/TableDataTools'
 
-const API_BASE = 'http://localhost:4000/api/hr-manager'
+const API_BASE = '/api/hr-manager'
 
 const LEAVE_TYPES = [
   'Annual Leave',
@@ -152,6 +153,10 @@ function normalizeLeaveRequest(request) {
 
     remarks:
       request.remarks ||
+      '',
+
+    rejectionReason:
+      request.rejectionReason ||
       '',
 
     balance:
@@ -510,7 +515,7 @@ function ReviewModal({
           </section>
 
           <section>
-            <Field label="HR Review Remark">
+            <Field label="Review Remark / Rejection Reason">
               <textarea
                 rows={4}
                 value={reviewRemarks}
@@ -519,7 +524,7 @@ function ReviewModal({
                     event.target.value,
                   )
                 }
-                placeholder="Enter an approval or rejection remark..."
+                placeholder="Add a review remark, or enter the reason when rejecting..."
                 className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
               />
             </Field>
@@ -541,31 +546,27 @@ function ReviewModal({
               Cancel
             </button>
 
-            <button
+            <Button
               type="button"
               onClick={onReject}
               disabled={saving}
-              className="flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              icon={XCircle}
+              loading={saving}
+              loadingText="Processing..."
             >
-              <XCircle size={17} />
+              Reject Request
+            </Button>
 
-              {saving
-                ? 'Processing...'
-                : 'Reject Request'}
-            </button>
-
-            <button
+            <Button
               type="button"
               onClick={onApprove}
               disabled={saving}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
+              icon={Check}
+              loading={saving}
+              loadingText="Processing..."
             >
-              <Check size={17} />
-
-              {saving
-                ? 'Processing...'
-                : 'Approve Request'}
-            </button>
+              Approve Request
+            </Button>
           </div>
         </div>
       </div>
@@ -682,7 +683,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                 >
                   <option value="">
                     Select employee
@@ -746,7 +747,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                 >
                   {LEAVE_TYPES.map(
                     (type) => (
@@ -774,7 +775,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
                 />
               </Field>
@@ -792,7 +793,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
                 />
               </Field>
@@ -814,7 +815,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
                 />
               </Field>
@@ -843,16 +844,8 @@ function EditLeaveModal({
                   }
                   disabled={saving}
                 >
-                  {APPROVAL_STATUSES.map(
-                    (status) => (
-                      <option
-                        key={status}
-                        value={status}
-                      >
-                        {status}
-                      </option>
-                    ),
-                  )}
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
                 </SelectField>
               </Field>
             </div>
@@ -869,14 +862,9 @@ function EditLeaveModal({
               <textarea
                 rows={5}
                 value={form.remarks}
-                onChange={(event) =>
-                  onChange(
-                    'remarks',
-                    event.target.value,
-                  )
-                }
-                disabled={saving}
-                placeholder="Enter leave request remarks..."
+                readOnly
+                disabled
+                placeholder="Employee remarks"
                 className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
               />
             </Field>
@@ -897,27 +885,17 @@ function EditLeaveModal({
 
           {form.approvalStatus ===
             'Rejected' && (
-            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3">
-              <p className="text-sm font-semibold text-red-800">
-                Rejected request
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-red-700">
-                A rejected request does not count against the employee's approved leave balance.
-              </p>
-            </div>
-          )}
-
-          {form.approvalStatus ===
-            'Pending' && (
-            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
-              <p className="text-sm font-semibold text-amber-800">
-                Returned to Pending
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-amber-700">
-                This request will return to the HR review queue and must be reviewed again.
-              </p>
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+              <p className="text-sm font-semibold text-red-800">Reason for rejection</p>
+              <textarea
+                rows={3}
+                value={form.rejectionReason || ''}
+                onChange={(event) => onChange('rejectionReason', event.target.value)}
+                disabled={saving}
+                required
+                placeholder="Explain why this leave request is rejected."
+                className="mt-3 w-full resize-y rounded-xl border border-red-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              />
             </div>
           )}
 
@@ -937,18 +915,16 @@ function EditLeaveModal({
               Cancel
             </button>
 
-            <button
+            <Button
               type="button"
               onClick={onSave}
               disabled={saving}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
+              icon={Save}
+              loading={saving}
+              loadingText="Saving Changes..."
             >
-              <Save size={17} />
-
-              {saving
-                ? 'Saving Changes...'
-                : 'Save Changes'}
-            </button>
+              Save Changes
+            </Button>
           </div>
         </div>
       </div>
@@ -1127,7 +1103,10 @@ function Leave() {
 
     return Array.isArray(data)
       ? data
-      : data.leaveRequests || []
+      : data.leaveRequests ||
+          data.requests ||
+          data.records ||
+          []
   }
 
   async function updateLeaveRequest(
@@ -1660,6 +1639,8 @@ function Leave() {
       remarks:
         request.remarks ||
         '',
+      rejectionReason:
+        request.rejectionReason || '',
     })
 
     setEditError('')
@@ -1713,72 +1694,17 @@ function Leave() {
 
     setEditError('')
 
-    if (!editForm.employeeId) {
-      setEditError(
-        'Please select an employee.',
-      )
-      return
-    }
+    const calculatedDays = editingRequest.days
 
-    if (!editForm.leaveType) {
-      setEditError(
-        'Please select a leave type.',
-      )
-      return
-    }
-
-    if (!editForm.requestDate) {
-      setEditError(
-        'Please select the request date.',
-      )
-      return
-    }
-
-    if (!editForm.startDate) {
-      setEditError(
-        'Please select the start date.',
-      )
-      return
-    }
-
-    if (!editForm.endDate) {
-      setEditError(
-        'Please select the end date.',
-      )
-      return
-    }
-
-    if (
-      editForm.endDate <
-      editForm.startDate
-    ) {
-      setEditError(
-        'The end date cannot be before the start date.',
-      )
-      return
-    }
-
-    const calculatedDays =
-      calculateWorkingDays(
-        editForm.startDate,
-        editForm.endDate,
-      )
-
-    if (calculatedDays <= 0) {
-      setEditError(
-        'The selected date range contains no working days.',
-      )
-      return
-    }
-
-    if (
-      !APPROVAL_STATUSES.includes(
-        editForm.approvalStatus,
-      )
-    ) {
+    if (!['Approved', 'Rejected'].includes(editForm.approvalStatus)) {
       setEditError(
         'Please select a valid approval status.',
       )
+      return
+    }
+
+    if (editForm.approvalStatus === 'Rejected' && !editForm.rejectionReason.trim()) {
+      setEditError('Please provide a reason for rejecting this request.')
       return
     }
 
@@ -1833,8 +1759,11 @@ function Leave() {
           : null,
 
         remarks:
-          editForm.remarks.trim() ||
-          null,
+          editingRequest.remarks || null,
+
+        rejectionReason: editForm.approvalStatus === 'Rejected'
+          ? editForm.rejectionReason.trim()
+          : null,
       }
 
       await updateLeaveRequest(
@@ -1897,8 +1826,7 @@ function Leave() {
         approvalStatus ===
         'Approved'
 
-      const remarks =
-        reviewRemarks.trim()
+      const remarks = reviewRemarks.trim()
 
       await updateLeaveRequest(
         request.id,
@@ -1913,12 +1841,18 @@ function Leave() {
             ? getTodayString()
             : null,
 
-          remarks:
-            remarks ||
-            request.remarks ||
-            null,
+          remarks: approved
+            ? remarks || request.remarks || null
+            : request.remarks || null,
+          rejectionReason: approved
+            ? null
+            : remarks || request.rejectionReason || null,
         },
       )
+
+      window.dispatchEvent(new CustomEvent('hr-leave-updated', {
+        detail: { id: request.id, approvalStatus },
+      }))
 
       const updatedRequests =
         await fetchLeaveRequests()
@@ -1997,6 +1931,11 @@ function Leave() {
       return
     }
 
+    if (!reviewRemarks.trim()) {
+      setError('Please enter a reason for rejecting this request.')
+      return
+    }
+
     await updateStatus(
       reviewingRequest,
       'Rejected',
@@ -2023,6 +1962,23 @@ function Leave() {
 
     setNotificationVisible(false)
     setNotificationRequest(null)
+  }
+
+  async function importLeaveRequests(records) {
+    let imported = 0
+    for (const record of records) {
+      if (!record.employeeId || !record.leaveType || !record.startDate || !record.endDate) continue
+      const response = await fetch(`${API_BASE}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(`${record.employeeId}: ${result.message || 'Import failed.'}`)
+      imported += 1
+    }
+    await loadInitialData()
+    return `Imported ${imported} leave request(s). Existing requests are unchanged.`
   }
 
   /*
@@ -2143,19 +2099,14 @@ function Leave() {
           action={
             <div className="flex items-center gap-2">
               {newRequestCount > 0 && (
-                <button
+                <Button
                   type="button"
                   onClick={clearNewRequestNotifications}
-                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
+                  icon={Check}
                 >
-                  <Check size={16} />
                   Mark New as Seen
-                </button>
+                </Button>
               )}
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                HR Review Inbox
-              </div>
             </div>
           }
           className="mb-8"
@@ -2188,104 +2139,26 @@ function Leave() {
         ====================================================== */}
 
         <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div
-            className={`rounded-2xl border bg-white p-5 shadow-sm ${
-              pendingCount > 0
-                ? 'border-amber-200 ring-1 ring-amber-100'
-                : 'border-slate-200'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Pending Review
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {pendingCount}
-                </p>
-
-                {pendingCount > 0 && (
-                  <p className="mt-1 text-xs font-medium text-amber-600">
-                    Requires HR action
-                  </p>
-                )}
-              </div>
-
-              <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                <Clock3 size={20} />
-
-                {pendingCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                    {pendingCount}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Total Requests
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {requests.length}
-                </p>
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
-                <FileText size={20} />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Approved
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {approvedCount}
-                </p>
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                <Check size={20} />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Approved Leave Days
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {formatNumber(
-                    totalApprovedDays,
-                  )}
-                </p>
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-                <CalendarDays size={20} />
-              </div>
-            </div>
-          </div>
+          {[
+            { title: 'Pending Review', description: pendingCount > 0 ? 'Requires HR action' : 'No pending HR action', value: pendingCount, icon: Clock3, iconVariant: 'amber' },
+            { title: 'Total Requests', description: 'All leave requests', value: requests.length, icon: FileText, iconVariant: 'blue' },
+            { title: 'Approved', description: 'Approved leave requests', value: approvedCount, icon: Check, iconVariant: 'green' },
+            { title: 'Approved Leave Days', description: 'Total approved days', value: formatNumber(totalApprovedDays), icon: CalendarDays, iconVariant: 'violet' },
+          ].map((stat, statIndex) => (
+            <SummaryCard
+              key={stat.title}
+              {...stat}
+              valueLabel="Records"
+              animationDelay={statIndex * 100}
+            />
+          ))}
         </section>
 
         {/* =====================================================
             FILTERS
         ====================================================== */}
 
-        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="mb-6">
           <div className="grid gap-4 lg:grid-cols-[minmax(240px,1.5fr)_repeat(3,minmax(150px,1fr))]">
             <div className="relative">
               <Search
@@ -2382,7 +2255,7 @@ function Leave() {
             LEAVE REQUEST INBOX
         ====================================================== */}
 
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section id="leave-review-inbox" className="mt-6">
           <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center">
             <div>
               <div className="flex items-center gap-2">
@@ -2406,7 +2279,8 @@ function Leave() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <TableDataTools filename="leave-requests" rows={requests} onImport={importLeaveRequests} />
               <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
                 Automatically checking for new requests
@@ -2966,66 +2840,6 @@ function Leave() {
           </div>
         </section>
 
-        {/* =====================================================
-            HR REVIEW WORKFLOW
-            KEEPING THE BOTTOM SECTION
-        ====================================================== */}
-
-        <section className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#4755AE] shadow-sm">
-              <Bell size={17} />
-            </div>
-
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                HR Leave Review Workflow
-              </h3>
-
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
-                <li>
-                  • Employees submit their leave requests from the Employee Dashboard.
-                </li>
-
-                <li>
-                  • Submitted requests automatically appear in this HR review inbox.
-                </li>
-
-                <li>
-                  • The HR dashboard checks for new requests automatically every 15 seconds.
-                </li>
-
-                <li>
-                  • New requests are highlighted and generate an HR notification.
-                </li>
-
-                <li>
-                  • HR reviews the request before approving or rejecting it.
-                </li>
-
-                <li>
-                  • Once a request is Approved or Rejected, an Edit button becomes available.
-                </li>
-
-                <li>
-                  • Editing an existing approved request can update the employee, leave type, dates, status, or remarks.
-                </li>
-
-                <li>
-                  • Returning an edited request to Pending sends it back into the HR review workflow.
-                </li>
-
-                <li>
-                  • HR cannot create a brand-new leave request from this screen.
-                </li>
-
-                <li>
-                  • Only Approved leave counts against the employee leave balance.
-                </li>
-              </ul>
-            </div>
-          </div>
-        </section>
       </main>
 
       {/* =======================================================

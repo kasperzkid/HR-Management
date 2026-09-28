@@ -8,106 +8,110 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
-  role      String
-  createdAt DateTime @default(now())
+  id                  Int       @id @default(autoincrement())
+  name                String
+  email               String    @unique
+  password            String
+  mustChangePassword  Boolean   @default(false)
+  role                String
+  employeeId          String?   @unique
+  employee            Employee? @relation(fields: [employeeId], references: [id])
+  createdAt           DateTime  @default(now())
+
+  sentMessages        Message[] @relation("SentMessages")
+  receivedMessages    Message[] @relation("ReceivedMessages")
 }
 
 model Employee {
-  id                  String   @id
-  employeeId          String   @unique
-  name                String
-  gender              String
-  dateOfBirth         String
-  joinDate            String
-  jobTitle            String
-  department          String
-  employmentType      String
-  basicSalary         Float
-  transportAllowance  Float
-  housingAllowance    Float
-  mealAllowance       Float
-  otherAllowance      Float
-  otherDeductions     Float
-  loanDeductions      Float
-  bankName            String
-  bankAccount         String
-  tin                 String
-  pensionId           String
-  phone               String
-  email               String
-  address             String
-  emergencyContact    String
-  employmentStatus    String
-  exitDate            String?
-  notes               String?
-  status              String
-  avatar              String
-  location            String
-  salary              Float
-  manager             String
+  id                 String   @id
+  employeeId         String   @unique
+  name               String
+  gender             String
+  dateOfBirth        String
+  joinDate           String
+  jobTitle           String
+  department         String
+  employmentType     String
+  basicSalary        Float
+  transportAllowance Float
+  housingAllowance   Float
+  mealAllowance      Float
+  otherAllowance     Float
+  otherDeductions    Float
+  loanDeductions     Float
+  bankName           String
+  bankAccount        String
+  tin                String
+  pensionId          String
+  phone              String
+  ethioTelecomPhone  String   @default("")
+  email              String
+  address            String
+  emergencyContact   String
+  employmentStatus   String
+  exitDate           String?
+  notes              String?
+  status             String
+  avatar             String
+  location           String
+  salary             Float
+  manager            String
   roleType            String
   initials             String
-  createdAt            DateTime @default(now())
+  githubUrl          String   @default("")
+  linkedinUrl        String   @default("")
+  portfolioUrl       String   @default("")
+  skills             String   @default("")
+    resumeStorageName  String?
+    resumeFileName     String?
+    resumeMimeType     String?
+    resumeFileSize     Int?
+  createdAt          DateTime @default(now())
 
-  attendance           Attendance[]
-  leaveRequests        LeaveRequest[]
-  payrollRecords       PayrollRecord[]
+  attendance     Attendance[]
+  leaveRequests  LeaveRequest[]
+  payrollRecords PayrollRecord[]
+  user           User?
 }
 
 model Attendance {
-  id                    String   @id
-  employeeId            String
-  employeeName          String
-  department            String
-  date                  String
+  id           String @id
+  employeeId   String
+  employeeName String
+  department   String
+  date         String
 
-  // Attendance status:
-  // PRESENT
-  // LATE
-  // PENDING_REVIEW
-  // ABSENT
-  // LEAVE
-  // WEEKEND
-  status                String
+  status String
 
-  // Actual employee times
-  checkIn               String?
-  checkOut              String?
+  checkIn  String?
+  checkOut String?
 
-  // Late information
-  late                  Int      @default(0)
-  earlyDeparture        Int      @default(0)
+  late           Int @default(0)
+  earlyDeparture Int @default(0)
 
-  // Working/overtime hours
-  regular                Float    @default(0)
-  overtime               Float    @default(0)
+  regular  Float @default(0)
+  overtime Float @default(0)
 
-  // Location verification
   checkInLatitude       Float?
   checkInLongitude      Float?
-  checkInLocationStatus String?   // VERIFIED / REJECTED
+  checkInLocationStatus String?
 
-  checkOutLatitude      Float?
-  checkOutLongitude     Float?
-  checkOutLocationStatus String?  // VERIFIED / REJECTED
+  checkOutLatitude       Float?
+  checkOutLongitude      Float?
+  checkOutLocationStatus String?
 
-  // Required check-in time used when calculating lateness
-  requiredCheckInTime   String?
+  requiredCheckInTime String?
 
-  // Late-review workflow
-  reviewStatus           String?  // PENDING / ACCEPTED / REJECTED
-  reviewedBy             String?
-  reviewedAt             String?
-  reviewRemarks          String?
+  reviewStatus  String?
+  reviewedBy    String?
+  reviewedAt    String?
+  reviewRemarks String?
 
-  createdAt             DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  employee              Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 }
+
 model LeaveRequest {
   id             String   @id
   employeeId     String
@@ -122,40 +126,41 @@ model LeaveRequest {
   approvedBy     String?
   approvedDate   String?
   remarks        String?
+  rejectionReason String?
   balance        Float?
   createdAt      DateTime @default(now())
 
-  employee       Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 }
 
 model PayrollRecord {
-  id                   String   @id
-  employeeId           String
-  employeeName         String
-  department           String
-  payrollMonth         String
+  id           String @id
+  employeeId   String
+  employeeName String
+  department   String
+  payrollMonth String
 
-  basicSalary          Float
-  transportAllowance   Float
-  housingAllowance     Float
-  mealAllowance        Float
-  otherAllowance       Float
-  overtimePay          Float
-  grossSalary          Float
+  basicSalary        Float
+  transportAllowance Float
+  housingAllowance   Float
+  mealAllowance      Float
+  otherAllowance     Float
+  overtimePay        Float
+  grossSalary        Float
 
-  pensionDeduction     Float
-  incomeTax            Float
-  loanDeduction        Float
-  otherDeduction       Float
-  totalDeductions      Float
-  netSalary            Float
+  pensionDeduction Float
+  incomeTax        Float
+  loanDeduction    Float
+  otherDeduction   Float
+  totalDeductions  Float
+  netSalary        Float
 
-  employerPension      Float
-  employerCost         Float
+  employerPension Float
+  employerCost    Float
 
-  createdAt            DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  employee             Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@unique([employeeId, payrollMonth])
 }
@@ -164,4 +169,22 @@ model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique
   value String
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  senderId       Int
+  receiverId     Int
+  text           String
+  attachmentUrl  String?
+  attachmentName String?
+  attachmentType String?
+  attachmentSize Int?
+  read           Boolean  @default(false)
+  isComplain     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
 }

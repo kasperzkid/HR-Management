@@ -1,8 +1,31 @@
-import { Router } from 'express'
-import { login } from '../controllers/auth.controller.js'
+import express from 'express'
 
-const router = Router()
+import {
+  login,
+  changePassword,
+  forgotPassword,
+} from '../controllers/auth.controller.js'
 
-router.post('/login', login)
+import {
+  requireAuth,
+} from '../middleware/auth.middleware.js'
+
+const router = express.Router()
+
+router.post(
+  '/login',
+  login,
+)
+
+router.put(
+  '/password',
+  requireAuth,
+  changePassword,
+)
+
+router.post(
+  '/forgot-password',
+  forgotPassword,
+)
 
 export default router

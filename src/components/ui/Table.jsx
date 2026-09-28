@@ -11,7 +11,7 @@ function Table({
   return (
     <div
       className={cn(
-        'relative w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm',
+        'relative w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)]',
         containerClassName,
       )}
     >
@@ -47,7 +47,7 @@ Table.Header = function TableHeader({ children, className = '' }) {
   return (
     <thead
       className={cn(
-        '[&_tr]:border-b [&_tr]:border-slate-200',
+        '[&_tr]:border-b [&_tr]:border-slate-200 [&_tr]:bg-slate-50/80',
         className,
       )}
     >

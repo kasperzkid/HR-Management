@@ -111,7 +111,15 @@ const DEFAULT_SETTINGS = {
   // Stored in the existing Setting table as JSON.
   // ---------------------------------------------------------------
   attendanceConfiguration: {
+    checkInStartTime: '08:00',
+
     requiredCheckInTime: '08:30',
+
+    checkOutStartTime: '17:30',
+
+    checkOutEndTime: '19:00',
+
+    geoRestrictionEnabled: true,
 
     officeLatitude: 8.999654748138806,
 
@@ -231,6 +239,16 @@ function normalizeAttendanceConfiguration(value, fallback) {
   const result = { ...fallback }
 
   if (
+    value.checkInStartTime !== undefined &&
+    value.checkInStartTime !== null &&
+    value.checkInStartTime !== ''
+  ) {
+    result.checkInStartTime = String(
+      value.checkInStartTime,
+    ).trim()
+  }
+
+  if (
     value.requiredCheckInTime !== undefined &&
     value.requiredCheckInTime !== null &&
     value.requiredCheckInTime !== ''
@@ -238,6 +256,30 @@ function normalizeAttendanceConfiguration(value, fallback) {
     result.requiredCheckInTime = String(
       value.requiredCheckInTime,
     ).trim()
+  }
+
+  if (
+    value.checkOutStartTime !== undefined &&
+    value.checkOutStartTime !== null &&
+    value.checkOutStartTime !== ''
+  ) {
+    result.checkOutStartTime = String(
+      value.checkOutStartTime,
+    ).trim()
+  }
+
+  if (
+    value.checkOutEndTime !== undefined &&
+    value.checkOutEndTime !== null &&
+    value.checkOutEndTime !== ''
+  ) {
+    result.checkOutEndTime = String(
+      value.checkOutEndTime,
+    ).trim()
+  }
+
+  if (value.geoRestrictionEnabled !== undefined && value.geoRestrictionEnabled !== null) {
+    result.geoRestrictionEnabled = Boolean(value.geoRestrictionEnabled)
   }
 
   if (
@@ -387,11 +429,40 @@ function validateSettings(settings) {
 
   if (
     !isValidTime(
+      attendance.checkInStartTime,
+    )
+  ) {
+    errors.push(
+      'Check-in start time must be a valid 24-hour time such as 08:00.',
+    )
+  }
+
+  if (
+    !isValidTime(
       attendance.requiredCheckInTime,
     )
   ) {
     errors.push(
       'Required check-in time must be a valid 24-hour time such as 08:30.',
+    )
+  }
+
+  if (
+    !isValidTime(
+      attendance.checkOutStartTime,
+    )
+  ) {
+    errors.push(
+      'Check-out start time must be a valid 24-hour time such as 17:30.',
+    )
+  }
+
+  if (
+    attendance.checkOutEndTime &&
+    !isValidTime(attendance.checkOutEndTime)
+  ) {
+    errors.push(
+      'Check-out end time must be a valid 24-hour time such as 19:00.',
     )
   }
 
@@ -735,6 +806,50 @@ export async function updateHRSettings(req, res) {
     res.status(500).json({
       message: 'Failed to save HR settings',
     })
+  }
+}
+
+export async function getAttendanceConfigurationFromDb() {
+  try {
+    const settingRecord = await prisma.setting.findUnique({
+      where: { key: 'attendanceConfiguration' },
+    })
+
+    let config = {}
+    if (settingRecord?.value) {
+      config = parseStoredValue(settingRecord.value, {})
+    }
+
+    if (!config || Object.keys(config).length === 0) {
+      const rows = await prisma.setting.findMany({
+        where: {
+          key: {
+            in: [
+              'attendance.checkInStartTime',
+              'attendance.requiredCheckInTime',
+              'attendance.checkOutStartTime',
+              'attendance.checkOutEndTime',
+              'attendance.geoRestrictionEnabled',
+              'attendance.officeLatitude',
+              'attendance.officeLongitude',
+              'attendance.allowedRadiusMeters',
+            ],
+          },
+        },
+      })
+      for (const row of rows) {
+        const simpleKey = row.key.replace('attendance.', '')
+        config[simpleKey] = parseStoredValue(row.value, row.value)
+      }
+    }
+
+    return normalizeAttendanceConfiguration(
+      config,
+      DEFAULT_SETTINGS.attendanceConfiguration,
+    )
+  } catch (error) {
+    console.error('Failed to load attendance configuration from DB:', error)
+    return { ...DEFAULT_SETTINGS.attendanceConfiguration }
   }
 }
 

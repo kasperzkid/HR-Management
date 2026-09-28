@@ -17,10 +17,20 @@ import {
   Loader2,
   CheckCircle2,
   SlidersHorizontal,
+  Link2,
+  FileText,
+  Upload,
+  Download,
 } from 'lucide-react'
 import { useTheme } from '../../lib/theme'
 import { getCurrentUser, resolveEmployee } from '../lib/currentUser'
-import { fetchEmployees } from '../lib/employerApi'
+import {
+  fetchEmployees,
+  fetchMyEmployeeProfile,
+  uploadMyResume,
+  downloadMyResume,
+  updateMyEmployeeProfile,
+} from '../lib/employerApi'
 import { fetchMe, updateProfileApi, changePasswordApi } from '../lib/userApi'
 
 // ── Small building blocks ────────────────────────────────────────────────────
@@ -108,20 +118,51 @@ function Card({ children }) {
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
-function PersonalInfoSection({ user, employee, loading, onSave, saving }) {
-  const [form, setForm] = useState({ name: '', email: '', phone: '' })
+function PersonalInfoSection({
+  user,
+  employee,
+  loading,
+  onSave,
+  onSaveProfessionalProfile,
+  onUploadResume,
+  onDownloadResume,
+  resumeUploading,
+  saving,
+}) {
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    githubUrl: '',
+    linkedinUrl: '',
+    portfolioUrl: '',
+    skills: '',
+  })
 
   useEffect(() => {
     setForm({
       name: user?.name || '',
       email: user?.email || '',
       phone: employee?.phone || '',
+      githubUrl: employee?.githubUrl || '',
+      linkedinUrl: employee?.linkedinUrl || '',
+      portfolioUrl: employee?.portfolioUrl || '',
+      skills: employee?.skills || '',
     })
   }, [user, employee])
 
-  const dirty = useMemo(() => {
-    return form.name !== (user?.name || '') || form.email !== (user?.email || '')
-  }, [form, user])
+  const identityDirty = useMemo(
+    () => form.name !== (user?.name || '') || form.email !== (user?.email || ''),
+    [form.name, form.email, user],
+  )
+  const professionalProfileDirty = useMemo(
+    () =>
+      form.githubUrl !== (employee?.githubUrl || '') ||
+      form.linkedinUrl !== (employee?.linkedinUrl || '') ||
+      form.portfolioUrl !== (employee?.portfolioUrl || '') ||
+      form.skills !== (employee?.skills || ''),
+    [form.githubUrl, form.linkedinUrl, form.portfolioUrl, form.skills, employee],
+  )
 
   const set = (field) => (v) => setForm((p) => ({ ...p, [field]: v }))
 
@@ -190,7 +231,7 @@ function PersonalInfoSection({ user, employee, loading, onSave, saving }) {
             <div className="flex justify-end mt-5">
               <button
                 onClick={() => onSave(form)}
-                disabled={saving || !dirty}
+                disabled={saving || !identityDirty}
                 className="px-5 py-2.5 rounded-xl bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 text-xs font-semibold hover:bg-gray-800 flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {saving ? (
@@ -203,6 +244,120 @@ function PersonalInfoSection({ user, employee, loading, onSave, saving }) {
             </div>
           </>
         )}
+      </Card>
+
+      <Card>
+        <SectionHeader
+          icon={Link2}
+          title="Professional Profile"
+          description="Share your professional links and current skills with the HR team."
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Label>GitHub profile</Label>
+            <TextInput
+              type="url"
+              value={form.githubUrl}
+              onChange={set('githubUrl')}
+              placeholder="https://github.com/yourname"
+            />
+          </div>
+          <div>
+            <Label>LinkedIn profile</Label>
+            <TextInput
+              type="url"
+              value={form.linkedinUrl}
+              onChange={set('linkedinUrl')}
+              placeholder="https://www.linkedin.com/in/yourname"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Portfolio or website</Label>
+            <TextInput
+              type="url"
+              value={form.portfolioUrl}
+              onChange={set('portfolioUrl')}
+              placeholder="https://your-portfolio.com"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Skills</Label>
+            <textarea
+              value={form.skills}
+              onChange={(event) => set('skills')(event.target.value)}
+              rows={4}
+              maxLength={4000}
+              placeholder="Add skills separated by commas or new lines"
+              className="w-full px-3 py-2 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-white dark:bg-[#15181d] dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900/15 focus:border-gray-400 transition-colors resize-y"
+            />
+          </div>
+        </div>
+        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-[#262b31]">
+          <SectionHeader
+            icon={FileText}
+            title="Resume / CV"
+            description="Upload a current PDF, DOC, or DOCX resume for HR to review."
+          />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              {employee?.resumeFileName ? (
+                <>
+                  <p className="truncate text-xs font-semibold text-gray-900 dark:text-gray-100">
+                    {employee.resumeFileName}
+                  </p>
+                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    {employee.resumeFileSize
+                      ? `${(employee.resumeFileSize / (1024 * 1024)).toFixed(2)} MB`
+                      : 'Uploaded'}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400">No resume uploaded</p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {employee?.resumeFileName && (
+                <button
+                  type="button"
+                  onClick={onDownloadResume}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-[#33383f] dark:text-gray-200 dark:hover:bg-[#1c2026]"
+                >
+                  <Download size={14} /> Download
+                </button>
+              )}
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-gray-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-gray-800 dark:bg-[#3a4149] dark:hover:bg-gray-600">
+                {resumeUploading ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Upload size={14} />
+                )}
+                {resumeUploading ? 'Uploading…' : employee?.resumeFileName ? 'Replace Resume' : 'Upload Resume'}
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="sr-only"
+                  disabled={resumeUploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) onUploadResume(file)
+                    event.target.value = ''
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+          <p className="mt-3 text-[10px] text-gray-400">Maximum file size: 10 MB.</p>
+        </div>
+        <div className="flex justify-end mt-5">
+          <button
+            onClick={() => onSaveProfessionalProfile(form)}
+            disabled={saving || !professionalProfileDirty}
+            className="px-5 py-2.5 rounded-xl bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 text-xs font-semibold hover:bg-gray-800 flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? 'Saving…' : 'Save Profile'}
+          </button>
+        </div>
       </Card>
 
       {/* Work record (read-only) */}
@@ -636,6 +791,7 @@ function EmployeeSettings() {
   const [toast, setToast] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [resumeUploading, setResumeUploading] = useState(false)
   const [user, setUser] = useState(() => getCurrentUser())
   const [employee, setEmployee] = useState(null)
 
@@ -655,10 +811,17 @@ function EmployeeSettings() {
       .finally(() => !cancelled && setLoading(false))
 
     // Employee record (work info) — read-only
-    fetchEmployees()
-      .then((data) => {
+    Promise.all([
+      fetchEmployees(),
+      fetchMyEmployeeProfile().catch(() => ({})),
+    ])
+      .then(([data, profile]) => {
         if (cancelled) return
-        setEmployee(resolveEmployee(Array.isArray(data) ? data : [], getCurrentUser()))
+        const record = resolveEmployee(
+          Array.isArray(data) ? data : [],
+          getCurrentUser(),
+        )
+        setEmployee({ ...record, ...profile })
       })
       .catch(() => {})
 
@@ -685,6 +848,51 @@ function EmployeeSettings() {
       showToast(err.message || 'Could not save changes')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const saveProfessionalProfile = async (form) => {
+    setSaving(true)
+    try {
+      const employeeProfile = await updateMyEmployeeProfile({
+        githubUrl: form.githubUrl,
+        linkedinUrl: form.linkedinUrl,
+        portfolioUrl: form.portfolioUrl,
+        skills: form.skills,
+      })
+      setEmployee((current) => ({ ...current, ...employeeProfile }))
+      showToast('Professional profile saved')
+    } catch (err) {
+      showToast(err.message || 'Could not save changes')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const uploadResume = async (file) => {
+    setResumeUploading(true)
+    try {
+      const profile = await uploadMyResume(file)
+      setEmployee((current) => ({ ...current, ...profile }))
+      showToast('Resume uploaded')
+    } catch (err) {
+      showToast(err.message || 'Could not upload resume')
+    } finally {
+      setResumeUploading(false)
+    }
+  }
+
+  const downloadResume = async () => {
+    try {
+      const blob = await downloadMyResume()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = employee?.resumeFileName || 'resume'
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      showToast(err.message || 'Could not download resume')
     }
   }
 
@@ -773,7 +981,11 @@ function EmployeeSettings() {
               employee={employee}
               loading={loading}
               saving={saving}
+              resumeUploading={resumeUploading}
               onSave={saveProfile}
+              onSaveProfessionalProfile={saveProfessionalProfile}
+              onUploadResume={uploadResume}
+              onDownloadResume={downloadResume}
             />
           )}
           {section === 'preferences' && <PreferencesSection />}

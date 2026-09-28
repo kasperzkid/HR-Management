@@ -34,7 +34,7 @@ import AddEmployeeModal from '../../HR-Manager/components/AddEmployeeModal'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
 import { attendanceTotals } from '../lib/attendanceUtils'
-import { fetchEmployees, fetchAttendance, fetchLeaveRequests, fetchPayrollRecords } from '../lib/employerApi'
+import { fetchEmployees, createEmployee, fetchAttendance, fetchLeaveRequests, fetchPayrollRecords } from '../lib/employerApi'
 import useRealtimeRefetch from '../hooks/useRealtimeRefetch'
 
 function Dashboard() {
@@ -77,6 +77,14 @@ function Dashboard() {
   }, [])
 
   useEffect(() => loadAll(), [loadAll])
+
+  const handleAddEmployee = async (employee) => {
+    const result = await createEmployee(employee)
+    const savedEmployee = result.employee || result
+    setEmployees((current) => [savedEmployee, ...current])
+    setIsAddModalOpen(false)
+    setToast(`Added ${savedEmployee.name} to the team`)
+  }
 
   // Live refresh: refetch when any punch/HR attendance change is pushed
   // over the socket, plus a 60s safety-net poll.
@@ -658,8 +666,7 @@ function Dashboard() {
       <AddEmployeeModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onSave={(newEmp) => setEmployees((prev) => [newEmp, ...prev])}
-        existingEmployees={employees}
+        onAdd={handleAddEmployee}
       />
     </div>
   )

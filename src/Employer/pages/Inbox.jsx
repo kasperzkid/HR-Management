@@ -301,6 +301,7 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
   const [pendingFile, setPendingFile] = useState(null)
   const [attachmentCaption, setAttachmentCaption] = useState('')
   const [newChatOpen, setNewChatOpen] = useState(false)
+  const [flagAsComplaint, setFlagAsComplaint] = useState(false)
 
   const bottomRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -386,8 +387,9 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
   const handleSend = (e) => {
     e.preventDefault()
     if (!draft.trim() || !activeContactId) return
-    sendMessage(activeContactId, draft)
+    sendMessage(activeContactId, draft, { isComplain: flagAsComplaint })
     setDraft('')
+    setFlagAsComplaint(false)
   }
 
   const handleFile = (file) => {
@@ -899,6 +901,7 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
                           </div>
                         ) : (
                           <>
+                            {msg.isComplain && <span className="mb-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-800">Employee request</span>}
                             {msg.text && <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>}
 
                             <div
@@ -944,6 +947,12 @@ function Inbox({ basePath = '/employer/inbox', canStartChat = false }) {
                 onSubmit={handleSend}
                 className="p-3 sm:p-4 border-t border-gray-100 dark:border-[#262b31] bg-white dark:bg-[#15181d] flex items-center gap-2 shrink-0"
               >
+                {!canStartChat && (
+                  <label className="flex shrink-0 items-center gap-1 text-[10px] font-semibold text-gray-500" title="Flag this message for HR follow-up">
+                    <input type="checkbox" checked={flagAsComplaint} onChange={(event) => setFlagAsComplaint(event.target.checked)} className="accent-indigo-600" />
+                    Request
+                  </label>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"

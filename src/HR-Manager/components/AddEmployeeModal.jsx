@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button } from '../../components/ui'
 import { X, UserPlus, User, Briefcase, DollarSign, CreditCard, UploadCloud, FileText, ChevronRight, ChevronLeft } from 'lucide-react'
 import { useEmployeeForm } from './add-employee-modal/useEmployeeForm'
 import {

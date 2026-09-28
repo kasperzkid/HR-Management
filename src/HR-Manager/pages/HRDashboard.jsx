@@ -9,14 +9,13 @@ import {
   TrendingUp,
 } from 'lucide-react'
 
-import { INITIAL_EMPLOYEES } from '../../Employer/data/employeeData'
-
 import {
   Badge,
   Button,
-  Card,
   DonutChart,
   PageTitle,
+  SummaryCard,
+  Table,
 } from '../../components/ui'
 
 // Uses the Vite proxy:
@@ -24,13 +23,10 @@ import {
 const API_URL = '/api/hr-manager'
 
 function HRDashboard() {
-  const employees = Array.isArray(INITIAL_EMPLOYEES)
-    ? INITIAL_EMPLOYEES
-    : []
-
+  const [employees, setEmployees] = useState([])
+  const [employeesLoading, setEmployeesLoading] = useState(true)
   const [attendanceRecords, setAttendanceRecords] = useState([])
-  const [attendanceLoading, setAttendanceLoading] =
-    useState(true)
+  const [attendanceLoading, setAttendanceLoading] = useState(true)
 
   /*
    * =========================================================
@@ -154,102 +150,97 @@ function HRDashboard() {
 
   /*
    * =========================================================
-   * LOAD ATTENDANCE FROM BACKEND API
+   * LOAD LIVE EMPLOYEES + ATTENDANCE FROM BACKEND API
    * =========================================================
+   *
+   * The dashboard must never read employee demo/mock data.
+   * Employees and attendance are loaded directly from the
+   * HR Manager API so newly-created employees appear here.
    */
 
   useEffect(() => {
     let cancelled = false
 
-    const loadAttendance = async () => {
+    const formatDate = (date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+
+    const loadDashboardData = async () => {
       try {
+        setEmployeesLoading(true)
         setAttendanceLoading(true)
 
         const today = new Date()
-
         today.setHours(0, 0, 0, 0)
 
         const startDate = new Date(today)
+        startDate.setDate(today.getDate() - 6)
 
-        startDate.setDate(
-          today.getDate() - 6
-        )
+        const [employeesResponse, attendanceResponse] =
+          await Promise.all([
+            fetch(`${API_URL}/employees`, { cache: 'no-store' }),
+            fetch(
+              `${API_URL}/attendance?startDate=${formatDate(startDate)}&endDate=${formatDate(today)}`,
+              { cache: 'no-store' },
+            ),
+          ])
 
-        const formatDate = (date) => {
-          const year = date.getFullYear()
-
-          const month = String(
-            date.getMonth() + 1
-          ).padStart(2, '0')
-
-          const day = String(
-            date.getDate()
-          ).padStart(2, '0')
-
-          return `${year}-${month}-${day}`
-        }
-
-        const startDateString =
-          formatDate(startDate)
-
-        const endDateString =
-          formatDate(today)
-
-        const response = await fetch(
-          `${API_URL}/attendance?startDate=${startDateString}&endDate=${endDateString}`
-        )
-
-        if (!response.ok) {
+        if (!employeesResponse.ok) {
           throw new Error(
-            `Failed to load attendance statistics: ${response.status}`
+            `Failed to load employees: ${employeesResponse.status}`,
           )
         }
 
-        const result =
-          await response.json()
-
-        let records = []
-
-        if (Array.isArray(result)) {
-          records = result
-        } else if (
-          Array.isArray(result?.data)
-        ) {
-          records = result.data
-        } else if (
-          Array.isArray(
-            result?.attendance
+        if (!attendanceResponse.ok) {
+          throw new Error(
+            `Failed to load attendance: ${attendanceResponse.status}`,
           )
-        ) {
-          records = result.attendance
-        } else if (
-          Array.isArray(
-            result?.records
-          )
-        ) {
-          records = result.records
         }
+
+        const employeeResult = await employeesResponse.json()
+        const attendanceResult = await attendanceResponse.json()
+
+        const employeeRows = Array.isArray(employeeResult)
+          ? employeeResult
+          : Array.isArray(employeeResult?.data)
+            ? employeeResult.data
+            : Array.isArray(employeeResult?.employees)
+              ? employeeResult.employees
+              : []
+
+        const attendanceRows = Array.isArray(attendanceResult)
+          ? attendanceResult
+          : Array.isArray(attendanceResult?.data)
+            ? attendanceResult.data
+            : Array.isArray(attendanceResult?.attendance)
+              ? attendanceResult.attendance
+              : Array.isArray(attendanceResult?.records)
+                ? attendanceResult.records
+                : []
 
         if (!cancelled) {
-          setAttendanceRecords(records)
+          setEmployees(employeeRows)
+          setAttendanceRecords(attendanceRows)
         }
       } catch (error) {
-        console.error(
-          'Failed to load attendance statistics:',
-          error
-        )
+        console.error('Failed to load HR dashboard data:', error)
 
         if (!cancelled) {
+          setEmployees([])
           setAttendanceRecords([])
         }
       } finally {
         if (!cancelled) {
+          setEmployeesLoading(false)
           setAttendanceLoading(false)
         }
       }
     }
 
-    loadAttendance()
+    loadDashboardData()
 
     return () => {
       cancelled = true
@@ -629,9 +620,9 @@ function HRDashboard() {
           <Button
             type="button"
             variant="primary"
-            size="md"
+            size="lg"
             icon={ArrowUpRight}
-            className="group relative overflow-hidden rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_8px_30px_rgba(15,23,42,0.35)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-950 hover:shadow-[0_0_0_1px_rgba(34,211,238,0.2),0_0_25px_rgba(34,211,238,0.25),0_12px_35px_rgba(15,23,42,0.45)]"
+            onClick={() => { window.location.href = '/hr-manager/reports' }}
           >
             View Reports
           </Button>
@@ -644,148 +635,19 @@ function HRDashboard() {
       ===================================================== */}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map(
-          (stat, statIndex) => {
-            const Icon = stat.icon
-
-            const avatarEmployees =
-              employees.slice(0, 4)
-
-            const avatarColors = [
-              'bg-sky-100 text-sky-700',
-              'bg-rose-100 text-rose-700',
-              'bg-emerald-100 text-emerald-700',
-              'bg-violet-100 text-violet-700',
-            ]
-
-            const iconStyles = [
-              'bg-violet-50 text-violet-600',
-              'bg-emerald-50 text-emerald-600',
-              'bg-orange-50 text-orange-500',
-              'bg-violet-50 text-violet-600',
-            ]
-
-            return (
-              <Card
-                key={stat.title}
-                variant="default"
-                className="animate-dashboard-stat group overflow-hidden rounded-[18px] border border-slate-200/70 bg-[#F3F4F6] p-4 shadow-[0_3px_14px_rgba(15,23,42,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-[#D5E3EE] hover:bg-[#E8F1F9] hover:shadow-[0_12px_30px_rgba(15,23,42,0.09)]"
-                style={{
-                  animationDelay: `${
-                    statIndex * 120
-                  }ms`,
-                }}
-              >
-                <div className="flex items-start justify-between">
-                  <p className="text-[15px] font-semibold tracking-[-0.01em] text-slate-800">
-                    {stat.title}
-                  </p>
-
-                  {/* Animated Icon */}
-                  <div
-                    className={`animate-dashboard-stat-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] transition-colors duration-300 group-hover:bg-[#D7E8F4] group-hover:text-slate-700 ${
-                      iconStyles[
-                        statIndex
-                      ]
-                    }`}
-                  >
-                    <Icon
-                      size={19}
-                      strokeWidth={1.8}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4 rounded-[13px] bg-[#E8F1F9] px-3.5 py-3 transition-colors duration-300 group-hover:bg-[#E8F1F9]">
-                  <div className="flex items-end justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium text-slate-400">
-                        People
-                      </p>
-
-                      {/* Animated Number */}
-                      <p className="animate-dashboard-stat-value mt-0.5 text-[26px] font-bold leading-none tracking-tight text-slate-950">
-                        {stat.value}
-                      </p>
-                    </div>
-
-                    {avatarEmployees.length >
-                      0 && (
-                      <div className="flex items-center pb-0.5 pl-2">
-                        {avatarEmployees.map(
-                          (
-                            employee,
-                            index
-                          ) => {
-                            const initials =
-                              employee?.initials ||
-                              employee?.name
-                                ?.split(
-                                  ' '
-                                )
-                                .map(
-                                  (
-                                    part
-                                  ) =>
-                                    part[0]
-                                )
-                                .join('')
-                                .slice(
-                                  0,
-                                  2
-                                )
-                                .toUpperCase() ||
-                              'EM'
-
-                            return (
-                              <div
-                                key={
-                                  employee?.id ||
-                                  employee?.employeeId ||
-                                  index
-                                }
-                                className={`relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white text-[8px] font-bold ${
-                                  index > 0
-                                    ? '-ml-2'
-                                    : ''
-                                } ${
-                                  avatarColors[
-                                    index %
-                                      avatarColors.length
-                                  ]
-                                }`}
-                                title={
-                                  employee?.name ||
-                                  'Employee'
-                                }
-                              >
-                                {employee?.photo ||
-                                employee?.profileImage ||
-                                employee?.avatar ? (
-                                  <img
-                                    src={
-                                      employee.photo ||
-                                      employee.profileImage ||
-                                      employee.avatar
-                                    }
-                                    alt=""
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  initials
-                                )}
-                              </div>
-                            )
-                          }
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            )
-          }
-        )}
+        {stats.map((stat, statIndex) => (
+          <SummaryCard
+            key={stat.title}
+            title={stat.title}
+            description={stat.description}
+            value={stat.value}
+            icon={stat.icon}
+            iconVariant={['blue', 'green', 'orange', 'violet'][statIndex]}
+            employees={employees}
+            showAvatars
+            animationDelay={statIndex * 120}
+          />
+        ))}
       </div>
 
       {/* =====================================================
@@ -1322,8 +1184,13 @@ function HRDashboard() {
             </a>
           </div>
 
-          {employees.length ===
-          0 ? (
+          {employeesLoading ? (
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm font-medium text-slate-500">
+                Loading employee records...
+              </p>
+            </div>
+          ) : employees.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                 <Users size={20} />
@@ -1339,9 +1206,10 @@ function HRDashboard() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px]">
+              <Table className="w-full min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-50/70">
+                    <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">#</th>
                     <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">
                       Employee
                     </th>
@@ -1409,6 +1277,7 @@ function HRDashboard() {
                             }
                             className="group border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50/70"
                           >
+                            <td className="px-4 py-4 text-xs font-semibold text-slate-400">{index + 1}</td>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
                                 <div
@@ -1484,7 +1353,7 @@ function HRDashboard() {
                       }
                     )}
                 </tbody>
-              </table>
+              </Table>
             </div>
           )}
 

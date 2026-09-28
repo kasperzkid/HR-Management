@@ -1,9 +1,46 @@
 // Geofencing for the punch clock. Employees may only check in / check out
-// while physically inside the office radius (default 50m) around the office.
+// while physically inside the office radius configured in HR Settings.
 
-export const OFFICE_LAT = 9.0245
-export const OFFICE_LNG = 38.7485
-export const PUNCH_RADIUS_METERS = 50
+let geoConfig = {
+  officeLatitude: 8.999654748138806,
+  officeLongitude: 38.820610900000005,
+  allowedRadiusMeters: 100,
+  geoRestrictionEnabled: true,
+}
+
+export function setGeoConfig(newConfig = {}) {
+  if (!newConfig) return
+  geoConfig = {
+    ...geoConfig,
+    officeLatitude:
+      newConfig.officeLatitude !== undefined ? newConfig.officeLatitude : geoConfig.officeLatitude,
+    officeLongitude:
+      newConfig.officeLongitude !== undefined ? newConfig.officeLongitude : geoConfig.officeLongitude,
+    allowedRadiusMeters:
+      Number(newConfig.allowedRadiusMeters) || geoConfig.allowedRadiusMeters,
+    geoRestrictionEnabled:
+      newConfig.geoRestrictionEnabled !== undefined
+        ? Boolean(newConfig.geoRestrictionEnabled)
+        : geoConfig.geoRestrictionEnabled,
+  }
+}
+
+export function getGeoConfig() {
+  return geoConfig
+}
+
+export function isGeoRestrictionEnabled() {
+  return geoConfig.geoRestrictionEnabled !== false
+}
+
+export function getPunchRadiusMeters() {
+  return Number(geoConfig.allowedRadiusMeters) || 100
+}
+
+// Fallback exported constants for backwards compatibility
+export const OFFICE_LAT = 8.999654748138806
+export const OFFICE_LNG = 38.820610900000005
+export const PUNCH_RADIUS_METERS = 100
 
 export function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000
@@ -43,16 +80,31 @@ export function getCurrentPosition(options = { enableHighAccuracy: true, timeout
 }
 
 export function distanceToOfficeMeters(latitude, longitude) {
-  return haversineMeters(latitude, longitude, OFFICE_LAT, OFFICE_LNG)
+  const officeLat = geoConfig.officeLatitude ?? OFFICE_LAT
+  const officeLng = geoConfig.officeLongitude ?? OFFICE_LNG
+  return haversineMeters(latitude, longitude, officeLat, officeLng)
 }
 
 export function formatDistance(meters) {
+  if (!Number.isFinite(meters)) return '0m'
   if (meters >= 1000) return `${(meters / 1000).toFixed(1)}km`
   return `${Math.round(meters)}m`
 }
 
-// Returns { latitude, longitude, distanceMeters } or throws.
+// Returns { latitude, longitude, distanceMeters, verified } or throws if geo restriction is on and device location is unavailable.
 export async function getPunchLocation() {
+  if (!isGeoRestrictionEnabled()) {
+    try {
+      if ('geolocation' in navigator) {
+        const pos = await getCurrentPosition({ timeout: 2000, enableHighAccuracy: false })
+        return { ...pos, distanceMeters: 0, verified: true }
+      }
+    } catch {
+      // Harmless when geo restriction is disabled by HR Admin
+    }
+    return { latitude: null, longitude: null, accuracy: null, distanceMeters: 0, verified: true }
+  }
+
   const pos = await getCurrentPosition()
-  return { ...pos, distanceMeters: distanceToOfficeMeters(pos.latitude, pos.longitude) }
+  return { ...pos, distanceMeters: distanceToOfficeMeters(pos.latitude, pos.longitude), verified: true }
 }

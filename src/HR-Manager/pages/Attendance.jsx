@@ -8,15 +8,14 @@ import {
   Clock3,
   Loader2,
   MapPin,
-  RefreshCw,
   Search,
-  ShieldCheck,
   UserCheck,
   UserX,
   Users,
   X,
 } from 'lucide-react'
-import { PageTitle } from '../../components/ui'
+import { PageTitle, SummaryCard, Table } from '../../components/ui'
+import TableDataTools from '../components/TableDataTools'
 
 const API_URL = 'http://localhost:4000/api/hr-manager'
 
@@ -37,7 +36,7 @@ const MONTHS = [
 
 const STATUS_STYLES = {
   PRESENT: {
-    label: 'Present',
+    label: 'P',
     className:
       'border-emerald-200 bg-emerald-50 text-emerald-700',
   },
@@ -67,13 +66,13 @@ const STATUS_STYLES = {
   },
 
   ABSENT: {
-    label: 'Absent',
+    label: 'A',
     className:
       'border-red-200 bg-red-50 text-red-700',
   },
 
   A: {
-    label: 'Absent',
+    label: 'A',
     className:
       'border-red-200 bg-red-50 text-red-700',
   },
@@ -85,7 +84,7 @@ const STATUS_STYLES = {
   },
 
   AL: {
-    label: 'Annual Leave',
+    label: 'AL',
     className:
       'border-blue-200 bg-blue-50 text-blue-700',
   },
@@ -113,6 +112,10 @@ const STATUS_STYLES = {
     className:
       'border-slate-200 bg-slate-100 text-slate-500',
   },
+}
+
+function formatLateHours(minutes) {
+  return `${(Number(minutes || 0) / 60).toFixed(2)} hours`
 }
 
 function getCurrentMonth() {
@@ -645,14 +648,11 @@ function AttendanceReviewCard({
 
         <div className="rounded-xl bg-slate-50 p-3">
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-            Late Minutes
+            Late Hours
           </p>
 
           <p className="mt-1 text-sm font-semibold text-red-600">
-            {Number(
-              record.late || 0,
-            )}{' '}
-            minutes
+            {formatLateHours(record.late)}
           </p>
         </div>
 
@@ -714,11 +714,20 @@ function Attendance() {
   const [year, setYear] =
     useState(getCurrentYear())
 
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate())
+  const [dailyView, setDailyView] = useState(true)
+
   const [search, setSearch] =
     useState('')
 
   const [department, setDepartment] =
     useState('All Departments')
+
+  const [manualDepartment, setManualDepartment] =
+    useState('')
+
+  const [attendanceStatusFilter, setAttendanceStatusFilter] =
+    useState('')
 
   const [employees, setEmployees] =
     useState([])
@@ -729,8 +738,6 @@ function Attendance() {
   const [loading, setLoading] =
     useState(true)
 
-  const [refreshing, setRefreshing] =
-    useState(false)
 
   const [apiError, setApiError] =
     useState('')
@@ -746,6 +753,35 @@ function Attendance() {
       year,
       month,
     )
+
+  // Keep the attendance calendar starting from the 23rd, then continue
+  // through the end of the month and wrap around to the 1st.
+  const attendanceDays = [
+    ...Array.from(
+      { length: daysInMonth },
+      (_, index) => ((22 + index) % daysInMonth) + 1,
+    ),
+  ]
+
+  const selectedAttendanceDay = Math.min(selectedDay, daysInMonth)
+  const selectedAttendanceDate = getDateKey(year, month, selectedAttendanceDay)
+  const displayedDays = dailyView ? [selectedAttendanceDay] : attendanceDays
+
+  function shiftAttendanceDay(offset) {
+    const date = new Date(year, month, selectedAttendanceDay + offset)
+    setYear(date.getFullYear())
+    setMonth(date.getMonth())
+    setSelectedDay(date.getDate())
+  }
+
+  function setAttendanceDate(value) {
+    if (!value) return
+    const [nextYear, nextMonth, nextDay] = value.split('-').map(Number)
+    setYear(nextYear)
+    setMonth(nextMonth - 1)
+    setSelectedDay(nextDay)
+    setDailyView(true)
+  }
 
   const monthStart =
     getDateKey(
@@ -768,8 +804,6 @@ function Attendance() {
       try {
         if (showLoader) {
           setLoading(true)
-        } else {
-          setRefreshing(true)
         }
 
         setApiError('')
@@ -844,7 +878,6 @@ function Attendance() {
         )
       } finally {
         setLoading(false)
-        setRefreshing(false)
       }
     },
     [
@@ -886,6 +919,11 @@ function Attendance() {
       ]
     }, [employees])
 
+  const todayKey =
+    new Date()
+      .toISOString()
+      .slice(0, 10)
+
   const rows = useMemo(
     () =>
       buildEmployeeRows(
@@ -920,11 +958,17 @@ function Attendance() {
               .toLowerCase()
               .includes(query)
 
+          const departmentFilter =
+            department === '__manual__'
+              ? manualDepartment.trim().toLowerCase()
+              : department
+
           const matchesDepartment =
-            department ===
-              'All Departments' ||
-            row.department ===
-              department
+            department === 'All Departments' ||
+            (department === '__manual__'
+              ? Boolean(departmentFilter) &&
+                row.department.toLowerCase().includes(departmentFilter)
+              : row.department === department)
 
           return (
             matchesSearch &&
@@ -936,6 +980,56 @@ function Attendance() {
       rows,
       search,
       department,
+      manualDepartment,
+    ])
+
+  const statusFilteredRows =
+    useMemo(() => {
+      if (!attendanceStatusFilter) {
+        return filteredRows
+      }
+
+      return filteredRows.filter((row) => {
+        const record = getRecordForDate(
+          databaseRecords,
+          row.employee,
+          selectedAttendanceDate,
+        )
+
+        const status = record?.status || ''
+
+        if (attendanceStatusFilter === 'present') {
+          return status === 'PRESENT'
+        }
+
+        if (attendanceStatusFilter === 'checked-in') {
+          return (
+            status === 'CHECKED_IN' ||
+            status === 'PENDING_CHECKOUT'
+          )
+        }
+
+        if (attendanceStatusFilter === 'pending-review') {
+          return (
+            status === 'PENDING_REVIEW' ||
+            status === 'LATE'
+          )
+        }
+
+        if (attendanceStatusFilter === 'absent') {
+          return (
+            status === 'ABSENT' ||
+            status === 'A'
+          )
+        }
+
+        return true
+      })
+    }, [
+      filteredRows,
+      databaseRecords,
+      selectedAttendanceDate,
+      attendanceStatusFilter,
     ])
 
   const summaries =
@@ -1039,11 +1133,6 @@ function Attendance() {
           ),
         )
     }, [databaseRecords])
-
-  const todayKey =
-    new Date()
-      .toISOString()
-      .slice(0, 10)
 
   const todayRecords =
     useMemo(() => {
@@ -1212,6 +1301,24 @@ function Attendance() {
     )
   }
 
+  async function importAttendance(records) {
+    let imported = 0
+    for (const record of records) {
+      const employeeId = String(record.employeeId || '').trim()
+      if (!employeeId || !record.date || !record.status) continue
+      const response = await fetch(`${API_URL}/attendance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...record, employeeId, date: String(record.date).slice(0, 10) }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(`${employeeId} ${record.date}: ${result.message || 'Import failed.'}`)
+      imported += 1
+    }
+    await loadData(false)
+    return `Imported ${imported} attendance record(s). Existing records are left unchanged.`
+  }
+
   return (
     <div className="min-h-full bg-slate-50">
       <div className="mx-auto max-w-[1800px] p-4 sm:p-6">
@@ -1221,29 +1328,6 @@ function Attendance() {
           eyebrow="Attendance Management"
           title="Track Your Team's Attendance"
           description="Attendance is automatically recorded from employee check-in and check-out activity. HR reviews exceptions only."
-          action={
-            <button
-              type="button"
-              onClick={() =>
-                loadData(false)
-              }
-              disabled={refreshing}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {refreshing ? (
-                <Loader2
-                  size={17}
-                  className="animate-spin"
-                />
-              ) : (
-                <RefreshCw
-                  size={17}
-                />
-              )}
-
-              Refresh
-            </button>
-          }
           className="mb-8"
         />
 
@@ -1287,176 +1371,36 @@ function Attendance() {
         )}
 
         {/* Today's automatic attendance */}
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-bold text-slate-900">
-                Today's Attendance
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Automatically updated from
-                employee attendance activity.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Auto refresh every 30 seconds
-            </div>
-          </div>
-
+        <div className="mb-5 bg-transparent p-0">
           {/* Dashboard employee statistics + today's attendance */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-
-            {/* Total Employees */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Total Employees
-                </p>
-
-                <Users
-                  size={18}
-                  className="text-slate-500"
-                />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {totalEmployees}
-              </p>
-
-              <p className="mt-1 text-[11px] text-slate-500">
-                Employees in the company
-              </p>
-            </div>
-
-            {/* Active Employees */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">
-                  Active Employees
-                </p>
-
-                <UserCheck
-                  size={18}
-                  className="text-emerald-600"
-                />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {activeEmployees}
-              </p>
-
-              <p className="mt-1 text-[11px] text-slate-500">
-                Currently active
-              </p>
-            </div>
-
-            {/* Total Present */}
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">
-                  Total Present
-                </p>
-
-                <UserCheck
-                  size={18}
-                  className="text-emerald-600"
-                />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {todayPresent}
-              </p>
-
-              <p className="mt-1 text-[11px] text-slate-500">
-                Completed attendance today
-              </p>
-            </div>
-
-            {/* Checked In */}
-            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
-                  Checked In
-                </p>
-
-                <Clock3
-                  size={18}
-                  className="text-blue-600"
-                />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {todayCheckedIn}
-              </p>
-
-              <p className="mt-1 text-[11px] text-slate-500">
-                Currently checked in
-              </p>
-            </div>
-
-            {/* Pending Review */}
-            <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wide text-amber-600">
-                  Pending Review
-                </p>
-
-                <AlertCircle
-                  size={18}
-                  className="text-amber-600"
-                />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {todayPending}
-              </p>
-
-              <p className="mt-1 text-[11px] text-slate-500">
-                Requires HR review
-              </p>
-            </div>
-
-            {/* Absent */}
-            <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wide text-red-600">
-                  Absent
-                </p>
-
-                <UserX
-                  size={18}
-                  className="text-red-600"
-                />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {todayAbsent}
-              </p>
-
-              <p className="mt-1 text-[11px] text-slate-500">
-                No attendance recorded
-              </p>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {[
+              { title: 'Total Employees', description: 'Employees in the company', value: totalEmployees, icon: Users, iconVariant: 'blue' },
+              { title: 'Active Employees', description: 'Currently active', value: activeEmployees, icon: UserCheck, iconVariant: 'green' },
+              { title: 'Total Present', description: 'Completed attendance today', value: todayPresent, icon: UserCheck, iconVariant: 'green', filterKey: 'present' },
+              { title: 'Checked In', description: 'Currently checked in', value: todayCheckedIn, icon: Clock3, iconVariant: 'blue', filterKey: 'checked-in' },
+              { title: 'Pending Review', description: 'Requires HR review', value: todayPending, icon: AlertCircle, iconVariant: 'amber', filterKey: 'pending-review' },
+              { title: 'Absent', description: 'No attendance recorded', value: todayAbsent, icon: UserX, iconVariant: 'red', filterKey: 'absent' },
+            ].map((stat, statIndex) => (
+              <SummaryCard
+                key={stat.title}
+                title={stat.title}
+                description={stat.description}
+                value={stat.value}
+                icon={stat.icon}
+                iconVariant={stat.iconVariant}
+                animationDelay={statIndex * 100}
+                onClick={stat.filterKey ? () => setAttendanceStatusFilter((current) => current === stat.filterKey ? '' : stat.filterKey) : undefined}
+              />
+            ))}
           </div>
         </div>
 
         {/* Late review queue */}
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/40 p-5">
+        <div className="mb-5 rounded-2xl p-5">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <AlertCircle
-                  size={19}
-                  className="text-amber-600"
-                />
-
-                <h2 className="font-bold text-slate-900">
-                  New Late Attendance Review
-                </h2>
-
                 {pendingReviews.length > 0 && (
                   <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white">
                     {pendingReviews.length}
@@ -1464,31 +1408,10 @@ function Attendance() {
                 )}
               </div>
 
-              <p className="mt-1 text-xs text-slate-500">
-                HR action is required only for
-                late attendance exceptions.
-              </p>
             </div>
           </div>
 
-          {pendingReviews.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-amber-200 bg-white/70 px-5 py-6 text-center">
-              <CheckCircle2
-                size={25}
-                className="mx-auto text-emerald-500"
-              />
-
-              <p className="mt-2 text-sm font-semibold text-slate-700">
-                No late attendance reviews
-                pending.
-              </p>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Normal completed attendance
-                does not require HR action.
-              </p>
-            </div>
-          ) : (
+          {pendingReviews.length === 0 ? null : (
             <div className="space-y-3">
               {pendingReviews.map(
                 (record) => (
@@ -1627,14 +1550,6 @@ function Attendance() {
               </button>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <ShieldCheck
-                size={15}
-                className="text-emerald-600"
-              />
-
-              Attendance is database-driven
-            </div>
           </div>
         </div>
 
@@ -1658,102 +1573,37 @@ function Attendance() {
             />
           </div>
 
-          <select
-            value={department}
-            onChange={(event) =>
-              setDepartment(
-                event.target.value,
-              )
-            }
-            className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-          >
-            {departments.map(
-              (item) => (
-                <option
-                  key={item}
-                  value={item}
-                >
+          <div className="flex gap-2">
+            <select
+              value={department}
+              onChange={(event) => {
+                setDepartment(event.target.value)
+                if (event.target.value !== '__manual__') {
+                  setManualDepartment('')
+                }
+              }}
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
+            >
+              {departments.map((item) => (
+                <option key={item} value={item}>
                   {item}
                 </option>
-              ),
-            )}
-          </select>
-        </div>
+              ))}
+              <option value="__manual__">Enter Department Manually</option>
+            </select>
 
-        {/* Monthly KPI */}
-        <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Employees
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {totals.employees}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
-              Present
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {totals.present}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-              Checked In
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {totals.checkedIn}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
-              Pending Review
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {totals.pendingReview}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-red-600">
-              Absent
-            </p>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {totals.absent}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-                Overtime
-              </p>
-
-              <Clock3
-                size={16}
-                className="text-blue-500"
+            {department === '__manual__' && (
+              <input
+                value={manualDepartment}
+                onChange={(event) => setManualDepartment(event.target.value)}
+                placeholder="Enter department..."
+                className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400"
               />
-            </div>
-
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {totals.overtime.toFixed(
-                1,
-              )}
-              h
-            </p>
+            )}
           </div>
         </div>
 
-        {/* Automatic attendance records */}
+        {/* Attendance records */}
         <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1762,18 +1612,23 @@ function Attendance() {
               </h2>
 
               <p className="mt-1 text-xs text-slate-500">
-                {MONTHS[month]}{' '}
-                {year} ·{' '}
-                {daysInMonth}{' '}
-                days
+                {dailyView ? selectedAttendanceDate : `${MONTHS[month]} ${year} · ${daysInMonth} days`}
               </p>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-
-              Automatic attendance
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button type="button" onClick={() => setDailyView((current) => !current)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                {dailyView ? 'Month view' : 'Day view'}
+              </button>
+              {dailyView && <>
+                <button type="button" onClick={() => shiftAttendanceDay(-1)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Previous day</button>
+                <input type="date" value={selectedAttendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" aria-label="Attendance date" />
+                <button type="button" onClick={() => shiftAttendanceDay(1)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Next day</button>
+                <button type="button" onClick={() => setAttendanceDate(getDateKey(getCurrentYear(), getCurrentMonth(), new Date().getDate()))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Today</button>
+              </>}
+              <TableDataTools filename={`attendance-${selectedAttendanceDate}`} rows={databaseRecords} onImport={importAttendance} />
             </div>
+
           </div>
 
           {loading ? (
@@ -1787,7 +1642,7 @@ function Attendance() {
                 Loading attendance...
               </div>
             </div>
-          ) : filteredRows.length ===
+          ) : statusFilteredRows.length ===
             0 ? (
             <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center">
               <CalendarDays
@@ -1808,7 +1663,7 @@ function Attendance() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-[1800px] border-collapse">
+              <Table className="min-w-[1800px] border-collapse">
                 <thead>
                   <tr className="bg-slate-50">
                     <th className="sticky left-0 z-20 min-w-28 border-b border-r border-slate-200 bg-slate-50 px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
@@ -1823,14 +1678,8 @@ function Attendance() {
                       Department
                     </th>
 
-                    {Array.from(
-                      {
-                        length:
-                          daysInMonth,
-                      },
-                      (_, index) => {
-                        const day =
-                          index + 1
+                    {displayedDays.map(
+                      (day) => {
 
                         const info =
                           getDayInfo(
@@ -1885,7 +1734,7 @@ function Attendance() {
                 </thead>
 
                 <tbody>
-                  {filteredRows.map(
+                  {statusFilteredRows.map(
                     (row) => {
                       const summary =
                         calculateSummary(
@@ -1933,14 +1782,8 @@ function Attendance() {
                             </span>
                           </td>
 
-                          {Array.from(
-                            {
-                              length:
-                                daysInMonth,
-                            },
-                            (_, index) => {
-                              const day =
-                                index + 1
+                          {displayedDays.map(
+                            (day) => {
 
                               const dateKey =
                                 getDateKey(
@@ -2035,16 +1878,15 @@ function Attendance() {
 
                           <td className="border-b border-slate-200 px-2 py-3 text-center text-xs font-semibold text-slate-700">
                             {
-                              summary.lateMinutes
-                            }{' '}
-                            min
+                              formatLateHours(summary.lateMinutes)
+                            }
                           </td>
                         </tr>
                       )
                     },
                   )}
                 </tbody>
-              </table>
+              </Table>
             </div>
           )}
         </div>
@@ -2078,7 +1920,7 @@ function Attendance() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-[1000px] w-full">
+              <Table className="min-w-[1000px] w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
@@ -2206,11 +2048,7 @@ function Attendance() {
                                   : 'text-slate-400'
                               }`}
                             >
-                              {Number(
-                                record.late ||
-                                  0,
-                              )}{' '}
-                              min
+                              {formatLateHours(record.late)}
                             </span>
                           </td>
                         </tr>
@@ -2218,64 +2056,11 @@ function Attendance() {
                     },
                   )}
                 </tbody>
-              </table>
+              </Table>
             </div>
           )}
         </div>
 
-        {/* System explanation */}
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <UserCheck
-                size={17}
-              />
-
-              Automatic Present
-            </div>
-
-            <p className="mt-2 text-xs leading-5 text-slate-500">
-              When an employee successfully
-              checks in and checks out on time,
-              the backend records the attendance
-              as PRESENT automatically.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <AlertCircle
-                size={17}
-              />
-
-              HR Exception Review
-            </div>
-
-            <p className="mt-2 text-xs leading-5 text-slate-500">
-              Late attendance remains pending
-              until HR accepts the exception.
-              HR does not manually mark normal
-              completed attendance.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <MapPin
-                size={17}
-              />
-
-              Location Verification
-            </div>
-
-            <p className="mt-2 text-xs leading-5 text-slate-500">
-              Employee check-in and check-out
-              location verification is performed
-              by the attendance backend and
-              displayed here for HR monitoring.
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   )
