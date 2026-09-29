@@ -37,6 +37,9 @@ prisma/verify-*.db-journal
 prisma/dev.db
 prisma/dev.db-journal
 
+# Server runtime data
+server/uploads
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
