@@ -109,7 +109,7 @@ export default function FeedbackModal({
               <div className="flex items-center justify-between gap-2">
                 <span className="text-gray-500 dark:text-gray-400">HR review</span>
                 <span
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${hrStatusClass(hrStatusLabel)}`}
+                  className={`${['Approved', 'Pending Review'].includes(hrStatusLabel) ? 'text-[10px] font-bold' : 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold'} ${hrStatusClass(hrStatusLabel)}`}
                 >
                   {hrStatusLabel}
                 </span>

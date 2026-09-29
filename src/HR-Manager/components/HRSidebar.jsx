@@ -7,8 +7,10 @@ import {
   FileBarChart,
   FileText,
   LayoutDashboard,
+  Megaphone,
   Moon,
   Settings,
+  ShieldCheck,
   Sun,
   Users,
   Wallet,
@@ -16,51 +18,97 @@ import {
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
+/**
+ * Navigation, each entry naming the permission that makes it reachable.
+ *
+ * A link is hidden when the account does not hold the permission, and the route
+ * behind it is guarded by the same permission on both the client and the
+ * server. Hiding it is a courtesy that stops somebody opening a screen full of
+ * buttons that would all fail; the 403 is what actually stops them.
+ *
+ * The dashboard aggregates every module, so it asks for any one of them rather
+ * than a permission of its own.
+ */
 const navigation = [
   {
     label: 'Dashboard',
     path: '/hr-manager',
     icon: LayoutDashboard,
     end: true,
+    anyOf: [
+      'employees.view',
+      'attendance.view',
+      'leave.view',
+      'payroll.view',
+      'payment_slips.view',
+      'reports.view',
+      'users.view',
+    ],
   },
   {
     label: 'Employees',
     path: '/hr-manager/employees',
     icon: Users,
+    permission: 'employees.view',
   },
   {
     label: 'Attendance',
     path: '/hr-manager/attendance',
     icon: CalendarDays,
+    permission: 'attendance.view',
   },
   {
     label: 'Leave Management',
     path: '/hr-manager/leave',
     icon: ClipboardList,
+    permission: 'leave.view',
   },
   {
     label: 'Payroll',
     path: '/hr-manager/payroll',
     icon: Wallet,
+    permission: 'payroll.view',
   },
   {
     label: 'Payment Slips',
     path: '/hr-manager/payslips',
     icon: FileText,
+    permission: 'payment_slips.view',
+  },
+  {
+    label: 'Company Announcements',
+    path: '/hr-manager/announcements',
+    icon: Megaphone,
+    permission: 'announcements.view',
   },
   {
     label: 'HR Reports',
     path: '/hr-manager/reports',
     icon: FileBarChart,
+    permission: 'reports.view',
   },
   {
     label: 'HR Settings',
     path: '/hr-manager/settings',
     icon: Settings,
+    permission: 'settings.view',
+  },
+  {
+    label: 'User & Role Management',
+    path: '/hr-manager/users',
+    icon: ShieldCheck,
+    anyOf: ['users.view', 'users.permissions'],
   },
 ]
 
-function HRSidebar({ mobileOpen = false, onClose }) {
+function isVisible(item, permissions) {
+  if (item.anyOf) {
+    return item.anyOf.some((permission) => permissions.includes(permission))
+  }
+  return permissions.includes(item.permission)
+}
+
+function HRSidebar({ mobileOpen = false, onClose, permissions = [] }) {
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('hr-theme') === 'dark'
   })
@@ -196,7 +244,9 @@ function HRSidebar({ mobileOpen = false, onClose }) {
           </p>
 
           <div className="space-y-1.5">
-            {navigation.map((item) => {
+            {navigation
+              .filter((item) => isVisible(item, permissions))
+              .map((item) => {
               const Icon = item.icon
 
               return (

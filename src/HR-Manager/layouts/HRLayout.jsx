@@ -1,13 +1,83 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 
 import HRSidebar from '../components/HRSidebar'
 import HRTopbar from '../components/HRTopbar'
 import { MessagingProvider } from '../../Employer/context/MessagingContext'
+import { authHeaders } from '../../lib/hrApi'
+import { getUser } from '../../lib/auth'
+import { permissionsOf } from '../../lib/rbac'
 
 function HRLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [accessPermissions, setAccessPermissions] = useState(null)
+
+  // Start from what the account carried at login so the first paint already
+  // hides nothing, then replace it with a fresh read.
+  const [permissions, setPermissions] = useState(() => permissionsOf())
+
+  const loadAccount = useCallback(async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        headers: authHeaders(),
+        cache: 'no-store',
+      })
+
+      if (!response.ok) return
+
+      const data = await response.json()
+      const next = Array.isArray(data?.user?.permissions) ? data.user.permissions : []
+
+      setPermissions(next)
+
+      // Keep the stored session in step, so a permission change survives a
+      // page reload even before /me is asked again.
+      const stored = getUser()
+      if (stored) {
+        localStorage.setItem('user', JSON.stringify({ ...stored, permissions: next }))
+      }
+    } catch {
+      // Keep whatever we already had if the account cannot be read right now.
+    }
+  }, [])
+
+  useEffect(() => {
+    loadAccount()
+  }, [loadAccount])
+
+  // A permission change made in User & Role Management fires this so the
+  // sidebar and the buttons update without a sign-out.
+  useEffect(() => {
+    const reload = () => loadAccount()
+    window.addEventListener('hr-permissions-updated', reload)
+    return () => window.removeEventListener('hr-permissions-updated', reload)
+  }, [loadAccount])
+
+  useEffect(() => {
+    let active = true
+    const loadAccess = async () => {
+      try {
+        const response = await fetch('/api/hr-manager/settings', {
+          headers: authHeaders(),
+          cache: 'no-store',
+        })
+        if (!response.ok) return
+        const settings = await response.json()
+        if (active) setAccessPermissions(settings.accessPermissions || {})
+      } catch {
+        // Keep access usable if settings are temporarily unavailable.
+      }
+    }
+    loadAccess()
+    const interval = window.setInterval(loadAccess, 5000)
+    window.addEventListener('hr-access-updated', loadAccess)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+      window.removeEventListener('hr-access-updated', loadAccess)
+    }
+  }, [])
 
   return (
     <MessagingProvider portalType="hr">
@@ -17,6 +87,7 @@ function HRLayout() {
         onClose={() => setSidebarOpen(false)}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((current) => !current)}
+        permissions={permissions}
       />
 
       <div
@@ -30,7 +101,7 @@ function HRLayout() {
         />
 
         <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <Outlet />
+          <Outlet context={{ accessPermissions, permissions, reloadAccess: loadAccount }} />
         </main>
       </div>
     </div>

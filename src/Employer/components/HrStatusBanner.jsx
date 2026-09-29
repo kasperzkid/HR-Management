@@ -66,7 +66,7 @@ export default function HrStatusBanner() {
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               {punch.hrStatus && (
                 <span
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${hrStatusClass(punch.hrStatus)}`}
+                  className={`${['Approved', 'Pending Review'].includes(punch.hrStatus) ? 'text-[10px] font-bold' : 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold'} ${hrStatusClass(punch.hrStatus)}`}
                 >
                   {punch.hrStatus}
                 </span>

@@ -87,11 +87,18 @@ export default function LuxuryPhoneInput({ value, onChange, placeholder = '968 0
   }
 
   const remaining = Math.max(0, country.maxDigits - digitText.replace(/\D/g, '').length)
+  const nationalDigits = digitText.replace(/\D/g, '')
+  const isEthiopianMobile = code === '+251' && country.maxDigits === 9
+  const detectedOperator = isEthiopianMobile
+    ? nationalDigits.startsWith('7') ? 'Safaricom' : nationalDigits.startsWith('9') ? 'Ethio Telecom' : ''
+    : ''
+  const invalidEthiopianMobile = isEthiopianMobile && nationalDigits.length === 9 && !detectedOperator
+  const phoneError = error || (invalidEthiopianMobile ? 'Wrong phone number. Use a valid Safaricom (07…) or Ethio Telecom (09…) mobile number.' : '')
 
   return (
     <div className="relative" ref={rootRef}>
       <div className={`flex rounded-lg border bg-white dark:bg-[#15181d] overflow-hidden transition-colors ${
-        error
+        phoneError
           ? 'border-rose-400 focus-within:ring-1 focus-within:ring-rose-500'
           : 'border-gray-300 dark:border-[#33383f] focus-within:border-gray-400 focus-within:ring-1 focus-within:ring-gray-300 dark:focus-within:ring-gray-600'
       }`}>
@@ -141,6 +148,7 @@ export default function LuxuryPhoneInput({ value, onChange, placeholder = '968 0
             type="tel"
             inputMode="numeric"
             placeholder={placeholder}
+            aria-invalid={Boolean(phoneError)}
             value={digitText}
             onChange={handleDigitChange}
             className="w-full pl-9 pr-9 py-2.5 text-sm font-mono font-bold text-gray-800 dark:text-gray-200 bg-transparent focus:outline-none placeholder:text-gray-400 dark:placeholder:text-gray-600"
@@ -155,7 +163,8 @@ export default function LuxuryPhoneInput({ value, onChange, placeholder = '968 0
           </span>
         </div>
       </div>
-      {error && <p className="text-[11px] text-rose-600 mt-1">{error}</p>}
+      {detectedOperator && <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-gray-400">Detected network: <span className="font-bold text-[#0092B8]">{detectedOperator}</span></p>}
+      {phoneError && <p className="text-[11px] text-rose-600 mt-1">{phoneError}</p>}
     </div>
   )
 }

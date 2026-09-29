@@ -4,15 +4,19 @@ import {
   getAddisNow,
   isWorkDay,
   isWithinCheckInWindow,
-  isCheckInOpen,
   isCheckOutTime,
+  isWithinCheckOutWindow,
   remainingLabel,
   getPunchState,
   subscribePunch,
   applyPunchStatus,
   getWorkStartDisplay,
+  getWorkStartMinutes,
   getCheckInCutoffDisplay,
+  getCheckOutEndMinutes,
+  getWorkEndMinutes,
   getWorkEndDisplay,
+  getCheckOutEndDisplay,
 } from '../lib/workTime'
 import {
   fetchPunchStatusApi,
@@ -89,12 +93,11 @@ export default function PunchWidget() {
 
   const isWeekend = !isWorkDay(day)
   const inWindow = isWithinCheckInWindow(minutes)
-  const checkInOpen = isCheckInOpen(minutes)
-  const atCheckOut = isCheckOutTime(minutes)
+  const withinCheckOutWindow = isWithinCheckOutWindow(minutes)
   const onLeave = punch.onLeave
 
-  const canCheckIn = !onLeave && !isWeekend && checkInOpen && !checkedIn && !checkedOut
-  const canCheckOut = !onLeave && !isWeekend && atCheckOut && checkedIn && !checkedOut
+  const canCheckIn = !onLeave && !isWeekend && inWindow && !checkedIn && !checkedOut
+  const canCheckOut = !onLeave && !isWeekend && withinCheckOutWindow && checkedIn && !checkedOut
 
   async function handleCheckIn() {
     setBusy(true)
@@ -186,8 +189,10 @@ export default function PunchWidget() {
             title={
               isWeekend
                 ? 'Check-in is disabled on weekends (Sat/Sun)'
-                : !checkInOpen
+                : minutes < getWorkStartMinutes()
                 ? `Check-in opens at ${getWorkStartDisplay()} (UTC+3)`
+                : !inWindow
+                ? `Check-in window closed at ${getCheckInCutoffDisplay()} (UTC+3)`
                 : inWindow
                 ? `Check in — Present window ends at ${getCheckInCutoffDisplay()}`
                 : 'Late check-in — attendance will be marked Absent (A) and late time recorded'
@@ -214,9 +219,13 @@ export default function PunchWidget() {
             title={
               !checkedIn
                 ? 'Check in first'
-                : atCheckOut
+                : minutes > getCheckOutEndMinutes()
+                ? `Check-out window closed at ${getCheckOutEndDisplay()} (UTC+3)`
+                : withinCheckOutWindow
                 ? 'Check out'
-                : `Check-out unlocks at ${getWorkEndDisplay()} — ${remainingLabel(minutes)} remaining`
+                : minutes < getWorkEndMinutes()
+                ? `Check-out unlocks at ${getWorkEndDisplay()} — ${remainingLabel(minutes)} remaining`
+                : `Check-out window closed at ${getCheckOutEndDisplay()} (UTC+3)`
             }
             className={`${base} ${
               canCheckOut

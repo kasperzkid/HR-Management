@@ -5,6 +5,7 @@ import { lookupTax, isExempt } from '../../lib/payroll'
 import { generateNextId } from './constants'
 import { formatAge } from './formSections'
 import { uploadEmployeeFile } from '../../../lib/hrApi'
+import { withEmailFromName } from '../../../lib/employeeEmail'
 
 // Compute DOB validity for audit warnings (DOB is optional, but implausible values get flagged)
 export function dobStatus(dateStr) {
@@ -25,11 +26,11 @@ export function dobStatus(dateStr) {
   return null
 }
 
-// Valid Ethiopian mobile prefix list (09X / +2519X)
+// Valid Ethiopian mobile prefixes: Safaricom (07X) and Ethio Telecom (09X).
 const VALID_MOBILE_PREFIXES = [
+  '70', '71', '72', '73', '74', '75', '76', '77', '78', '79',
   '90', '91', '92', '93', '94', '95', '96', '97', '98', '99',
 ]
-const VALID_LANDLINE_PREFIXES = ['11', '22', '33', '34', '44', '46', '47', '57', '58']
 
 const PHONE_COUNTRIES = [
   { code: '+251', maxDigits: 9 },
@@ -70,7 +71,7 @@ async function uploadOrReuse(file) {
   return uploadEmployeeFile(file)
 }
 
-// Validate a phone number (may carry a country code from the dropdown).
+// Validate a phone number (may carry a country code).
 // Returns null if valid (or empty), or an error message string otherwise.
 export function validatePhone(raw) {
   if (!raw || !raw.trim()) return null
@@ -88,7 +89,6 @@ export function validatePhone(raw) {
     if (country.code === '+251') {
       const prefix = national.slice(0, 2)
       if (VALID_MOBILE_PREFIXES.includes(prefix)) return null
-      if (VALID_LANDLINE_PREFIXES.includes(prefix.slice(0, 2))) return null
       return `"0${prefix}..." is not a valid Ethiopian area/mobile prefix`
     }
     return null
@@ -103,7 +103,6 @@ export function validatePhone(raw) {
 
   const prefix = national.slice(1, 3)
   if (VALID_MOBILE_PREFIXES.includes(prefix)) return null
-  if (VALID_LANDLINE_PREFIXES.includes(prefix)) return null
   return `"0${prefix}..." is not a valid Ethiopian area/mobile prefix`
 }
 
@@ -324,6 +323,19 @@ export function useEmployeeForm({ isOpen, onClose, onSave, existingEmployees, ed
       if (field === 'employmentType' && val === 'Permanent' && updated.employmentStatus === 'Active') {
         updated.exitDate = ''
       }
+
+      // The email field follows the name while an employee is being added, so
+      // the HR Admin is not transcribing an address by hand.
+      //
+      // Not while editing: that address is someone's existing login, and a name
+      // correction must never silently move it. And inside withEmailFromName, a
+      // field the HR Admin has typed their own address into stops following the
+      // name, so their choice survives. The employee ID is watched too, because
+      // it is the fallback for a name with no Latin characters.
+      if (!editingEmployee && (field === 'name' || field === 'employeeId')) {
+        return withEmailFromName(updated, updated.name)
+      }
+
       return updated
     })
     if (errors[field]) {
@@ -463,6 +475,13 @@ export function useEmployeeForm({ isOpen, onClose, onSave, existingEmployees, ed
     if (!formData.employeeId.trim()) newErrors.employeeId = 'Employee ID is required'
     if (isDuplicateId) newErrors.employeeId = 'Employee ID is already in use'
     if (!formData.name.trim()) newErrors.name = 'Full Name is required'
+    // The email only has to be there. It is the employee's login address, and a
+    // company address such as employee@yanoltech.com is perfectly normal here,
+    // so demanding a real external mailbox would be wrong. The server requires
+    // the same thing - a non-empty value - so the two never disagree.
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email address is required'
+    }
     if (!formData.jobTitle.trim()) newErrors.jobTitle = 'Job Title is required'
     if (!formData.department) newErrors.department = 'Department is required'
     if (!basicSalaryNum || basicSalaryNum <= 0) newErrors.basicSalary = 'Basic salary must be greater than 0'

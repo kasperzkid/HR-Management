@@ -576,7 +576,6 @@ function Dashboard() {
       <LuxuryDataTable
         title="My Recent Leave Requests"
         subtitle={`Recent time-off applications submitted by ${currentEmployee.name}`}
-        countBadge={`${myLeaveRequests.length} records`}
         data={myLeaveRequests}
         searchable={true}
         searchPlaceholder="Search my requests..."
@@ -630,12 +629,12 @@ function Dashboard() {
             align: 'center',
             render: (r) => (
               <span
-                className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                className={`text-[10px] font-bold ${
                   r.approvalStatus === 'Approved'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60'
+                    ? 'text-emerald-700 dark:text-emerald-400'
                     : r.approvalStatus === 'Pending'
-                    ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60'
-                    : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60'
+                    ? 'text-amber-700 dark:text-amber-400'
+                    : 'text-rose-700 dark:text-rose-400'
                 }`}
               >
                 {r.approvalStatus}

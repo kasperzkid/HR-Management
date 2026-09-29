@@ -73,6 +73,10 @@ export function getWorkEndMinutes() {
   return parseTimeToMinutes(attendanceConfig.checkOutStartTime, 17 * 60 + 30)
 }
 
+export function getCheckOutEndMinutes() {
+  return parseTimeToMinutes(attendanceConfig.checkOutEndTime, 19 * 60)
+}
+
 export function getWorkStartDisplay() {
   return formatMinutesToDisplay(getWorkStartMinutes())
 }
@@ -83,6 +87,10 @@ export function getCheckInCutoffDisplay() {
 
 export function getWorkEndDisplay() {
   return formatMinutesToDisplay(getWorkEndMinutes())
+}
+
+export function getCheckOutEndDisplay() {
+  return formatMinutesToDisplay(getCheckOutEndMinutes())
 }
 
 // @deprecated — use getWorkStartMinutes() instead (reads HR admin config)
@@ -138,6 +146,10 @@ export function getLateMinutes(minutes) {
 
 export function isCheckOutTime(minutes) {
   return minutes >= getWorkEndMinutes()
+}
+
+export function isWithinCheckOutWindow(minutes) {
+  return minutes >= getWorkEndMinutes() && minutes <= getCheckOutEndMinutes()
 }
 
 export function remainingLabel(minutes) {

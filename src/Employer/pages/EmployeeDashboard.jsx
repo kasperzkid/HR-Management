@@ -454,10 +454,10 @@ function EmployeeDashboard() {
                   <td className="px-4 py-3 text-right tabular-nums font-bold text-gray-950">{formatETB(h.net)}</td>
                   <td className="px-4 py-3">
                     <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      className={`inline-flex items-center gap-1 text-[10px] font-semibold ${
                         h.status === 'Paid'
-                          ? 'bg-gray-950 text-white'
-                          : 'bg-gray-100 text-gray-600'
+                          ? 'text-gray-950'
+                          : 'text-gray-600'
                       }`}
                     >
                       {h.status}

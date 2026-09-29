@@ -112,6 +112,7 @@ function professionalProfile(employee) {
     linkedinUrl: employee.linkedinUrl,
     portfolioUrl: employee.portfolioUrl,
     skills: employee.skills,
+    avatar: employee.avatar,
     resumeFileName: employee.resumeFileName,
     resumeFileSize: employee.resumeFileSize,
   }
@@ -169,9 +170,14 @@ export async function updateMyProfile(req, res) {
       return res.status(400).json({ message: 'Skills must be 4000 characters or fewer' })
     }
 
+    const avatar = data.avatar === undefined ? employee.avatar : String(data.avatar || '')
+    if (avatar.length > 3 * 1024 * 1024 || (avatar && !/^data:image\/(png|jpeg|webp);base64,/i.test(avatar))) {
+      return res.status(400).json({ message: 'Profile photo must be a PNG, JPG, or WebP image no larger than 2 MB.' })
+    }
+
     const updatedEmployee = await prisma.employee.update({
       where: { id: employee.id },
-      data: { ...profile, skills },
+      data: { ...profile, skills, avatar },
     })
 
     return res.json(professionalProfile(updatedEmployee))
@@ -521,8 +527,8 @@ function getCheckInTiming(time, configuration = {}) {
   }
 
   return {
-    allowed: true,
-    status: 'ABSENT',
+    allowed: false,
+    status: 'TOO_LATE',
     lateMinutes:
       minutes -
       cutoffMinutes,
@@ -703,6 +709,15 @@ export async function checkIn(req, res) {
             configuration.checkInStartTime || '08:00',
           checkInEnd:
             configuration.requiredCheckInTime || '08:30',
+        })
+      }
+
+      if (timing.status === 'TOO_LATE') {
+        const cutoffDisplay = formatTimeDisplay(configuration.requiredCheckInTime || '08:30')
+        return res.status(403).json({
+          message: `Check-in window closed at ${cutoffDisplay}.`,
+          code: 'CHECK_IN_WINDOW_CLOSED',
+          checkInEnd: configuration.requiredCheckInTime || '08:30',
         })
       }
 
@@ -925,6 +940,9 @@ export async function checkOut(req, res) {
       timeToMinutes(configuration.checkOutStartTime || '17:30') ??
       (17 * 60 + 30)
 
+    const checkoutEndMinutes =
+      timeToMinutes(configuration.checkOutEndTime || '19:00') ?? (19 * 60)
+
     if (
       checkoutMinutes === null
     ) {
@@ -948,6 +966,15 @@ export async function checkOut(req, res) {
           'CHECK_OUT_NOT_OPEN',
         checkOutTime:
           configuration.checkOutStartTime || '17:30',
+      })
+    }
+
+    if (checkoutMinutes > checkoutEndMinutes) {
+      const checkoutEndDisplay = formatTimeDisplay(configuration.checkOutEndTime || '19:00')
+      return res.status(403).json({
+        message: `Check-out window closed at ${checkoutEndDisplay}.`,
+        code: 'CHECK_OUT_WINDOW_CLOSED',
+        checkOutEndTime: configuration.checkOutEndTime || '19:00',
       })
     }
 

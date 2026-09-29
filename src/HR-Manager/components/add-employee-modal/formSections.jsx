@@ -117,19 +117,25 @@ export function PersonalSection({ formData, errors, isDuplicateId, hasIdentity, 
           />
         </div>
 
-        {/* Email */}
+        {/* Email - the employee's login address. It is filled in from the name
+            while the form is being filled out, and stays editable afterwards.
+            It does not have to be a real or external mailbox: a company
+            address such as employee@yanoltech.com is the normal case. */}
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="font-bold text-gray-800 dark:text-gray-200">Email</label>
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">Optional</span>
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">From the name</span>
           </div>
           <input
             type="email"
-            placeholder="employee@yanol.com"
+            placeholder="employee@yanoltech.com"
             value={formData.email}
             onChange={(e) => handleChange('email', e.target.value)}
-            className={inputNormal}
+            className={`${inputBase} ${
+              errors.email ? 'border-rose-400 focus:ring-rose-500' : 'border-gray-300 dark:border-[#33383f] focus:ring-gray-900'
+            }`}
           />
+          {errors.email && <p className="text-[11px] text-rose-600 mt-1">{errors.email}</p>}
         </div>
       </div>
 

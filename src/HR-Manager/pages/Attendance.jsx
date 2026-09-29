@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { PageTitle, SummaryCard, Table } from '../../components/ui'
 import TableDataTools from '../components/TableDataTools'
+import { useAccess } from '../../lib/rbac'
 
 const API_URL = 'http://localhost:4000/api/hr-manager'
 
@@ -115,7 +116,8 @@ const STATUS_STYLES = {
 }
 
 function formatLateHours(minutes) {
-  return `${(Number(minutes || 0) / 60).toFixed(2)} hours`
+  const value = Math.max(0, Number(minutes) || 0) / 60
+  return `${value.toFixed(2)} ${value === 1 ? 'hour' : 'hours'}`
 }
 
 function getCurrentMonth() {
@@ -488,7 +490,7 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${style.className}`}
+      className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wide ${String(style.className || '').replace(/\bbg-[^\s]+|\bborder(?:-[^\s]+)?/g, '')}`}
     >
       {style.label}
     </span>
@@ -708,6 +710,9 @@ function AttendanceReviewCard({
 }
 
 function Attendance() {
+  const { can } = useAccess()
+  const canManage = can('attendance.manage')
+
   const [month, setMonth] =
     useState(getCurrentMonth())
 
@@ -719,6 +724,16 @@ function Attendance() {
 
   const [search, setSearch] =
     useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [searchHintIndex, setSearchHintIndex] = useState(0)
+  const searchHints = ['Search employee name…', 'Search employee ID…', 'Search by department…']
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setSearchHintIndex((index) => (index + 1) % searchHints.length)
+    }, 2600)
+    return () => window.clearInterval(interval)
+  }, [])
 
   const [department, setDepartment] =
     useState('All Departments')
@@ -1411,7 +1426,7 @@ function Attendance() {
             </div>
           </div>
 
-          {pendingReviews.length === 0 ? null : (
+          {pendingReviews.length === 0 || !canManage ? null : (
             <div className="space-y-3">
               {pendingReviews.map(
                 (record) => (
@@ -1434,125 +1449,6 @@ function Attendance() {
           )}
         </div>
 
-        {/* Month / Year controls */}
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-wrap items-end gap-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Month
-                </label>
-
-                <select
-                  value={month}
-                  onChange={(event) =>
-                    setMonth(
-                      Number(
-                        event.target
-                          .value,
-                      ),
-                    )
-                  }
-                  className="h-11 min-w-40 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  {MONTHS.map(
-                    (
-                      monthName,
-                      index,
-                    ) => (
-                      <option
-                        key={
-                          monthName
-                        }
-                        value={
-                          index
-                        }
-                      >
-                        {
-                          monthName
-                        }
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Year
-                </label>
-
-                <select
-                  value={year}
-                  onChange={(event) =>
-                    setYear(
-                      Number(
-                        event.target
-                          .value,
-                      ),
-                    )
-                  }
-                  className="h-11 min-w-28 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-                >
-                  {Array.from(
-                    {
-                      length: 11,
-                    },
-                    (_, index) =>
-                      getCurrentYear() -
-                      5 +
-                      index,
-                  ).map(
-                    (
-                      yearValue,
-                    ) => (
-                      <option
-                        key={
-                          yearValue
-                        }
-                        value={
-                          yearValue
-                        }
-                      >
-                        {
-                          yearValue
-                        }
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={
-                  previousMonth
-                }
-                className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                title="Previous month"
-              >
-                <ChevronLeft
-                  size={18}
-                />
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  nextMonth
-                }
-                className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                title="Next month"
-              >
-                <ChevronRight
-                  size={18}
-                />
-              </button>
-            </div>
-
-          </div>
-        </div>
-
         {/* Filters */}
         <div className="mb-5 grid gap-3 md:grid-cols-[1fr_220px]">
           <div className="relative">
@@ -1561,6 +1457,11 @@ function Attendance() {
               className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
             />
 
+            {!search && !searchFocused && (
+              <span key={searchHintIndex} aria-hidden="true" className="pointer-events-none absolute left-10 top-1/2 -translate-y-1/2 animate-in fade-in slide-in-from-bottom-1 duration-500 text-sm text-slate-400">
+                {searchHints[searchHintIndex]}
+              </span>
+            )}
             <input
               value={search}
               onChange={(event) =>
@@ -1568,7 +1469,10 @@ function Attendance() {
                   event.target.value,
                 )
               }
-              placeholder="Search employee ID or name..."
+              aria-label="Search employees by name, ID, or department"
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              placeholder=""
               className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-slate-400"
             />
           </div>
@@ -1605,24 +1509,42 @@ function Attendance() {
 
         {/* Attendance records */}
         <div className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-bold text-slate-900">
+          <div className="border-b border-slate-200 px-4 py-5 sm:px-5">
+            <div className="mb-4 text-center">
+              <h2 className="text-2xl font-bold tracking-tight text-[#0092B8] sm:text-3xl">
                 Attendance Records
               </h2>
 
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1.5 text-sm font-semibold text-[#0092B8] sm:text-base">
                 {dailyView ? selectedAttendanceDate : `${MONTHS[month]} ${year} · ${daysInMonth} days`}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
+              <select
+                aria-label="Attendance month"
+                value={month}
+                onChange={(event) => setMonth(Number(event.target.value))}
+                className="h-9 min-w-32 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700"
+              >
+                {MONTHS.map((monthName, index) => <option key={monthName} value={index}>{monthName}</option>)}
+              </select>
+              <select
+                aria-label="Attendance year"
+                value={year}
+                onChange={(event) => setYear(Number(event.target.value))}
+                className="h-9 min-w-20 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700"
+              >
+                {Array.from({ length: 11 }, (_, index) => getCurrentYear() - 5 + index).map((yearValue) => <option key={yearValue} value={yearValue}>{yearValue}</option>)}
+              </select>
+              <button type="button" onClick={previousMonth} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="Previous month" aria-label="Previous month"><ChevronLeft size={16} /></button>
+              <button type="button" onClick={nextMonth} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="Next month" aria-label="Next month"><ChevronRight size={16} /></button>
               <button type="button" onClick={() => setDailyView((current) => !current)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
                 {dailyView ? 'Month view' : 'Day view'}
               </button>
               {dailyView && <>
                 <button type="button" onClick={() => shiftAttendanceDay(-1)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Previous day</button>
-                <input type="date" value={selectedAttendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs" aria-label="Attendance date" />
+                <input type="date" value={selectedAttendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs" aria-label="Filter attendance by date" />
                 <button type="button" onClick={() => shiftAttendanceDay(1)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Next day</button>
                 <button type="button" onClick={() => setAttendanceDate(getDateKey(getCurrentYear(), getCurrentMonth(), new Date().getDate()))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Today</button>
               </>}
@@ -1892,17 +1814,11 @@ function Attendance() {
         </div>
 
         {/* Today's detailed records */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="font-bold text-slate-900">
+            <h2 className="text-center font-bold text-[#0092B8]">
               Today's Check In / Check Out
             </h2>
-
-            <p className="mt-1 text-xs text-slate-500">
-              Actual attendance times recorded
-              automatically by the employee
-              attendance system.
-            </p>
           </div>
 
           {todayRecords.length ===

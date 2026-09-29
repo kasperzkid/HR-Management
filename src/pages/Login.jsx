@@ -25,10 +25,12 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
   const [error, setError] = useState("");
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotMessage, setForgotMessage] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  // True when the server reported a failure, so a broken mail server is shown
+  // as an error rather than styled like a delivered link.
+  const [forgotError, setForgotError] = useState(false);
   const [typedText, setTypedText] = useState("");
 
   useEffect(() => {
@@ -133,23 +135,22 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
     }
   }
 
+  // Requests a single-use reset link. The new password is deliberately NOT
+  // collected here: it used to be, which let anyone who knew an email address
+  // overwrite that account's password without ever proving they owned it. The
+  // password is now only ever set from the emailed link, which carries a
+  // single-use, time-limited token.
   const handleForgotPassword = async (event) => {
     event.preventDefault();
     setForgotMessage("");
     setError("");
+    setForgotError(false);
 
-    if (!forgotEmail.trim() || !newPassword || !confirmPassword) {
-      setForgotMessage("Enter your email, new password, and confirm the new password.");
-      return;
-    }
+    const email = forgotEmail.trim();
 
-    if (newPassword.length < 8) {
-      setForgotMessage("New password must be at least 8 characters.");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setForgotMessage("The new passwords do not match.");
+    if (!email) {
+      setForgotMessage("Enter your email address.");
+      setForgotError(true);
       return;
     }
 
@@ -159,25 +160,25 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
       const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: forgotEmail.trim(),
-          newPassword,
-          role: isHRPortal ? "admin" : "employee",
-        }),
+        body: JSON.stringify({ email }),
       });
 
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data?.message || "Unable to reset the password.");
+        // The server is explicit when it could not send: either its email
+        // settings are incomplete, or delivery itself failed. Neither is
+        // dressed up as a successful send.
+        throw new Error(data?.message || "Unable to send the reset email.");
       }
 
-      setForgotMessage("Password changed successfully. You can now sign in with your new password.");
-      setForm((current) => ({ ...current, email: forgotEmail.trim(), password: "" }));
-      setNewPassword("");
-      setConfirmPassword("");
+      setForgotSent(true);
+      setForgotMessage(data?.message || "If that email is registered, a reset link is on its way.");
+      setForm((current) => ({ ...current, email, password: "" }));
     } catch (err) {
-      setForgotMessage(err?.message || "Unable to reset the password.");
+      setForgotSent(false);
+      setForgotError(true);
+      setForgotMessage(err?.message || "Unable to send the reset email.");
     } finally {
       setForgotLoading(false);
     }
@@ -197,7 +198,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
         .ref-login-page {
           width: 100vw;
           height: 100vh;
-          min-height: 700px;
+          min-height: 760px;
           overflow: hidden;
           position: relative;
           font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -264,10 +265,10 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
         .ref-login-card {
           position: absolute;
           z-index: 15;
-          left: 19.6%;
-          top: 60px;
-          width: 450px;
-          height: 585px;
+          left: calc(57.4% - 662px);
+          top: 96px;
+          width: 520px;
+          height: 650px;
           padding: 25px 32px 22px;
           border-radius: 21px;
           background: rgba(255,255,255,.985);
@@ -480,45 +481,6 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
           flex: 0 0 auto;
         }
 
-        .ref-divider {
-          display: flex;
-          align-items: center;
-          gap: 13px;
-          margin: 21px 0;
-          color: #8395a5;
-          font-size: 12px;
-        }
-
-        .ref-divider::before,
-        .ref-divider::after {
-          content: "";
-          height: 1px;
-          flex: 1;
-          background: #e1e7eb;
-        }
-
-        .ref-google {
-          width: 100%;
-          height: 55px;
-          border: 1px solid #dce4e9;
-          border-radius: 12px;
-          background: #fff;
-          color: #4d6174;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 11px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-        }
-
-        .ref-google-letter {
-          color: #4285f4;
-          font-size: 20px;
-          font-weight: 900;
-        }
-
         .ref-bottom {
           margin-top: 25px;
           text-align: center;
@@ -537,7 +499,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
           position: absolute;
           z-index: 8;
           left: calc(57.4% - 50px);
-          top: calc(8.5% + 10px);
+          top: calc(8.5% + 60px);
           color: #fff;
           width: 530px;
         }
@@ -588,14 +550,14 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
           user-select: none;
         }
 
-        @media (max-width: 1250px) {
-          .ref-login-card { left: 5%; }
-          .ref-right-copy { left: 58%; width: 430px; }
+        @media (max-width: 1320px) {
+          .ref-login-card { left: calc(58% - 612px); }
+          .ref-right-copy { left: 58%; width: 380px; }
           .ref-right-title { font-size: 49px; }
           .ref-illustration { right: 0; width: 470px; height: 395px; }
         }
 
-        @media (max-width: 980px) {
+        @media (max-width: 1100px) {
           .ref-login-page {
             min-height: 100vh;
             height: auto;
@@ -608,7 +570,7 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
             position: relative;
             left: auto;
             top: auto;
-            width: min(450px, 100%);
+            width: min(520px, 100%);
             height: auto;
             margin: 0 auto;
           }
@@ -702,18 +664,6 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
                 />
                 <span>Remember me</span>
               </label>
-
-              <button
-                type="button"
-                className="ref-forgot"
-                onClick={() => {
-                  setShowForgot(true);
-                  setForgotEmail(form.email);
-                  setForgotMessage("");
-                }}
-              >
-                Forgot password?
-              </button>
             </div>
 
             <button
@@ -744,13 +694,6 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
             </button>
           </form>
 
-          <div className="ref-divider">OR</div>
-
-          <button type="button" className="ref-google">
-            <span className="ref-google-letter">G</span>
-            <span>Continue with Google</span>
-          </button>
-
           <div className="ref-bottom">
             Don't have an account?{" "}
             <button
@@ -773,37 +716,41 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
                 >
                   ×
                 </button>
-                <h3>Change your password</h3>
-                <p>Enter your account email and choose a new password.</p>
+                <h3>Reset your password</h3>
+                <p>
+                  Enter your account email and we will send you a secure link to
+                  choose a new password.
+                </p>
 
                 <form onSubmit={handleForgotPassword} className="ref-reset-form">
                   <input
                     className="ref-reset-input"
                     type="email"
+                    required
                     value={forgotEmail}
-                    onChange={(event) => setForgotEmail(event.target.value)}
+                    onChange={(event) => {
+                      setForgotEmail(event.target.value);
+                      if (forgotSent) setForgotSent(false);
+                      if (forgotError) setForgotError(false);
+                    }}
                     placeholder="Email address"
                     autoComplete="email"
                   />
-                  <input
-                    className="ref-reset-input"
-                    type="password"
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                    placeholder="New password"
-                    autoComplete="new-password"
-                  />
-                  <input
-                    className="ref-reset-input"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    placeholder="Confirm new password"
-                    autoComplete="new-password"
-                  />
-                  {forgotMessage && <div className="ref-reset-message">{forgotMessage}</div>}
+                  {forgotMessage && (
+                    <div
+                      className={`ref-reset-message${forgotError ? " ref-reset-message--error" : ""}`}
+                    >
+                      {forgotMessage}
+                    </div>
+                  )}
+                  {forgotSent && (
+                    <p className="ref-reset-hint">
+                      The link expires in 30 minutes and can only be used once.
+                      Open it on the device where you are signing in.
+                    </p>
+                  )}
                   <button type="submit" className="ref-reset-submit" disabled={forgotLoading}>
-                    {forgotLoading ? "Changing password..." : "Change Password"}
+                    {forgotLoading ? "Sending link..." : "Send reset link"}
                   </button>
                 </form>
               </div>
@@ -919,6 +866,11 @@ export default function Login({ onLogin, onRegister, onForgotPassword }) {
         .ref-reset-input { width: 100%; height: 48px; border: 1px solid #d6e0e7; border-radius: 10px; padding: 0 13px; outline: none; color: #243b50; }
         .ref-reset-input:focus { border-color: #13a0b9; box-shadow: 0 0 0 3px rgba(19,160,185,.10); }
         .ref-reset-message { padding: 10px 12px; border-radius: 9px; background: #eef9f5; color: #18785b; font-size: 12px; line-height: 1.45; }
+        /* A configuration or delivery failure is shown in a different colour
+           from a success, so a broken mail server is never mistaken for an
+           email that is on its way. */
+        .ref-reset-message.ref-reset-message--error { background: #fdeeee; color: #a12c2c; }
+        .ref-reset-hint { margin: 0; color: #64798c; font-size: 11px; line-height: 1.5; }
         .ref-reset-submit { height: 50px; border: 0; border-radius: 10px; background: #0d91aa; color: #fff; font-weight: 700; cursor: pointer; }
         .ref-reset-submit:disabled { opacity: .65; cursor: not-allowed; }
 

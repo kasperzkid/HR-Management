@@ -390,7 +390,7 @@ export default function DailyLogTable({
                         </div>
                       </div>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${getStatusBadge(
+                        className={`text-[10px] font-bold shrink-0 ${getStatusBadge(
                           log.status
                         )}`}
                       >
@@ -593,7 +593,7 @@ export default function DailyLogTable({
 
                       {/* Late hours */}
                       <td className="py-3 px-3.5 text-right font-mono tabular-nums">
-                        {log.late > 0 ? (
+                        {Number(log.late) > 0 ? (
                           <span className="text-amber-700 font-bold">{(Number(log.late) / 60).toFixed(2)}h</span>
                         ) : (
                           <span className="text-slate-400">0</span>
@@ -603,7 +603,7 @@ export default function DailyLogTable({
                       {/* Status Badge */}
                       <td className="py-3 px-3.5 text-center">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadge(
+                          className={`inline-flex items-center text-[10px] font-bold ${getStatusBadge(
                             log.status
                           )}`}
                         >

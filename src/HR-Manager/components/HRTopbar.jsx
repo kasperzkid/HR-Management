@@ -14,7 +14,12 @@ import { useNavigate } from 'react-router-dom'
 import { useMessagingOptional } from '../../Employer/context/messagingStore'
 import HRAssistant from './HRAssistant'
 
-const rows = (data) => Array.isArray(data) ? data : data?.employees || data?.requests || data?.records || []
+const rows = (data) => {
+  if (Array.isArray(data)) return data
+  const candidates = [data?.employees, data?.leaveRequests, data?.requests, data?.records, data?.data]
+  const list = candidates.find(Array.isArray)
+  return list || (data?.data && typeof data.data === 'object' ? rows(data.data) : [])
+}
 const currentMonth = () => {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -36,11 +41,9 @@ function HRTopbar() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
-  const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const profileRef = useRef(null)
   const notificationsRef = useRef(null)
   const searchInputRef = useRef(null)
-  const searchPlaceholders = ['Search employees by name…', 'Search by employee ID…', 'Search by department…']
 
   useEffect(() => {
     let cancelled = false
@@ -62,7 +65,16 @@ function HRTopbar() {
         const payroll = rows(payrollData)
         const updates = []
         if (!cancelled) {
-          setPendingRequests(requests.filter((request) => request.approvalStatus === 'Pending').sort((a, b) => String(b.createdAt || b.requestDate || '').localeCompare(String(a.createdAt || a.requestDate || ''))))
+          const pending = requests.filter((request) => String(request.approvalStatus || 'Pending').toLowerCase() === 'pending').sort((a, b) => String(b.createdAt || b.requestDate || '').localeCompare(String(a.createdAt || a.requestDate || '')))
+          setPendingRequests(pending)
+          pending.forEach((request) => updates.push({
+            id: `leave-request-${request.id}`,
+            type: 'leave-request',
+            title: 'New employee leave request',
+            message: `${request.employeeName || 'Employee'} · ${request.leaveType || 'Leave'} · ${request.days || 0} day(s)`,
+            action: 'Review request',
+            href: '/hr-manager/leave#leave-review-inbox',
+          }))
           const now = Date.now()
           requests.filter((request) => request.approvalStatus === 'Approved').forEach((request) => {
             const decisionDate = new Date(request.approvedDate || request.updatedAt || request.createdAt || 0).getTime()
@@ -109,12 +121,22 @@ function HRTopbar() {
       }
     }
     loadNotifications()
-    const interval = window.setInterval(loadNotifications, 60000)
+    const interval = window.setInterval(loadNotifications, 15000)
     window.addEventListener('hr-leave-updated', loadNotifications)
+    window.addEventListener('hr-leave-request-created', loadNotifications)
+    const handleStorage = (event) => {
+      if (event.key === 'hr-leave-request-created') loadNotifications()
+    }
+    window.addEventListener('storage', handleStorage)
+    const channel = 'BroadcastChannel' in window ? new BroadcastChannel('hr-leave-requests') : null
+    if (channel) channel.onmessage = loadNotifications
     return () => {
       cancelled = true
       window.clearInterval(interval)
       window.removeEventListener('hr-leave-updated', loadNotifications)
+      window.removeEventListener('hr-leave-request-created', loadNotifications)
+      window.removeEventListener('storage', handleStorage)
+      channel?.close()
     }
   }, [])
 
@@ -152,11 +174,6 @@ function HRTopbar() {
     }
   }, [searchOpen])
 
-  useEffect(() => {
-    const interval = window.setInterval(() => setPlaceholderIndex((index) => (index + 1) % searchPlaceholders.length), 2600)
-    return () => window.clearInterval(interval)
-  }, [])
-
   function handleLogout() {
     localStorage.removeItem('user')
     localStorage.removeItem('token')
@@ -188,7 +205,7 @@ function HRTopbar() {
   }
 
   const visibleUpdates = systemUpdates.filter((update) => !dismissedUpdates.has(update.id))
-  const notificationCount = pendingRequests.length + (messaging?.totalUnread || 0) + visibleUpdates.length
+  const notificationCount = (messaging?.totalUnread || 0) + visibleUpdates.length
 
   return (
     <>
@@ -227,7 +244,7 @@ function HRTopbar() {
                 onChange={(event) =>
                   setSearchValue(event.target.value)
                 }
-                placeholder={searchPlaceholders[placeholderIndex]}
+                placeholder="Search employees by name, ID, or department…"
                 className="ml-2 min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 placeholder:animate-pulse"
               />
 

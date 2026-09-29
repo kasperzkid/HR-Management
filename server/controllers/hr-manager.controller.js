@@ -3,6 +3,15 @@ import { access } from 'node:fs/promises'
 import prisma from '../db.js'
 import { getResumeFilePath } from '../middleware/resume-upload.js'
 import { getAttendanceConfigurationFromDb } from './hr-settings.controller.js'
+import { hashPassword } from '../utils/security.js'
+
+/**
+ * A generated password must not be ambiguous to retype, and must be strong
+ * enough that a shared one is not a liability.
+ */
+function generateTemporaryPassword() {
+  return crypto.randomBytes(12).toString('base64url')
+}
 
 const n = (value, fallback = 0) => {
   const result = Number(value)
@@ -94,20 +103,33 @@ export async function createEmployee(req, res) {
   try {
     const data = req.body || {}
     if (!data.employeeId || !data.name || !data.email) return res.status(400).json({ message: 'Employee ID, name, and email are required' })
-    const [employeeExists, userExists] = await Promise.all([
-      prisma.employee.findUnique({ where: { employeeId: data.employeeId } }), prisma.user.findUnique({ where: { email: data.email } }),
+
+    // The address the HR Admin typed is the employee's login, full stop.
+    //
+    // It is not checked for being real or external, and nothing is ever sent
+    // to it. A company address such as john.doe@yanoltech.com is a normal
+    // thing to enter here, so the only requirement is that there is one.
+    const email = data.email
+
+    const [employeeExists, userExists, employeeEmailExists] = await Promise.all([
+      prisma.employee.findUnique({ where: { employeeId: data.employeeId } }),
+      prisma.user.findUnique({ where: { email } }),
+      prisma.employee.findFirst({ where: { email, ...(data.id ? { NOT: { id: data.id } } : {}) } }),
     ])
     if (employeeExists) return res.status(409).json({ message: 'Employee ID already exists' })
     if (userExists?.employeeId) return res.status(409).json({ message: 'An account with this email is already linked to an employee' })
-    const temporaryPassword = crypto.randomBytes(9).toString('base64url')
+    if (userExists) return res.status(409).json({ message: 'An account with this email already exists' })
+    if (employeeEmailExists) return res.status(409).json({ message: 'Another employee already uses this email address' })
+    const temporaryPassword = generateTemporaryPassword()
+    const hashedTemporaryPassword = await hashPassword(temporaryPassword)
     const result = await prisma.$transaction(async (tx) => {
       const employee = await tx.employee.create({ data: { id: crypto.randomUUID(), ...employeeValues(data) } })
       const user = userExists
         ? await tx.user.update({
             where: { id: userExists.id },
-            data: { name: employee.name, password: temporaryPassword, mustChangePassword: true, role: 'EMPLOYEE', employeeId: employee.id },
+            data: { name: employee.name, password: hashedTemporaryPassword, mustChangePassword: true, role: 'EMPLOYEE', employeeId: employee.id },
           })
-        : await tx.user.create({ data: { name: employee.name, email: employee.email, password: temporaryPassword, mustChangePassword: true, role: 'EMPLOYEE', employeeId: employee.id } })
+        : await tx.user.create({ data: { name: employee.name, email: employee.email, password: hashedTemporaryPassword, mustChangePassword: true, role: 'EMPLOYEE', employeeId: employee.id } })
       const payrollMonth = new Date().toISOString().slice(0, 7)
       await tx.payrollRecord.create({
         data: {
@@ -125,7 +147,18 @@ export async function createEmployee(req, res) {
       })
       return { employee, user }
     })
-    return res.status(201).json({ employee: result.employee, account: { email: result.user.email, temporaryPassword }, message: 'Employee and employee login account created successfully' })
+    // The temporary password is handed straight back to the authenticated HR
+    // Admin. It is never emailed - the address belongs to the company and there
+    // is no inbox behind it - so this response is the only way it reaches the
+    // employee, via the person onboarding them.
+    return res.status(201).json({
+      employee: result.employee,
+      account: {
+        email: result.user.email,
+        temporaryPassword,
+      },
+      message: 'Employee and employee login account created successfully',
+    })
   } catch (error) { return fail(res, error, 'Failed to create employee') }
 }
 
@@ -135,6 +168,27 @@ export async function updateEmployee(req, res) {
     if (!current) return res.status(404).json({ message: 'Employee not found' })
     const data = req.body || {}
     if (data.employeeId && data.employeeId !== current.employeeId && await prisma.employee.findUnique({ where: { employeeId: data.employeeId } })) return res.status(409).json({ message: 'Employee ID already exists' })
+
+    // A changed address is still checked for collisions, because the account
+    // row is keyed on it. No format check: the address is whatever the HR Admin
+    // entered.
+    //
+    // A blank field on an unrelated edit must not wipe it. employeeValues
+    // coalesces with ??, and '' is not nullish, so without this an omitted or
+    // cleared field would store an empty address - the employee's login
+    // identity, gone. Keeping what they already have is not a second way to
+    // set the address; it is just declining to destroy one.
+    if (data.email) {
+      const email = data.email
+      if (email !== current.email) {
+        if (await prisma.user.findUnique({ where: { email } })) return res.status(409).json({ message: 'An account with this email already exists' })
+        if (await prisma.employee.findFirst({ where: { email, NOT: { id: current.id } } })) return res.status(409).json({ message: 'Another employee already uses this email address' })
+      }
+      data.email = email
+    } else if (current.email) {
+      data.email = current.email
+    }
+
     const employee = await prisma.employee.update({ where: { id: current.id }, data: employeeValues(data, current) })
     if (data.email && data.email !== current.email) await prisma.user.updateMany({ where: { employeeId: current.id }, data: { email: data.email, name: employee.name } })
     return res.json(employee)
@@ -166,12 +220,22 @@ export async function resetEmployeePassword(req, res) {
     const user = await prisma.user.findUnique({ where: { employeeId: employee.id } })
     if (!user) return res.status(404).json({ message: 'Employee login account not found' })
 
-    const temporaryPassword = crypto.randomBytes(9).toString('base64url')
+    const temporaryPassword = generateTemporaryPassword()
     await prisma.user.update({
       where: { id: user.id },
-      data: { password: temporaryPassword, mustChangePassword: true },
+      data: {
+        password: await hashPassword(temporaryPassword),
+        mustChangePassword: true,
+      },
     })
-    return res.json({ email: user.email, temporaryPassword, message: 'Temporary password reset successfully' })
+
+    // As with creation, the new password goes back to the HR Admin to pass on.
+    // Nothing is sent to the employee's address.
+    return res.json({
+      email: user.email,
+      temporaryPassword,
+      message: 'Temporary password reset successfully',
+    })
   } catch (error) { return fail(res, error, 'Failed to reset employee password') }
 }
 
@@ -194,9 +258,22 @@ function locationStatus(latitude, longitude, config) {
   return { verified: distanceMeters <= config.allowedRadiusMeters, distanceMeters }
 }
 function lateMinutes(checkIn, required) {
-  const [hour, minute] = s(checkIn).split(':').map(Number), [requiredHour, requiredMinute] = s(required).split(':').map(Number)
-  if (![hour, minute, requiredHour, requiredMinute].every(Number.isFinite)) return 0
-  return Math.max(0, hour * 60 + minute - requiredHour * 60 - requiredMinute)
+  const toMinutes = (value) => {
+    if (value instanceof Date) return value.getHours() * 60 + value.getMinutes()
+    const text = s(value).trim()
+    const match = text.match(/(?:T|\b)(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?/i)
+    if (!match) return null
+    let hour = Number(match[1])
+    const minute = Number(match[2])
+    if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 23 || minute > 59) return null
+    const meridiem = match[3]?.toUpperCase()
+    if (meridiem) hour = (hour % 12) + (meridiem === 'PM' ? 12 : 0)
+    return hour * 60 + minute
+  }
+  const actual = toMinutes(checkIn)
+  const cutoff = toMinutes(required)
+  if (actual == null || cutoff == null) return 0
+  return Math.max(0, actual - cutoff)
 }
 
 export async function getAttendance(req, res) {
@@ -211,15 +288,21 @@ export async function getAttendanceRecord(req, res) {
   catch (error) { return fail(res, error, 'Failed to load attendance record') }
 }
 
-function attendanceValues(data, employee, current = {}) {
-  return { employeeId: employee.id, employeeName: data.employeeName ?? employee.name, department: data.department ?? employee.department, date: data.date ?? current.date, status: data.status ?? current.status, checkIn: data.checkIn ?? current.checkIn ?? null, checkOut: data.checkOut ?? current.checkOut ?? null, late: n(data.late, current.late), earlyDeparture: n(data.earlyDeparture, current.earlyDeparture), regular: n(data.regular, current.regular), overtime: n(data.overtime, current.overtime) }
+function attendanceValues(data, employee, current = {}, config = {}) {
+  const checkIn = data.checkIn ?? current.checkIn ?? null
+  const requiredCheckInTime = data.requiredCheckInTime ?? config.requiredCheckInTime ?? current.requiredCheckInTime ?? null
+  const late = checkIn && requiredCheckInTime
+    ? lateMinutes(checkIn, requiredCheckInTime)
+    : n(data.late, current.late)
+  return { employeeId: employee.id, employeeName: data.employeeName ?? employee.name, department: data.department ?? employee.department, date: data.date ?? current.date, status: data.status ?? current.status, checkIn, checkOut: data.checkOut ?? current.checkOut ?? null, requiredCheckInTime, late, earlyDeparture: n(data.earlyDeparture, current.earlyDeparture), regular: n(data.regular, current.regular), overtime: n(data.overtime, current.overtime) }
 }
 export async function createAttendance(req, res) {
   try {
     const data = req.body || {}, employee = await employeeById(data.employeeId)
     if (!employee || !data.date || !data.status) return res.status(400).json({ message: 'Employee, date, and status are required' })
     if (await prisma.attendance.findFirst({ where: { employeeId: employee.id, date: data.date } })) return res.status(409).json({ message: 'Attendance record already exists for this employee and date' })
-    const record = await prisma.attendance.create({ data: { id: data.id || crypto.randomUUID(), ...attendanceValues(data, employee) } })
+    const config = await attendanceConfig()
+    const record = await prisma.attendance.create({ data: { id: data.id || crypto.randomUUID(), ...attendanceValues(data, employee, {}, config) } })
     return res.status(201).json(record)
   } catch (error) { return fail(res, error, 'Failed to create attendance record') }
 }
@@ -229,7 +312,8 @@ export async function updateAttendance(req, res) {
     if (!current) return res.status(404).json({ message: 'Attendance record not found' })
     const employee = await employeeById(data.employeeId || current.employeeId)
     if (!employee) return res.status(400).json({ message: 'Employee not found' })
-    const record = await prisma.attendance.update({ where: { id: current.id }, data: attendanceValues(data, employee, current) })
+    const config = await attendanceConfig()
+    const record = await prisma.attendance.update({ where: { id: current.id }, data: attendanceValues(data, employee, current, config) })
     return res.json(record)
   } catch (error) { return fail(res, error, 'Failed to update attendance record') }
 }

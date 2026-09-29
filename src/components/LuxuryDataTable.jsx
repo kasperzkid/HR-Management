@@ -377,6 +377,8 @@ export default function LuxuryDataTable({
 
   // 3. Client-side Search state (if not controlled)
   const [internalSearch, setInternalSearch] = useState('')
+  // Derived here (before the filtering effect below) so the dependency array
+  // never touches `searchTerm` while it is still in the temporal dead zone.
   const searchTerm = externalSearchTerm !== undefined ? externalSearchTerm : internalSearch
   const handleSearchChange = (val) => {
     if (externalOnSearchChange) {
@@ -385,7 +387,6 @@ export default function LuxuryDataTable({
       setInternalSearch(val)
     }
   }
-
   // 4. Client-side Sorting state (if not controlled)
   const [internalSortBy, setInternalSortBy] = useState(null)
   const [internalSortOrder, setInternalSortOrder] = useState('asc')

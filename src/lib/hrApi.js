@@ -28,6 +28,27 @@ export async function hrFetch(path, options = {}) {
   return res.json()
 }
 
+/**
+ * Turns a 401 into something the HR admin can actually act on.
+ *
+ * The server answers an unauthenticated request with the bare words
+ * "Authentication required". Shown next to a form the admin just filled in,
+ * that reads like a broken button, when the usual cause is simply a session
+ * that ran out - login tokens last 8 hours, so it is a normal thing to hit
+ * after a long shift.
+ *
+ * Non-401 failures are left alone and return '', so callers fall through to
+ * their own message. This does not weaken anything: the server has already
+ * rejected the request by the time this runs, and it only rewords the
+ * explanation.
+ */
+export function describeAuthFailure(response, data) {
+  if (response.status !== 401) return ''
+  return getToken()
+    ? 'Your session has expired. Please log in again, then retry.'
+    : 'You are not signed in. Please log in, then retry.'
+}
+
 export const fetchEmployeesApi = () => hrFetch('/employees')
 
 export const createEmployeeApi = (payload) =>

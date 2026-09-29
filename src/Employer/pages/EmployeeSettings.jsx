@@ -21,6 +21,7 @@ import {
   FileText,
   Upload,
   Download,
+  Camera,
 } from 'lucide-react'
 import { useTheme } from '../../lib/theme'
 import { getCurrentUser, resolveEmployee } from '../lib/currentUser'
@@ -127,6 +128,8 @@ function PersonalInfoSection({
   onUploadResume,
   onDownloadResume,
   resumeUploading,
+  onUploadPhoto,
+  photoUploading,
   saving,
 }) {
   const [form, setForm] = useState({
@@ -175,15 +178,13 @@ function PersonalInfoSection({
           title="Who you are"
           description="How your account appears across Yanol-HR — dashboards, messaging and approvals."
         />
-        <div className="flex items-center gap-4 mb-5 pb-5 border-b border-gray-100 dark:border-[#262b31]">
-          <div className="w-14 h-14 rounded-full bg-gray-950 text-white dark:bg-[#3a4149] dark:text-gray-100 flex items-center justify-center text-lg font-bold shrink-0 shadow-sm">
-            {(form.name || '?')
-              .split(' ')
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((p) => p[0])
-              .join('')
-              .toUpperCase() || '?'}
+        <div className="mb-5 flex flex-wrap items-center gap-4 border-b border-gray-100 pb-5 dark:border-[#262b31]">
+          <div className="relative h-16 w-16 shrink-0">
+            {employee?.avatar ? <img src={employee.avatar} alt={`${form.name || 'Employee'} profile`} className="h-16 w-16 rounded-full object-cover ring-2 ring-gray-100 dark:ring-[#33383f]" /> : <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-950 text-lg font-bold text-white shadow-sm dark:bg-[#3a4149] dark:text-gray-100">{(form.name || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?'}</div>}
+            <label className="absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-[#0092B8] text-white shadow dark:border-[#15181d]" title="Change profile photo">
+              {photoUploading ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={photoUploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) onUploadPhoto(file); event.target.value = '' }} />
+            </label>
           </div>
           <div className="min-w-0">
             <p className="text-sm font-bold text-gray-950 dark:text-gray-100 truncate">
@@ -196,6 +197,7 @@ function PersonalInfoSection({
             <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
               <ShieldCheck size={10} /> {employee?.employmentStatus || 'Active'}
             </span>
+            <p className="mt-1 text-[10px] text-gray-400">Click the camera to change your profile photo (PNG, JPG, or WebP · max 2 MB).</p>
           </div>
         </div>
 
@@ -792,6 +794,7 @@ function EmployeeSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [resumeUploading, setResumeUploading] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
   const [user, setUser] = useState(() => getCurrentUser())
   const [employee, setEmployee] = useState(null)
 
@@ -866,6 +869,27 @@ function EmployeeSettings() {
       showToast(err.message || 'Could not save changes')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const uploadProfilePhoto = async (file) => {
+    if (!file.type.startsWith('image/')) return showToast('Choose an image file')
+    if (file.size > 2 * 1024 * 1024) return showToast('Profile photo must be 2 MB or smaller')
+    setPhotoUploading(true)
+    try {
+      const avatar = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => reject(new Error('Could not read the selected image'))
+        reader.readAsDataURL(file)
+      })
+      const profile = await updateMyEmployeeProfile({ avatar })
+      setEmployee((current) => ({ ...current, ...profile }))
+      showToast('Profile photo updated')
+    } catch (err) {
+      showToast(err.message || 'Could not update profile photo')
+    } finally {
+      setPhotoUploading(false)
     }
   }
 
@@ -982,6 +1006,8 @@ function EmployeeSettings() {
               loading={loading}
               saving={saving}
               resumeUploading={resumeUploading}
+              onUploadPhoto={uploadProfilePhoto}
+              photoUploading={photoUploading}
               onSave={saveProfile}
               onSaveProfessionalProfile={saveProfessionalProfile}
               onUploadResume={uploadResume}

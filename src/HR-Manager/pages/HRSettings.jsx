@@ -1,21 +1,31 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   Building2,
   Check,
   CircleDollarSign,
   Clock3,
   Globe,
+  KeyRound,
   ListChecks,
   LocateFixed,
+  MailCheck,
   MapPin,
   Plus,
   Save,
+  Send,
   ShieldCheck,
   Trash2,
   UserRound,
 } from 'lucide-react'
 
 import { Button, PageTitle } from '../../components/ui'
+import {
+  fetchMyAccount,
+  updateMyAccount,
+  resendEmailVerificationApi,
+  changePasswordApi,
+} from '../../lib/accountApi'
 
 const API_URL = '/api/hr-manager'
 
@@ -351,6 +361,212 @@ function HRSettings() {
   const [detectingLocation, setDetectingLocation] = useState(false)
   const [locationMessage, setLocationMessage] = useState('')
 
+  // The signed-in admin's own login details. Deliberately separate from
+  // companyInformation below, which is the organisation's public address and
+  // has nothing to do with how anyone signs in.
+  const [account, setAccount] = useState(null)
+  const [accountName, setAccountName] = useState('')
+  const [accountEmail, setAccountEmail] = useState('')
+  const [accountRole, setAccountRole] = useState('')
+  const [accountLoading, setAccountLoading] = useState(true)
+  const [accountSaving, setAccountSaving] = useState(false)
+  const [accountMessage, setAccountMessage] = useState('')
+  const [accountError, setAccountError] = useState('')
+  const [pendingEmail, setPendingEmail] = useState('')
+  const [resending, setResending] = useState(false)
+
+  // Password change. The temporary setup password is replaced here, which is
+  // the last step of handing the system to a company.
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordMessage, setPasswordMessage] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+
+  const applyAccount = (user) => {
+    if (!user) return
+
+    setAccount(user)
+    setAccountName(user.name || '')
+    setAccountEmail(user.email || '')
+    setAccountRole(user.role || '')
+    setPendingEmail(user.pendingEmail || '')
+  }
+
+  useEffect(() => {
+    let active = true
+
+    fetchMyAccount()
+      .then((data) => {
+        if (active) applyAccount(data?.user)
+      })
+      .catch((requestError) => {
+        if (active) {
+          setAccountError(
+            requestError.message ||
+              'Could not load your account details.',
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setAccountLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Keep the locally stored session in step, so the rest of the app shows the
+  // new address straight away rather than after the next sign-in.
+  const syncStoredUser = (user) => {
+    try {
+      const raw = localStorage.getItem('user')
+
+      if (!raw) return
+
+      const stored = JSON.parse(raw)
+
+      localStorage.setItem(
+        'user',
+        JSON.stringify({
+          ...stored,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        }),
+      )
+    } catch {
+      // A missing or corrupt local session must not break the save.
+    }
+  }
+
+  const handleAccountSave = async () => {
+    const email = accountEmail.trim().toLowerCase()
+
+    setAccountSaving(true)
+    setAccountMessage('')
+    setAccountError('')
+
+    try {
+      if (!email) {
+        throw new Error('Login email is required.')
+      }
+
+      if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(email)) {
+        throw new Error('Enter a valid email address.')
+      }
+
+      const data = await updateMyAccount({
+        name: accountName.trim(),
+        email,
+      })
+
+      if (data?.user) {
+        applyAccount(data.user)
+        syncStoredUser(data.user)
+      }
+
+      setAccountMessage(
+        data?.message || 'Account updated.',
+      )
+    } catch (requestError) {
+      setAccountError(
+        requestError.message ||
+          'Could not save your account details.',
+      )
+    } finally {
+      setAccountSaving(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    setResending(true)
+    setAccountMessage('')
+    setAccountError('')
+
+    try {
+      const data = await resendEmailVerificationApi()
+
+      if (data?.user) applyAccount(data.user)
+
+      setAccountMessage(
+        data?.message ||
+          'Confirmation link sent. Check the new address.',
+      )
+    } catch (requestError) {
+      setAccountError(
+        requestError.message ||
+          'Could not resend the confirmation email.',
+      )
+    } finally {
+      setResending(false)
+    }
+  }
+
+  const handlePasswordChange = async (event) => {
+    event.preventDefault()
+
+    setPasswordMessage('')
+    setPasswordError('')
+
+    if (!currentPassword) {
+      setPasswordError('Enter your current password.')
+      return
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError(
+        'New password must be at least 8 characters.',
+      )
+      return
+    }
+
+    if (newPassword === currentPassword) {
+      setPasswordError(
+        'The new password must be different from the current one.',
+      )
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('The new passwords do not match.')
+      return
+    }
+
+    setPasswordSaving(true)
+
+    try {
+      const data = await changePasswordApi({
+        currentPassword,
+        newPassword,
+      })
+
+      // Cleared either way, so the form never keeps a password in memory.
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+
+      setPasswordMessage(
+        data?.message ||
+          'Password changed successfully.',
+      )
+
+      // The temporary-password warning should go away without a page reload.
+      fetchMyAccount()
+        .then((result) => applyAccount(result?.user))
+        .catch(() => {})
+    } catch (requestError) {
+      setPasswordError(
+        requestError.message ||
+          'Could not change your password.',
+      )
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
+
   const handleDetectLocation = () => {
     if (!('geolocation' in navigator)) {
       setLocationMessage('Geolocation is not supported by your browser.')
@@ -540,6 +756,7 @@ function HRSettings() {
       })
 
       setSaved(true)
+      window.dispatchEvent(new Event('hr-access-updated'))
 
       window.setTimeout(() => {
         setSaved(false)
@@ -602,6 +819,237 @@ function HRSettings() {
             Settings saved to the HR database successfully.
           </div>
         )}
+
+        {/* My Account - the address that signs in and receives reset links */}
+        <SettingsCard
+          icon={UserRound}
+          title="My Account"
+        >
+          {accountLoading ? (
+            <p className="text-sm text-slate-500">
+              Loading your account details...
+            </p>
+          ) : (
+            <>
+              {/* Temporary setup password. Disappears the moment the real one
+                  is set, so it is a checklist item rather than a nag. */}
+              {account?.mustChangePassword && (
+                <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+                  <AlertTriangle
+                    size={18}
+                    className="mt-0.5 shrink-0 text-amber-600"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-amber-900">
+                      You are still using the temporary setup
+                      password
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-amber-800">
+                      Set your own password below before handing
+                      this system over. It is the only thing
+                      standing between a published account and
+                      anyone who guesses the default.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <p className="mb-5 text-sm leading-relaxed text-slate-600">
+                This is the email address you sign in with, and the
+                address &quot;Forgot password&quot; sends reset links
+                to. A new address is never switched on straight
+                away - we email a confirmation link first, so a
+                mistyped address can never lock you out. Your role,
+                permissions and employee record stay exactly as
+                they are throughout.
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Your Name"
+                  value={accountName}
+                  onChange={setAccountName}
+                  placeholder="Your full name"
+                />
+
+                <Field
+                  label="Login Email"
+                  type="email"
+                  value={accountEmail}
+                  onChange={(value) => {
+                    setAccountEmail(value)
+                    setAccountMessage('')
+                    setAccountError('')
+                  }}
+                  placeholder="you@company.com"
+                />
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-4">
+                <Button
+                  type="button"
+                  onClick={handleAccountSave}
+                  disabled={accountSaving}
+                  icon={Check}
+                  loading={accountSaving}
+                  loadingText="Saving..."
+                >
+                  Save My Account
+                </Button>
+
+                {accountRole && (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Role: {accountRole.replace(/_/g, ' ')}
+                  </span>
+                )}
+              </div>
+
+              {/* A change that has been requested but not yet confirmed. */}
+              {pendingEmail && (
+                <div className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-4">
+                  <div className="flex items-start gap-3">
+                    <MailCheck
+                      size={18}
+                      className="mt-0.5 shrink-0 text-[#0092B8]"
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-cyan-900">
+                        Waiting for confirmation
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-cyan-900/80">
+                        A confirmation link was sent to{' '}
+                        <span className="font-semibold break-all">
+                          {pendingEmail}
+                        </span>
+                        . Your login address stays{' '}
+                        <span className="font-semibold">
+                          {accountEmail}
+                        </span>{' '}
+                        until that link is opened.
+                      </p>
+
+                      <Button
+                        type="button"
+                        onClick={handleResendVerification}
+                        disabled={resending}
+                        icon={Send}
+                        loading={resending}
+                        loadingText="Sending..."
+                        className="mt-3"
+                      >
+                        Resend confirmation
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {accountError && (
+                <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {accountError}
+                </p>
+              )}
+
+              {accountMessage && (
+                <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                  {accountMessage}
+                </p>
+              )}
+
+              {/* Password */}
+              <div className="mt-8 border-t border-slate-100 pt-7">
+                <div className="mb-4 flex items-center gap-2.5">
+                  <KeyRound
+                    size={17}
+                    className="text-slate-400"
+                  />
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-slate-600">
+                    Change password
+                  </h3>
+                </div>
+
+                <form
+                  onSubmit={handlePasswordChange}
+                >
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Current password
+                      </span>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={currentPassword}
+                        onChange={(event) =>
+                          setCurrentPassword(event.target.value)
+                        }
+                        placeholder="Temporary or current"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#4755AE] focus:ring-4 focus:ring-[#4755AE]/10"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        New password
+                      </span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={newPassword}
+                        onChange={(event) =>
+                          setNewPassword(event.target.value)
+                        }
+                        placeholder="At least 8 characters"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#4755AE] focus:ring-4 focus:ring-[#4755AE]/10"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Confirm new password
+                      </span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={(event) =>
+                          setConfirmPassword(event.target.value)
+                        }
+                        placeholder="Repeat it"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#4755AE] focus:ring-4 focus:ring-[#4755AE]/10"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-5">
+                    <Button
+                      type="submit"
+                      disabled={passwordSaving}
+                      icon={KeyRound}
+                      loading={passwordSaving}
+                      loadingText="Updating..."
+                    >
+                      Update Password
+                    </Button>
+                  </div>
+
+                  {passwordError && (
+                    <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {passwordError}
+                    </p>
+                  )}
+
+                  {passwordMessage && (
+                    <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                      {passwordMessage}
+                    </p>
+                  )}
+                </form>
+              </div>
+            </>
+          )}
+        </SettingsCard>
 
         {/* Company Information */}
         <SettingsCard
@@ -835,7 +1283,7 @@ function HRSettings() {
             </div>
 
             <p className="mt-2 text-xs text-slate-500">
-              Employees can check in starting at the window start. Check-ins after the required time are recorded with late minutes and flagged for HR review. Check-out unlocks at the required check-out time.
+              Employees can check in from the window start through the required check-in cutoff. Check-out is available from the required check-out time through the window end. Punch buttons are disabled outside these configured times.
             </p>
           </div>
         </SettingsCard>
@@ -1038,35 +1486,6 @@ function HRSettings() {
               )
             }
           />
-        </SettingsCard>
-
-        {/* Security */}
-        <SettingsCard
-          icon={ShieldCheck}
-          title="HR Access & Security"
-          description="Current role structure for the HR management area."
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            {Object.keys(EMPTY_SETTINGS.accessPermissions).map((item) => {
-              const enabled = settings.accessPermissions?.[item] !== false
-              return (
-                <div key={item} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-100">
-                      <UserRound className="h-4 w-4 text-[#0092B8]" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{item}</p>
-                      <p className={`mt-0.5 text-xs font-semibold ${enabled ? 'text-emerald-600' : 'text-slate-400'}`}>{enabled ? 'Enabled' : 'Disabled'}</p>
-                    </div>
-                  </div>
-                  <button type="button" role="switch" aria-checked={enabled} aria-label={`${enabled ? 'Disable' : 'Enable'} ${item}`} onClick={() => updateSetting('accessPermissions', { ...settings.accessPermissions, [item]: !enabled })} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${enabled ? 'bg-[#0092B8]' : 'bg-slate-300'}`}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
         </SettingsCard>
 
         {/* Bottom Save */}

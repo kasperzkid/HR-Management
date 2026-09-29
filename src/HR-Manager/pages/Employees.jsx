@@ -25,7 +25,9 @@ import {
 
 import { PageTitle, Table } from '../../components/ui'
 import { useSearchParams } from 'react-router-dom'
-import { downloadEmployeeResume } from '../../lib/hrApi'
+import { authHeaders, describeAuthFailure, downloadEmployeeResume } from '../../lib/hrApi'
+import { withEmailFromName } from '../../lib/employeeEmail'
+import { useAccess } from '../../lib/rbac'
 import TableDataTools from '../components/TableDataTools'
 
 const API_URL = 'http://localhost:4000/api/hr-manager'
@@ -36,11 +38,7 @@ const EMPLOYMENT_TYPES = [
   'Intern',
 ]
 
-const STATUSES = [
-  'Active',
-  'On Leave',
-  'Resigned',
-]
+const STATUSES = ['Active']
 
 const GENDERS = [
   'Male',
@@ -329,7 +327,7 @@ function normalizeEmployee(employee) {
 function statusClasses(status) {
   switch (status) {
     case 'Active':
-      return 'bg-emerald-50 text-emerald-700'
+      return 'text-emerald-700'
 
     case 'On Leave':
       return 'bg-amber-50 text-amber-700'
@@ -346,6 +344,7 @@ function Field({
   label,
   children,
   required = false,
+  hint = '',
 }) {
   return (
     <label className="block">
@@ -360,6 +359,12 @@ function Field({
       </span>
 
       {children}
+
+      {hint && (
+        <span className="mt-1 block text-[10px] leading-4 text-slate-400">
+          {hint}
+        </span>
+      )}
     </label>
   )
 }
@@ -376,16 +381,17 @@ function inputClassName() {
 }
 
 function PhoneFieldInput({ name = 'phone', value, onChange, className }) {
-  const [operator, setOperator] = useState(() => (/^(09|\+2519)/.test(value || '') ? 'ethio' : 'safaricom'))
-  const placeholder = operator === 'ethio' ? '09XXXXXXXX or +2519XXXXXXXX' : '07XXXXXXXX or +2517XXXXXXXX'
+  const normalized = String(value || '').replace(/[\s()-]/g, '')
+  const complete = /^(0[79]\d{8}|\+251[79]\d{8})$/.test(normalized)
+  const wrong = normalized.length >= 10 && !complete
+  const national = normalized.replace(/^\+251/, '0')
+  const detectedNetwork = /^07/.test(national) ? 'Safaricom' : /^09/.test(national) ? 'Ethio Telecom' : ''
 
   return (
-    <div className="flex gap-2">
-      <select aria-label="Phone network" value={operator} onChange={(event) => setOperator(event.target.value)} className="w-36 shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-[#4755AE]">
-        <option value="safaricom">Safaricom</option>
-        <option value="ethio">Ethio Telecom</option>
-      </select>
-      <input className={className || inputClassName()} name={name} value={value} onChange={onChange} placeholder={placeholder} inputMode="tel" />
+    <div>
+      <input className={`${className || inputClassName()} ${wrong ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-100' : ''}`} name={name} value={value} onChange={onChange} placeholder="07XXXXXXXX or 09XXXXXXXX" inputMode="tel" aria-invalid={wrong} />
+      {detectedNetwork && !wrong && <p className="mt-1 text-[11px] font-medium text-slate-500">Detected network: <span className="font-bold text-[#4755AE]">{detectedNetwork}</span></p>}
+      {wrong && <p className="mt-1 text-xs font-medium text-rose-600">Wrong phone number. Enter a valid 07... or 09... mobile number.</p>}
     </div>
   )
 }
@@ -577,6 +583,11 @@ function EmployeeModal({
       setError('Email address is required.')
       return
     }
+
+    // Only presence is checked. The address becomes the employee's login, but
+    // it does not have to be a real or external mailbox - a company address
+    // such as employee@yanoltech.com is the normal case. The server applies the
+    // same rule, so the form and the API never disagree.
 
     if (!form.department) {
       setError('Department is required.')
@@ -1162,13 +1173,13 @@ function AddEmployeeDrawer({
           departments: data.departments || [],
           jobTitles: data.jobTitles || [],
           employmentTypes: data.employmentTypes || EMPLOYMENT_TYPES,
-          employmentStatuses: data.employmentStatuses || STATUSES,
+          employmentStatuses: STATUSES,
         })
         setForm((current) => ({
           ...current,
           department: data.departments?.includes(current.department) ? current.department : (data.departments?.[0] || ''),
           employmentType: data.employmentTypes?.includes(current.employmentType) ? current.employmentType : (data.employmentTypes?.[0] || ''),
-          status: data.employmentStatuses?.includes(current.status) ? current.status : (data.employmentStatuses?.[0] || ''),
+          status: 'Active',
         }))
       })
       .catch(() => {})
@@ -1250,24 +1261,21 @@ function AddEmployeeDrawer({
   function handleChange(event) {
     const {
       name,
-      value,
+      value: rawValue,
     } = event.target
+
+    const value =
+      name === 'firstName' ||
+      name === 'lastName' ||
+      name === 'grandfatherName'
+        ? rawValue.replace(/[^\p{L}\s]/gu, '')
+        : rawValue
 
     if (
       (name === 'dateOfBirth' || name === 'hireDate') &&
       value &&
       value.split('-')[0].length > 4
     ) {
-      return
-    }
-
-    if (
-      (name === 'firstName' || name === 'lastName' || name === 'grandfatherName') &&
-      /[^\p{L}\s]/u.test(value)
-    ) {
-      const lettersOnly = value.replace(/[^\p{L}\s]/gu, '')
-      setForm((current) => ({ ...current, [name]: lettersOnly }))
-      if (error) setError('')
       return
     }
 
@@ -1283,48 +1291,24 @@ function AddEmployeeDrawer({
         }
       }
 
-      if (
-        name === 'firstName' ||
-        name === 'lastName'
-      ) {
+      // The email field follows the name. Filling it in saves the HR Admin
+      // transcribing an address, and the field stays editable: once they type
+      // their own address it no longer looks generated, so the name stops
+      // overwriting it. What they end up with is what gets saved - the server
+      // takes the address as given.
+      if (name === 'firstName' || name === 'lastName') {
         const updated = {
           ...current,
           [name]: value,
         }
 
-        const firstName =
-          name === 'firstName'
-            ? value
-            : current.firstName
-
-        const lastName =
-          name === 'lastName'
-            ? value
-            : current.lastName
-
-        const generatedEmail =
-          `${firstName.trim()}${lastName.trim() ? `.${lastName.trim()}` : ''}`
-            .toLowerCase()
-            .replace(/[^a-z0-9.]/g, '') +
-          '@yanol.com'
-
-        const currentEmail =
-          String(current.email || '').trim()
-
-        const currentLooksGenerated =
-          !currentEmail ||
-          /^[a-z0-9.]+@yanol\.com$/i.test(
-            currentEmail,
-          )
-
-        if (
-          currentLooksGenerated &&
-          (firstName.trim() || lastName.trim())
-        ) {
-          updated.email = generatedEmail
-        }
-
-        return updated
+        // Read the names back out of `updated`, not `current`: whichever field
+        // is being typed is already replaced above, and reading `current` would
+        // build the address from the previous keystroke.
+        return withEmailFromName(
+          updated,
+          `${updated.firstName} ${updated.lastName}`,
+        )
       }
 
       return {
@@ -1386,13 +1370,8 @@ function AddEmployeeDrawer({
         return false
       }
 
-      const emailPattern =
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-      if (!emailPattern.test(form.email.trim())) {
-        setError('Please enter a valid email address.')
-        return false
-      }
+      // Presence only, matching the server. A company address is a normal login
+      // and does not have to resolve to a real external mailbox.
 
       if (form.phone.trim()) {
         const normalizedPhone = form.phone.replace(/[\s()-]/g, '')
@@ -1805,6 +1784,7 @@ function AddEmployeeDrawer({
                   <Field
                     label="Email"
                     required
+                    hint="Filled from the name. You can change it."
                   >
                     <input
                       type="email"
@@ -1812,7 +1792,7 @@ function AddEmployeeDrawer({
                       name="email"
                       value={form.email}
                       onChange={handleChange}
-                      placeholder="name@yanol.com"
+                      placeholder="employee@yanoltech.com"
                     />
                   </Field>
 
@@ -1973,7 +1953,7 @@ function AddEmployeeDrawer({
                       />
                     </Field>
 
-                    {form.basicSalary !== '' && <Field label="Transport Allowance">
+                    <Field label="Transport Allowance">
                       <input
                         type="number"
                         min="0"
@@ -1983,9 +1963,9 @@ function AddEmployeeDrawer({
                         onChange={handleChange}
                         placeholder="0.00"
                       />
-                    </Field>}
+                    </Field>
 
-                    {form.transportAllowance !== '' && <Field label="Housing Allowance">
+                    <Field label="Housing Allowance">
                       <input
                         type="number"
                         min="0"
@@ -1995,9 +1975,9 @@ function AddEmployeeDrawer({
                         onChange={handleChange}
                         placeholder="0.00"
                       />
-                    </Field>}
+                    </Field>
 
-                    {form.housingAllowance !== '' && <Field label="Meal Allowance">
+                    <Field label="Meal Allowance">
                       <input
                         type="number"
                         min="0"
@@ -2007,9 +1987,9 @@ function AddEmployeeDrawer({
                         onChange={handleChange}
                         placeholder="0.00"
                       />
-                    </Field>}
+                    </Field>
 
-                    {form.mealAllowance !== '' && <Field label="Other Allowance">
+                    <Field label="Other Allowance">
                       <input
                         type="number"
                         min="0"
@@ -2019,13 +1999,13 @@ function AddEmployeeDrawer({
                         onChange={handleChange}
                         placeholder="0.00"
                       />
-                    </Field>}
+                    </Field>
 
                   </div>
                 </section>
 
                 {/* Payroll */}
-                {form.otherAllowance !== '' && <section>
+                <section>
                   <SectionTitle
                     icon={Building2}
                     title="Payroll Information"
@@ -2092,7 +2072,7 @@ function AddEmployeeDrawer({
                     </Field>
 
                   </div>
-                </section>}
+                </section>
 
               </div>
             )}
@@ -2461,8 +2441,8 @@ function TemporaryCredentialsModal({ credentials, onClose }) {
     const text = [
       `Employee: ${credentials.employeeName || 'Employee'}`,
       `Employee ID: ${credentials.employeeId || ''}`,
-      `Email: ${credentials.email || ''}`,
-      `Initial Password: ${credentials.password || ''}`,
+      `Login email: ${credentials.email || ''}`,
+      `Temporary password: ${credentials.temporaryPassword || ''}`,
     ].join('\n')
 
     await copyText(text, 'all')
@@ -2478,10 +2458,10 @@ function TemporaryCredentialsModal({ credentials, onClose }) {
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-950">
-                Review Added Employee
+                Employee Added
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                The employee has been created successfully. Review and save the employee login credentials before closing.
+                The employee and their login account have been created. Share the login email and temporary password below with them.
               </p>
             </div>
           </div>
@@ -2525,28 +2505,46 @@ function TemporaryCredentialsModal({ credentials, onClose }) {
 
           <div>
             <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-400">
-              Initial Password
+              Temporary Password
             </label>
-            <div className="flex items-center gap-2 rounded-xl border border-[#4755AE]/20 bg-[#4755AE]/5 p-2">
-              <input
-                readOnly
-                type="text"
-                value={credentials.password || ''}
-                className="min-w-0 flex-1 bg-transparent px-2 font-mono text-sm font-bold tracking-wide text-slate-900 outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => copyText(credentials.password || '', 'password')}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#4755AE] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#3d4998]"
-              >
-                {copied === 'password' ? <Check size={14} /> : <Copy size={14} />}
-                {copied === 'password' ? 'Copied' : 'Copy'}
-              </button>
-            </div>
+            {/* Always shown. Nothing is emailed to the employee's address, so
+                this is the only copy of the password that exists - the HR Admin
+                reads it out or copies it across. */}
+            {credentials.temporaryPassword ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-center gap-2">
+                  <KeyRound size={15} className="shrink-0 text-amber-600" />
+                  <input
+                    readOnly
+                    value={credentials.temporaryPassword}
+                    aria-label="Temporary password"
+                    className="min-w-0 flex-1 bg-transparent font-mono text-sm font-bold text-amber-900 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyText(credentials.temporaryPassword, 'password')}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-100 px-2.5 py-1.5 text-xs font-bold text-amber-800 transition hover:bg-amber-200"
+                  >
+                    {copied === 'password' ? <Check size={13} /> : <Copy size={13} />}
+                    {copied === 'password' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-amber-800">
+                  Share this with the employee - it is not emailed, and the
+                  employee will be asked to change it the first time they sign
+                  in.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                The password is not available to display. Use &quot;Reset
+                Temporary Password&quot; on this employee to issue a new one.
+              </p>
+            )}
           </div>
 
-          <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
-            Give these credentials to the employee. The initial password is shown here after the account is created.
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+            The employee signs in with this email and the temporary password, and is required to set their own password immediately afterwards.
           </div>
         </div>
 
@@ -2581,7 +2579,8 @@ function EmployeeViewModal({
   onClose,
   onResetPassword,
 }) {
-  const [resetPassword, setResetPassword] = useState('')
+  const [resetPasswordNotice, setResetPasswordNotice] = useState('')
+  const [confirmReset, setConfirmReset] = useState(false)
   const [resettingPassword, setResettingPassword] = useState(false)
   const [downloadingResume, setDownloadingResume] = useState(false)
 
@@ -2597,12 +2596,19 @@ function EmployeeViewModal({
 
   async function resetPasswordForEmployee() {
     if (resettingPassword) return
-    if (!window.confirm(`Reset the login password for ${name}?`)) return
+    if (!confirmReset) { setConfirmReset(true); return }
+    setConfirmReset(false)
     setResettingPassword(true)
-    setResetPassword('')
+    setResetPasswordNotice('')
     try {
+      // Nothing is emailed to the employee, so the new password comes back
+      // here to be shown once for the HR Admin to share.
       const data = await onResetPassword(employee)
-      setResetPassword(data.temporaryPassword)
+      setResetPasswordNotice(
+        data?.temporaryPassword
+          ? `New temporary password: ${data.temporaryPassword} — share it with the employee. It expires once they sign in.`
+          : 'The password was reset, but the new value could not be displayed. Try again.',
+      )
     } catch (error) {
       window.alert(error.message || 'Failed to reset employee password')
     } finally {
@@ -2853,13 +2859,14 @@ function EmployeeViewModal({
 
           </div>
 
+          {onResetPassword && (
           <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
             <div className="flex items-center gap-2">
               <KeyRound size={16} className="text-amber-700" />
               <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Employee Login Password</p>
             </div>
             <p className="mt-2 text-xs leading-5 text-slate-600">
-              Reset the login if the employee lost the automatically generated password. They must change it after signing in.
+              Reset the login if the employee lost their temporary password. The new one is shown here to pass on, and they must change it after signing in.
             </p>
             <button
               type="button"
@@ -2868,26 +2875,17 @@ function EmployeeViewModal({
               className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#4755AE] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <KeyRound size={13} />
-              {resettingPassword ? 'Resetting...' : 'Reset Temporary Password'}
+            {resettingPassword ? 'Resetting...' : 'Reset Temporary Password'}
             </button>
-            {resetPassword && (
+            {confirmReset && <div className="mt-3 rounded-xl border border-amber-200 bg-white p-3"><p className="text-sm font-semibold text-slate-800">Reset the login password for {name}?</p><div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setConfirmReset(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">Cancel</button><button type="button" onClick={resetPasswordForEmployee} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white">Confirm reset</button></div></div>}
+            {resetPasswordNotice && (
               <div className="mt-3 rounded-lg border border-amber-200 bg-white p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">New temporary password</p>
-                <div className="mt-1 flex items-center gap-2">
-                  <code className="flex-1 break-all font-mono text-sm font-bold text-slate-900">{resetPassword}</code>
-                  <button
-                    type="button"
-                    title="Copy temporary password"
-                    onClick={() => navigator.clipboard?.writeText(resetPassword)}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                  >
-                    <Copy size={15} />
-                  </button>
-                </div>
-                <p className="mt-2 text-[10px] text-amber-700">Copy this password now. It will not be shown again.</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Temporary password issued</p>
+                <p className="mt-1 text-xs leading-5 text-slate-700">{resetPasswordNotice}</p>
               </div>
             )}
           </div>
+          )}
 
           {employee.notes && (
             <div className="mt-5 rounded-2xl border border-slate-200 p-4">
@@ -3069,8 +3067,9 @@ function EmployeeCard({
 
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className={onEdit ? 'mt-4 grid grid-cols-2 gap-2' : 'mt-4 grid gap-2'}>
 
+        {onEdit && (
         <button
           type="button"
           onClick={() => onEdit(employee)}
@@ -3078,6 +3077,7 @@ function EmployeeCard({
         >
           Edit
         </button>
+        )}
 
         <button
           type="button"
@@ -3089,6 +3089,7 @@ function EmployeeCard({
 
       </div>
 
+      {onDelete && (
       <button
         type="button"
         onClick={() => onDelete(employee)}
@@ -3097,6 +3098,7 @@ function EmployeeCard({
         <Trash2 size={13} />
         Delete Employee
       </button>
+      )}
 
     </article>
   )
@@ -3107,6 +3109,7 @@ function EmployeeTable({
   onEdit,
   onView,
   onDelete,
+  canEdit,
   onQuickUpdate,
   selectedIds,
   onToggleSelected,
@@ -3219,7 +3222,7 @@ function EmployeeTable({
                         ))}
                       </select>
                     ) : (
-                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${statusClasses(employee.status)}`}>
+                      <span className={`${employee.status === 'Active' ? 'text-emerald-700' : `rounded-full px-2.5 py-1 ${statusClasses(employee.status)}`} text-[10px] font-bold uppercase tracking-wide`}>
                         {employee.status}
                       </span>
                     )}
@@ -3250,8 +3253,8 @@ function EmployeeTable({
                           {actionMenuId === employee.id && (
                             <div className="absolute right-0 top-10 z-20 w-32 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
                               <button type="button" onClick={() => { setActionMenuId(null); onView(employee) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50">View</button>
-                              <button type="button" onClick={() => { setActionMenuId(null); startRowEdit(employee) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-[#4755AE] hover:bg-indigo-50">Edit</button>
-                              <button type="button" onClick={() => { setActionMenuId(null); onDelete(employee) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>
+                              {canEdit && <button type="button" onClick={() => { setActionMenuId(null); startRowEdit(employee) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-[#4755AE] hover:bg-indigo-50">Edit</button>}
+                              {onDelete && <button type="button" onClick={() => { setActionMenuId(null); onDelete(employee) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>}
                             </div>
                           )}
                         </div>
@@ -3274,6 +3277,15 @@ function EmployeeTable({
 
 export default function Employees() {
   const [searchParams] = useSearchParams()
+
+  // Which actions this account may take. Every one of these also has a matching
+  // permission check on the API route, so hiding a control and being refused by
+  // the server are the same decision made twice.
+  const { can } = useAccess()
+  const canAdd = can('employees.add')
+  const canEdit = can('employees.edit')
+  const canDelete = can('employees.delete')
+  const canResetPassword = can('employees.reset_password')
   const [employees, setEmployees] =
     useState([])
 
@@ -3320,6 +3332,7 @@ export default function Employees() {
   const [directoryView, setDirectoryView] =
     useState('card')
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([])
+  const [pendingDelete, setPendingDelete] = useState(null)
 
 
   async function loadEmployees() {
@@ -3391,7 +3404,7 @@ export default function Employees() {
       }
       const response = await fetch(`${API_URL}/employees`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload),
       })
       const result = await response.json()
@@ -3404,7 +3417,10 @@ export default function Employees() {
   }
 
   async function handleResetPassword(employee) {
-    const response = await fetch(`${API_URL}/employees/${employee.id}/reset-password`, { method: 'POST' })
+    const response = await fetch(`${API_URL}/employees/${employee.id}/reset-password`, {
+      method: 'POST',
+      headers: authHeaders(),
+    })
     const data = await response.json()
     if (!response.ok) throw new Error(data.message || 'Failed to reset employee password')
     return data
@@ -3687,6 +3703,16 @@ async function handleSave(employeeData) {
       ? `${API_URL}/employees/${editingEmployee.id}`
       : `${API_URL}/employees`
 
+    /*
+     * Both POST /employees and PUT /employees/:id sit behind requireAuth on
+     * the server, so this request has to carry the HR admin's bearer token.
+     *
+     * It used to hand-write its headers as just Content-Type, which meant the
+     * token never left the browser and the server answered a perfectly
+     * signed-in admin with "Authentication required". authHeaders() is the
+     * helper the rest of this file already uses; it is what puts the
+     * Authorization header on the request.
+     */
     const response = await fetch(
       url,
       {
@@ -3694,10 +3720,10 @@ async function handleSave(employeeData) {
           ? 'PUT'
           : 'POST',
 
-        headers: {
+        headers: authHeaders({
           'Content-Type':
             'application/json',
-        },
+        }),
 
         body: JSON.stringify(payload),
       },
@@ -3708,7 +3734,8 @@ async function handleSave(employeeData) {
 
     if (!response.ok) {
       throw new Error(
-        data?.message ||
+        describeAuthFailure(response, data) ||
+          data?.message ||
           data?.error ||
           'Failed to save employee.',
       )
@@ -3783,7 +3810,9 @@ async function handleSave(employeeData) {
           '',
         email:
           data.account.email || '',
-        password:
+        // Nothing is emailed, so the password always comes back here for the
+        // HR Admin to pass on.
+        temporaryPassword:
           data.account.temporaryPassword || '',
         employeeName:
           data.employee?.name ||
@@ -3822,7 +3851,7 @@ async function handleSave(employeeData) {
 
       const response = await fetch(`${API_URL}/employees/${employee.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(changes),
       })
 
@@ -3851,18 +3880,8 @@ async function handleSave(employeeData) {
   async function handleDelete(
     employee,
   ) {
-    const name =
-      getEmployeeName(employee)
-
-    const employeeId =
-      getEmployeeId(employee)
-
-    const confirmed =
-      window.confirm(
-        `Delete ${name} (${employeeId})? This action cannot be undone.`,
-      )
-
-    if (!confirmed) {
+    if (!pendingDelete) {
+      setPendingDelete(employee)
       return
     }
 
@@ -3874,6 +3893,11 @@ async function handleSave(employeeData) {
         `${API_URL}/employees/${employee.id}`,
         {
           method: 'DELETE',
+
+          // DELETE /employees/:id is behind requireAuth too. This call sent no
+          // headers at all, so deleting an employee failed with
+          // "Authentication required" even while signed in.
+          headers: authHeaders(),
         },
       )
 
@@ -3882,7 +3906,8 @@ async function handleSave(employeeData) {
 
       if (!response.ok) {
         throw new Error(
-          data?.message ||
+          describeAuthFailure(response, data) ||
+            data?.message ||
             data?.error ||
             'Failed to delete employee.',
         )
@@ -3899,6 +3924,7 @@ async function handleSave(employeeData) {
       setSuccessMessage(
         'Employee deleted successfully.',
       )
+      setPendingDelete(null)
     } catch (err) {
       console.error(
         'Delete employee error:',
@@ -3915,14 +3941,25 @@ async function handleSave(employeeData) {
   return (
     <div className="min-h-full bg-[#F3F4F6] text-slate-950">
 
-      <main className="mx-auto max-w-[1600px] px-5 py-6 sm:px-8">
+      {pendingDelete && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4">
+        <section role="alertdialog" aria-modal="true" aria-labelledby="delete-employee-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <h2 id="delete-employee-title" className="text-lg font-bold text-slate-900">Delete employee?</h2>
+          <p className="mt-2 text-sm text-slate-600">Delete {getEmployeeName(pendingDelete)} ({getEmployeeId(pendingDelete)})? This action cannot be undone.</p>
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" onClick={() => setPendingDelete(null)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={() => handleDelete(pendingDelete)} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Delete</button>
+          </div>
+        </section>
+      </div>}
+
+      <main className="w-full max-w-[1600px] px-5 py-6 sm:px-8">
 
         <PageTitle
           eyebrow="Employee Management"
           title="Manage Your Team"
           description="View, add, edit and manage all employees in your organization."
-          className="animate-employee-hero mb-8 px-6 py-2 sm:px-10 sm:py-3"
-          action={(
+          className="animate-employee-hero mb-8 px-0 py-2"
+          action={canAdd ? (
             <button
               type="button"
               onClick={openAddModal}
@@ -3931,7 +3968,7 @@ async function handleSave(employeeData) {
               <UserPlus size={18} />
               Add Employee
             </button>
-          )}
+          ) : null}
         />
 
         {/* Summary */}
@@ -4154,7 +4191,7 @@ async function handleSave(employeeData) {
                   status: employee.status || '',
                   joinDate: employee.joinDate || employee.hireDate || '',
                 }))}
-                onImport={importEmployees}
+                onImport={canAdd ? importEmployees : undefined}
               />
 
               <div className="flex items-center rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200/70">
@@ -4219,6 +4256,7 @@ async function handleSave(employeeData) {
                 or add a new employee.
               </p>
 
+              {canAdd && (
               <button
                 type="button"
                 onClick={openAddModal}
@@ -4227,6 +4265,7 @@ async function handleSave(employeeData) {
                 <UserPlus size={15} />
                 Add Employee
               </button>
+              )}
 
             </div>
           ) : (
@@ -4236,10 +4275,11 @@ async function handleSave(employeeData) {
                 selectedIds={selectedEmployeeIds}
                 onToggleSelected={(id, checked) => setSelectedEmployeeIds((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))}
                 onToggleAll={(rows, checked) => setSelectedEmployeeIds((current) => checked ? [...new Set([...current, ...rows.map((item) => item.id)])] : current.filter((id) => !rows.some((row) => row.id === id)))}
-                onEdit={openEditModal}
+                onEdit={canEdit ? openEditModal : null}
                 onView={setViewEmployee}
-                onDelete={handleDelete}
+                onDelete={canDelete ? handleDelete : null}
                 onQuickUpdate={handleQuickTableUpdate}
+                canEdit={canEdit}
               />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -4251,9 +4291,9 @@ async function handleSave(employeeData) {
                       index={index}
                       selected={selectedEmployeeIds.includes(employee.id)}
                       onToggleSelected={(id, checked) => setSelectedEmployeeIds((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))}
-                      onEdit={openEditModal}
+                      onEdit={canEdit ? openEditModal : null}
                       onView={setViewEmployee}
-                      onDelete={handleDelete}
+                      onDelete={canDelete ? handleDelete : null}
                     />
                   ),
                 )}
@@ -4297,7 +4337,7 @@ async function handleSave(employeeData) {
       {viewEmployee && (
         <EmployeeViewModal
           employee={viewEmployee}
-          onResetPassword={handleResetPassword}
+          onResetPassword={canResetPassword ? handleResetPassword : null}
           onClose={() =>
             setViewEmployee(null)
           }

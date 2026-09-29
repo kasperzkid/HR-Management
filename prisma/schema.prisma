@@ -18,8 +18,131 @@ model User {
   employee            Employee? @relation(fields: [employeeId], references: [id])
   createdAt           DateTime  @default(now())
 
+  // ── Role-based access control ───────────────────────────────────────
+  //
+  // `role` above is left exactly as it was: a coarse "which portal is this
+  // person in" marker that messaging, feedback, announcements and the existing
+  // test suites all compare against. It is deliberately NOT the fine-grained
+  // grant, because a PAYROLL_STAFF account still has to look like HR staff to
+  // that older code.
+  //
+  // `hrRoleId` is the fine-grained grant. NULL means this account holds no HR
+  // role at all, which is every EMPLOYEE/EMPLOYER account - they are outside
+  // the RBAC system entirely and can never satisfy a permission check.
+  isActive            Boolean   @default(true)
+  hrRoleId            Int?
+  hrRole              Role?     @relation("UserHrRole", fields: [hrRoleId], references: [id], onDelete: SetNull)
+
+  // Individual tweaks on top of whatever the role grants. A DENY row here beats
+  // both the role and an ALLOW row, so one person can be given or have taken
+  // away a single permission without cloning the role.
+  permissionOverrides UserPermission[]
+
+  // Pending login-email change.
+  //
+  // A new address is NEVER written straight to `email`. It is held here, with
+  // a hash of a single-use verification token, until the new owner proves they
+  // can receive mail at it. `email` keeps working as the login address until
+  // then, so a typo or a mistyped address cannot lock the HR Admin out.
+  // All four fields are cleared together the moment the change is activated.
+  pendingEmail            String?
+  pendingEmailTokenHash   String?
+  pendingEmailExpiresAt   DateTime?
+  pendingEmailRequestedAt DateTime?
+
   sentMessages        Message[] @relation("SentMessages")
   receivedMessages    Message[] @relation("ReceivedMessages")
+  announcements       Announcement[]
+  resetTokens         PasswordResetToken[]
+
+  @@index([pendingEmailTokenHash])
+  @@index([hrRoleId])
+}
+
+// ── Role-based access control ────────────────────────────────────────────
+//
+// Three tables, deliberately small:
+//   Permission        one row per thing that can be allowed
+//   Role              a named bundle of permissions ("Payroll Staff")
+//   RolePermission    which permissions a role grants
+//   UserPermission    per-person ALLOW/DENY on top of the role
+//
+// The grant chain is: role grants, plus ALLOW overrides, minus DENY overrides.
+// Every read of a user's permissions goes through server/rbac/service.js, so
+// there is exactly one place that decides what a token is allowed to do.
+
+model Permission {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  name        String
+  description String   @default("")
+  group       String
+  sortOrder   Int      @default(0)
+
+  roles RolePermission[]
+  users UserPermission[]
+
+  @@index([group])
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  name        String
+  description String   @default("")
+
+  // Built-in roles are seeded and cannot be deleted, and HR_ADMIN additionally
+  // cannot have its permission set edited: the one role whose whole job is to
+  // control the other roles must not become a lock-out vector.
+  isSystem    Boolean  @default(false)
+  isProtected Boolean  @default(false)
+
+  permissions RolePermission[]
+  users       User[]          @relation("UserHrRole")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserPermission {
+  userId       Int
+  permissionId Int
+
+  // ALLOW adds a permission the role does not carry; DENY removes one it does.
+  // DENY always wins, so an explicit removal cannot be undone by a later ALLOW.
+  effect       String    @default("ALLOW")
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime   @default(now())
+
+  @@id([userId, permissionId])
+  @@index([permissionId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Employee {
@@ -169,6 +292,24 @@ model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique
   value String
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  category    String   @default("General")
+  priority    String   @default("Normal")
+  published   Boolean  @default(true)
+  recipientEmployeeId String?
+  authorId    Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([published, createdAt])
+  @@index([authorId])
 }
 
 model Message {

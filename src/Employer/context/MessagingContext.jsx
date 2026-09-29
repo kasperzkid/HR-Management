@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { MessagingContext } from './messagingStore'
 import { getUser } from '../../lib/auth'
 import { connectSocket, disconnectSocket } from '../../lib/socket'
+import { authHeaders } from '../../lib/hrApi'
 import {
   fetchContactsApi,
   fetchThreadApi,
@@ -82,6 +83,48 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
   const [contacts, setContacts] = useState([])
   const [threads, setThreads] = useState({})
   const [notifications, setNotifications] = useState([])
+
+  const upsertAnnouncementNotifications = useCallback((announcements) => {
+    if (!Array.isArray(announcements)) return
+    let dismissed = []
+    try { dismissed = JSON.parse(localStorage.getItem('yanol-dismissed-announcement-notifications') || '[]') } catch {}
+    const dismissedIds = new Set(dismissed.map(String))
+    setNotifications((current) => {
+      const existing = new Map(current.filter((item) => item.type === 'announcement').map((item) => [String(item.id), item]))
+      const announcementItems = announcements
+        .filter((item) => !dismissedIds.has(String(item.id)))
+        .map((item) => {
+          const id = `announcement-${item.id}`
+          const previous = existing.get(id)
+          return {
+            id,
+            title: item.title,
+            message: item.content,
+            time: item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Now',
+            createdAt: item.createdAt,
+            unread: previous ? previous.unread : true,
+            type: 'announcement',
+            category: item.category || 'General',
+            priority: item.priority || 'Normal',
+          }
+        })
+      const incomingIds = new Set(announcementItems.map((item) => item.id))
+      const retainedAnnouncements = current.filter((item) => item.type === 'announcement' && !incomingIds.has(item.id))
+      return [...announcementItems, ...retainedAnnouncements, ...current.filter((item) => item.type !== 'announcement')].slice(0, 30)
+    })
+  }, [])
+
+  const loadAnnouncements = useCallback(async () => {
+    if (isHR) return
+    try {
+      const response = await fetch('/api/announcements', { headers: authHeaders(), cache: 'no-store' })
+      if (!response.ok) return
+      const data = await response.json()
+      upsertAnnouncementNotifications(Array.isArray(data) ? data : data.announcements || [])
+    } catch {
+      // Keep existing notification and messaging functionality available offline.
+    }
+  }, [isHR, upsertAnnouncementNotifications])
 
   const contactsRef = useRef(contacts)
   const threadsRef = useRef(threads)
@@ -271,6 +314,15 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
     setContacts((prev) => prev.map((c) => (String(c.id) === String(userId) ? { ...c, online } : c)))
   }, [])
 
+  const handleAnnouncement = useCallback((announcement) => {
+    if (!isHR && announcement?.id) upsertAnnouncementNotifications([announcement])
+  }, [isHR, upsertAnnouncementNotifications])
+
+  const handleAnnouncementDeleted = useCallback(({ id } = {}) => {
+    if (isHR || !id) return
+    setNotifications((current) => current.filter((item) => item.id !== `announcement-${id}`))
+  }, [isHR])
+
   const removeMessages = useCallback((contactId, ids) => {
     const idSet = new Set(ids.map(String))
     const key = String(contactId)
@@ -301,6 +353,14 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect — cached threads are restored synchronously on mount on purpose
     reloadContactsAndThreads()
+    loadAnnouncements()
+    const announcementPoll = window.setInterval(loadAnnouncements, 60000)
+    const handleAnnouncementCreated = (event) => handleAnnouncement(event.detail)
+    const handleAnnouncementStorage = (event) => {
+      if (event.key === 'company-announcement-created') loadAnnouncements()
+    }
+    window.addEventListener('company-announcement-created', handleAnnouncementCreated)
+    window.addEventListener('storage', handleAnnouncementStorage)
 
     const socket = connectSocket()
     if (socket) {
@@ -308,6 +368,8 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
       socket.on('message:updated', handleMessageUpdated)
       socket.on('message:deleted', handleMessageDeleted)
       socket.on('presence', handlePresence)
+      socket.on('announcement:new', handleAnnouncement)
+      socket.on('announcement:deleted', handleAnnouncementDeleted)
     }
 
     try {
@@ -348,14 +410,19 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
         socket.off('message:updated', handleMessageUpdated)
         socket.off('message:deleted', handleMessageDeleted)
         socket.off('presence', handlePresence)
+        socket.off('announcement:new', handleAnnouncement)
+        socket.off('announcement:deleted', handleAnnouncementDeleted)
       }
+      window.clearInterval(announcementPoll)
+      window.removeEventListener('company-announcement-created', handleAnnouncementCreated)
+      window.removeEventListener('storage', handleAnnouncementStorage)
       disconnectSocket()
       if (channelRef.current) {
         channelRef.current.close()
         channelRef.current = null
       }
     }
-  }, [handleIncoming, handlePresence, handleMessageUpdated, handleMessageDeleted, removeMessages, upsertMessage, isHR, reloadContactsAndThreads])
+  }, [handleIncoming, handlePresence, handleMessageUpdated, handleMessageDeleted, handleAnnouncement, handleAnnouncementDeleted, loadAnnouncements, removeMessages, upsertMessage, isHR, reloadContactsAndThreads])
 
   const sendMessage = useCallback(
     async (contactId, text, options = {}) => {
@@ -565,11 +632,25 @@ export function MessagingProvider({ children, portalType = 'employer' }) {
   }, [markContactRead])
 
   const markAllNotificationsReadAndRemove = useCallback(() => {
+    const dismissedIds = notifications.filter((item) => item.type === 'announcement').map((item) => item.id.replace(/^announcement-/, ''))
+    if (dismissedIds.length) {
+      try {
+        const existing = JSON.parse(localStorage.getItem('yanol-dismissed-announcement-notifications') || '[]')
+        localStorage.setItem('yanol-dismissed-announcement-notifications', JSON.stringify([...new Set([...existing, ...dismissedIds])]))
+      } catch {}
+    }
     setNotifications([])
     markAllRead()
-  }, [markAllRead])
+  }, [markAllRead, notifications])
 
   const dismissNotification = useCallback((id) => {
+    if (String(id).startsWith('announcement-')) {
+      const announcementId = String(id).replace(/^announcement-/, '')
+      try {
+        const existing = JSON.parse(localStorage.getItem('yanol-dismissed-announcement-notifications') || '[]')
+        localStorage.setItem('yanol-dismissed-announcement-notifications', JSON.stringify([...new Set([...existing, announcementId])]))
+      } catch {}
+    }
     setNotifications((prev) => prev.filter((n) => n.id !== id))
   }, [])
 

@@ -397,10 +397,10 @@ function PaymentInfo() {
             sortable: true,
             render: (t) => (
               <span
-                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold ${
+                className={`inline-flex items-center gap-1 text-[10.5px] font-semibold ${
                   t.status === 'Paid'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60'
-                    : 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-[#1c2026] dark:text-gray-400 dark:border-[#33383f]'
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : 'text-gray-600 dark:text-gray-400'
                 }`}
               >
                 {t.status}

@@ -39,6 +39,7 @@ function Employees() {
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [toastMessage, setToastMessage] = useState(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
 
   useEffect(() => {
     fetchEmployees()
@@ -124,11 +125,7 @@ function Employees() {
   }
 
   const handleBulkDelete = () => {
-    if (confirm(`Are you sure you want to delete ${selectedIds.length} employee(s)?`)) {
-      setEmployees(employees.filter((e) => !selectedIds.includes(e.id)))
-      setSelectedIds([])
-      showToast('Selected employees removed')
-    }
+    setConfirmBulkDelete(true)
   }
 
   const handleExportCSV = () => {
@@ -516,6 +513,7 @@ function Employees() {
         onDelete={handleDeleteEmployee}
         onResetPassword={handleResetPassword}
       />
+      {confirmBulkDelete && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"><section role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><h2 className="font-bold text-gray-900">Delete selected employees?</h2><p className="mt-2 text-sm text-gray-600">Delete {selectedIds.length} selected employee(s)? This action cannot be undone.</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setConfirmBulkDelete(false)} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold">Cancel</button><button type="button" onClick={() => { setEmployees(employees.filter((e) => !selectedIds.includes(e.id))); setSelectedIds([]); setConfirmBulkDelete(false); showToast('Selected employees removed') }} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white">Delete employees</button></div></section></div>}
     </div>
   )
 }
