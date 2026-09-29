@@ -1,144 +1,196 @@
-import { useEffect, useState } from 'react'
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+
 import Login from './pages/Login'
-import EmployerApp from './Employer/EmployerApp'
+import ResetPassword from './pages/ResetPassword'
+import VerifyEmail from './pages/VerifyEmail'
 import HRManagerApp from './HR-Manager/HRManagerApp'
+import EmployerApp from './Employer/EmployerApp'
 
-function useAuth() {
-  const [user, setUser] = useState(() => {
+function getStoredUser() {
+  try {
     const raw = localStorage.getItem('user')
-    if (!raw) return null
-    try {
-      const stored = JSON.parse(raw)
-      return stored && stored.role ? stored : null
-    } catch {
-      return null
-    }
-  })
-
-  const [status, setStatus] = useState(() => {
-    const raw = localStorage.getItem('user')
-    if (!raw) return 'anonymous'
-    try {
-      const stored = JSON.parse(raw)
-      return stored && stored.role ? 'authenticated' : 'anonymous'
-    } catch {
-      return 'anonymous'
-    }
-  })
-
-  useEffect(() => {
-    let cancelled = false
-    const raw = localStorage.getItem('user')
-
-    if (!raw) {
-      setStatus('anonymous')
-      setUser(null)
-      return
-    }
-
-    let stored
-    try {
-      stored = JSON.parse(raw)
-    } catch {
-      setStatus('anonymous')
-      setUser(null)
-      return
-    }
-
-    if (!stored || !stored.role) {
-      setStatus('anonymous')
-      setUser(null)
-      return
-    }
-
-    setUser(stored)
-    setStatus('authenticated')
-
-    // If backend token is present, attempt background sync without logging user out on error
-    if (stored.token && !stored.token.startsWith('session-')) {
-      fetch('/api/auth/me', { headers: { Authorization: `Bearer ${stored.token}` } })
-        .then(async (res) => {
-          if (cancelled) return
-          if (res.ok) {
-            const data = await res.json()
-            setUser(data.user)
-            setStatus('authenticated')
-          } else if (res.status === 401) {
-            // Token rejected by the server — drop the broken session and re-login
-            localStorage.removeItem('user')
-            setUser(null)
-            setStatus('anonymous')
-          }
-        })
-        .catch(() => {
-          // Server offline, keep local authenticated session
-        })
-    }
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  return { status, user }
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
 }
 
-function ProtectedRoute({ children, allowedRole }) {
-  const { status, user } = useAuth()
+function normalizeRole(role) {
+  const value = String(role || '').trim().toUpperCase()
 
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-950 rounded-full animate-spin" />
-      </div>
-    )
+  if (value === 'EMPLOYER' || value === 'EMPLOYEE') {
+    return 'EMPLOYEE'
   }
 
-  if (status === 'anonymous' || !user) {
-    return <Navigate to="/login" replace />
+  if (
+    value === 'ADMIN' ||
+    value === 'HR' ||
+    value === 'HR_ADMIN' ||
+    value === 'HR_MANAGER'
+  ) {
+    return 'HR_MANAGER'
   }
 
-  if (allowedRole && user.role && user.role !== allowedRole) {
-    return <Navigate to={user.role === 'HR_MANAGER' ? '/hr-manager/dashboard' : '/employer/dashboard'} replace />
+  return value
+}
+
+function ProtectedRoute({ children, allowedRole, loginPath }) {
+  const user = getStoredUser()
+
+  if (!user?.token) {
+    return <Navigate to={loginPath} replace />
+  }
+
+  if (normalizeRole(user.role) !== allowedRole) {
+    return <Navigate to={loginPath} replace />
   }
 
   return children
 }
 
-function App() {
+function AnimatedSearchPlaceholders() {
+  useEffect(() => {
+    const timers = new Map()
+    const animate = (input) => {
+      if (!(input instanceof HTMLInputElement) || input.dataset.animatedSearchPlaceholder) return
+      const original = input.getAttribute('placeholder') || ''
+      if (!/search/i.test(original)) return
+      input.dataset.animatedSearchPlaceholder = original
+      let index = 0
+      let deleting = false
+      let pause = 0
+      const timer = window.setInterval(() => {
+        if (!input.isConnected) {
+          window.clearInterval(timer)
+          timers.delete(input)
+          return
+        }
+        if (pause > 0) { pause -= 1; return }
+        if (!deleting) {
+          index += 1
+          input.setAttribute('placeholder', original.slice(0, index))
+          if (index >= original.length) { deleting = true; pause = 12 }
+        } else {
+          index -= 1
+          input.setAttribute('placeholder', original.slice(0, index))
+          if (index <= 0) { deleting = false; pause = 3 }
+        }
+      }, 65)
+      timers.set(input, timer)
+    }
+    const scan = (root) => {
+      if (root instanceof HTMLInputElement) animate(root)
+      root.querySelectorAll?.('input[placeholder]').forEach(animate)
+    }
+
+    scan(document)
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') mutation.addedNodes.forEach((node) => node.nodeType === Node.ELEMENT_NODE && scan(node))
+        else if (mutation.target instanceof HTMLInputElement && !mutation.target.dataset.animatedSearchPlaceholder) animate(mutation.target)
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['placeholder'] })
+    return () => {
+      observer.disconnect()
+      timers.forEach((timer) => window.clearInterval(timer))
+    }
+  }, [])
+
+  return null
+}
+
+export default function App() {
   return (
     <BrowserRouter>
+      <AnimatedSearchPlaceholders />
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Navigate to="/login" replace />} />
+
+        {/* HR ADMIN LOGIN */}
         <Route
-          path="/employer/*"
+          path="/hr-manager/login"
+          element={<Login />}
+        />
+
+        {/* EMPLOYEE LOGIN */}
+        <Route
+          path="/employer/login"
+          element={<Login />}
+        />
+
+        {/* PASSWORD RESET (public - reached from the emailed link) */}
+        <Route
+          path="/reset-password"
+          element={<ResetPassword />}
+        />
+
+        {/* LOGIN EMAIL CONFIRMATION (public - reached from the emailed link) */}
+        <Route
+          path="/verify-email"
+          element={<VerifyEmail />}
+        />
+
+        {/* KEEP OLD LOGIN URL WORKING */}
+        <Route
+          path="/login"
           element={
-            <ProtectedRoute allowedRole="EMPLOYER">
-              <EmployerApp />
-            </ProtectedRoute>
+            <Navigate
+              to="/hr-manager/login"
+              replace
+            />
           }
         />
+
+        {/* HR MANAGER / HR DASHBOARD */}
         <Route
           path="/hr-manager/*"
           element={
-            <ProtectedRoute allowedRole="HR_MANAGER">
+            <ProtectedRoute
+              allowedRole="HR_MANAGER"
+              loginPath="/hr-manager/login"
+            >
               <HRManagerApp />
             </ProtectedRoute>
           }
         />
-        <Route path="/hr-manager" element={<Navigate to="/hr-manager/dashboard" replace />} />
-        <Route path="/payroll" element={<Navigate to="/hr-manager/payroll" replace />} />
-        <Route path="/leave" element={<Navigate to="/hr-manager/leave" replace />} />
-        <Route path="/attendance" element={<Navigate to="/hr-manager/attendance" replace />} />
-        <Route path="/employees/new" element={<Navigate to="/hr-manager/employees/new" replace />} />
-        <Route path="/employees" element={<Navigate to="/hr-manager/employees" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+
+        {/* EMPLOYEE PORTAL */}
+        <Route
+          path="/employer/*"
+          element={
+            <ProtectedRoute
+              allowedRole="EMPLOYEE"
+              loginPath="/employer/login"
+            >
+              <EmployerApp />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* MAIN ROUTE → HR DASHBOARD */}
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to="/hr-manager"
+              replace
+            />
+          }
+        />
+
+        {/* UNKNOWN ROUTES → HR DASHBOARD */}
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/hr-manager"
+              replace
+            />
+          }
+        />
+
       </Routes>
     </BrowserRouter>
   )
 }
-
-export default App

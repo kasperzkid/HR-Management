@@ -1,13 +1,19 @@
 import { getToken } from './auth'
 
 function authHeaders(extra = {}) {
+  const token = getToken()
   return {
-    Authorization: `Bearer ${getToken()}`,
+    ...(token && !token.startsWith('session-') ? { Authorization: `Bearer ${token}` } : {}),
     ...extra,
   }
 }
 
 export async function apiFetch(path, options = {}) {
+  const token = getToken()
+  if (!token || token.startsWith('session-')) {
+    throw new Error('Local session mode')
+  }
+
   const res = await fetch(`/api/messages${path}`, {
     ...options,
     headers: authHeaders(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
@@ -22,6 +28,10 @@ export const fetchContactsApi = () => apiFetch('/contacts')
 
 export const fetchUsersApi = () => apiFetch('/users')
 
+// HR Admin inboxes — used by the employee portal to guarantee there is
+// always someone to raise a complaint with, even before any chat exists.
+export const fetchHrAdminsApi = () => apiFetch('/hr-admins')
+
 export const startConversationApi = (payload) =>
   apiFetch('/start', {
     method: 'POST',
@@ -30,15 +40,34 @@ export const startConversationApi = (payload) =>
 
 export const fetchThreadApi = (contactId) => apiFetch(`/${contactId}`)
 
-export const sendMessageApi = (contactId, text) =>
+export const sendMessageApi = (contactId, text, options = {}) =>
   apiFetch(`/${contactId}`, {
     method: 'POST',
+    body: JSON.stringify({
+      text,
+      isComplain: Boolean(options.isComplain),
+    }),
+  })
+
+export const updateMessageApi = (contactId, messageId, text) =>
+  apiFetch(`/${contactId}/messages/${messageId}`, {
+    method: 'PUT',
     body: JSON.stringify({ text }),
   })
 
-export const sendAttachmentApi = (contactId, file) => {
+export const deleteMessageApi = (contactId, messageId) =>
+  apiFetch(`/${contactId}/messages/${messageId}`, { method: 'DELETE' })
+
+export const bulkDeleteMessagesApi = (contactId, ids) =>
+  apiFetch(`/${contactId}/messages/bulk`, {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  })
+
+export const sendAttachmentApi = (contactId, file, caption) => {
   const form = new FormData()
   form.append('file', file)
+  if (caption && caption.trim()) form.append('caption', caption.trim())
   return apiFetch(`/${contactId}/upload`, { method: 'POST', body: form })
 }
 

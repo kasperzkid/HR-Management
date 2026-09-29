@@ -1,31 +1,71 @@
-import { useState, useMemo } from 'react'
-import { Play, CheckCircle2, RefreshCw, Calculator, AlertTriangle } from 'lucide-react'
-import { INITIAL_EMPLOYEES } from '../data/employeeData'
-import { ATTENDANCE, attendanceTotals } from '../data/attendanceData'
-import { calcPayroll, formatETB, roundMoney, netToBasic } from '../lib/payroll'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { calcPayroll, formatETB, roundMoney } from '../lib/payroll'
 import { SETTINGS } from '../data/settingsData'
 import LuxuryDataTable from '../components/LuxuryDataTable'
-import { getCurrentEmployee } from '../lib/currentUser'
+import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
+import { attendanceTotals } from '../lib/attendanceUtils'
+import { fetchEmployees, fetchAttendance } from '../lib/employerApi'
+import useRealtimeRefetch from '../hooks/useRealtimeRefetch'
 
 function Payroll() {
-  const currentEmployee = getCurrentEmployee()
-  const currentEmployeeId = currentEmployee.employeeId
+  const [employees, setEmployees] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [loading, setLoading] = useState(true)
+  const currentEmployeeId = resolveEmployee(employees, getCurrentUser()).employeeId
+  const showAllEmployees = currentEmployeeId === '—'
 
   const [month, setMonth] = useState(new Date().getMonth() + 1)
   const [year, setYear] = useState(new Date().getFullYear())
-  const [finalized, setFinalized] = useState(false)
   const [overrides, setOverrides] = useState({})
-  const [reverseInput, setReverseInput] = useState('')
-  const [reverseResult, setReverseResult] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchEmployees()
+      .then((emps) => {
+        if (!cancelled) setEmployees(Array.isArray(emps) ? emps : [])
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setAttendance([])
+    fetchAttendance({ month, year })
+      .then((att) => {
+        if (!cancelled) setAttendance(Array.isArray(att) ? att : (att?.attendance || []))
+      })
+      .catch(() => {
+        if (!cancelled) setAttendance([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [month, year])
+
+  // Live refresh: a punch or HR status change instantly recomputes the
+  // payroll rows for the selected month (OT hours feed the rows).
+  const reloadAttendance = useCallback(() => {
+    fetchAttendance({ month, year })
+      .then((att) => setAttendance(Array.isArray(att) ? att : (att?.attendance || [])))
+      .catch(() => {})
+  }, [month, year])
+  useRealtimeRefetch(`${month}-${year}`, reloadAttendance)
 
   const filteredEmployees = useMemo(() => {
-    return INITIAL_EMPLOYEES.filter((emp) => emp.employeeId === currentEmployeeId)
-  }, [currentEmployeeId])
+    if (showAllEmployees) return employees.filter((emp) => emp.employmentStatus !== 'Resigned' && emp.employmentStatus !== 'Terminated')
+    return employees.filter((emp) => emp.employeeId === currentEmployeeId)
+  }, [employees, currentEmployeeId, showAllEmployees])
 
   const rows = useMemo(() => {
-    const attTotals = attendanceTotals(ATTENDANCE)
+    const attTotals = attendanceTotals(attendance)
     return filteredEmployees.map((emp) => {
-      const base = calcPayroll(emp, attTotals[emp.employeeId] || { totalOtHours: 0 })
+      const base = calcPayroll(emp, attTotals[emp.id] || attTotals[emp.employeeId] || { totalOtHours: 0 })
       const ov = overrides[emp.employeeId]
       const otherDeductions = ov?.otherDeductions ?? emp.otherDeductions ?? 0
       const loanDeductions = ov?.loanDeductions ?? emp.loanDeductions ?? 0
@@ -38,7 +78,7 @@ function Payroll() {
         netSalary: roundMoney(base.gross - totalDeductions),
       }
     })
-  }, [overrides])
+  }, [filteredEmployees, attendance, overrides])
 
   const totals = useMemo(() => {
     const active = rows.filter((r) => r.active)
@@ -57,21 +97,11 @@ function Payroll() {
     setOverrides((prev) => ({ ...prev, [employeeId]: { ...(prev[employeeId] || {}), [field]: num } }))
   }
 
-  const handleReverse = () => {
-    const net = Number(reverseInput)
-    if (!net || net <= 0) return
-    setReverseResult({
-      net,
-      basic: netToBasic(net),
-      hourly: roundMoney(netToBasic(net) / SETTINGS.standardMonthlyHours),
-    })
-  }
-
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-950 dark:text-gray-100">Payroll Run</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-950 dark:text-gray-100">Payroll</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             Tax brackets per Proclamation No. 1395/2025 · Pension {SETTINGS.pension.employeeRate * 100}% / {SETTINGS.pension.employerRate * 100}% · OT {SETTINGS.overtimeMultiplier}x · {SETTINGS.standardMonthlyHours}h std
           </p>
@@ -90,30 +120,6 @@ function Payroll() {
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="px-3 py-2 text-xs border border-gray-200 dark:border-[#33383f] rounded-lg bg-white dark:bg-[#15181d] font-semibold text-gray-800 dark:text-gray-200">
             {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
-
-          {!finalized ? (
-            <button
-              onClick={() => setFinalized(true)}
-              className="px-4 py-2 rounded-lg bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 text-xs font-semibold flex items-center gap-1.5 hover:bg-gray-800 transition-colors"
-            >
-              <Play size={14} />
-              Finalize Run
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                <CheckCircle2 size={15} />
-                Finalized
-              </span>
-              <button
-                onClick={() => { setFinalized(false); setOverrides({}) }}
-                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-[#33383f] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#1c2026] flex items-center gap-1.5"
-              >
-                <RefreshCw size={13} />
-                Reopen
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -227,36 +233,6 @@ function Payroll() {
             exportValue: (r) => r.pensionEmployee,
           },
           {
-            key: 'otherDeductions',
-            header: 'Other Ded.',
-            align: 'right',
-            render: (r) => (
-              <input
-                type="number"
-                disabled={finalized}
-                value={r.otherDeductions}
-                onChange={(e) => handleOverride(r.employeeId, 'otherDeductions', e.target.value)}
-                className="w-18 text-right px-2 py-0.5 text-xs rounded-lg border border-amber-200 bg-amber-50/40 focus:outline-none focus:ring-1 focus:ring-amber-300 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:border-gray-100 dark:disabled:border-gray-800 text-gray-800 dark:text-gray-200"
-              />
-            ),
-            exportValue: (r) => r.otherDeductions,
-          },
-          {
-            key: 'loanDeductions',
-            header: 'Loan Ded.',
-            align: 'right',
-            render: (r) => (
-              <input
-                type="number"
-                disabled={finalized}
-                value={r.loanDeductions}
-                onChange={(e) => handleOverride(r.employeeId, 'loanDeductions', e.target.value)}
-                className="w-18 text-right px-2 py-0.5 text-xs rounded-lg border border-amber-200 bg-amber-50/40 focus:outline-none focus:ring-1 focus:ring-amber-300 disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:border-gray-100 dark:disabled:border-gray-800 text-gray-800 dark:text-gray-200"
-              />
-            ),
-            exportValue: (r) => r.loanDeductions,
-          },
-          {
             key: 'netSalary',
             header: 'Net Salary',
             sortable: true,
@@ -271,52 +247,6 @@ function Payroll() {
         ]}
       />
 
-      {/* Reverse calculator */}
-      <div className="bg-white dark:bg-[#15181d] rounded-2xl border border-gray-200/90 dark:border-[#262b31] shadow-2xs p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Calculator size={15} className="text-gray-500 dark:text-gray-400" />
-          <h3 className="text-sm font-bold text-gray-950 dark:text-gray-100">Net-to-Basic Reverse Calculator</h3>
-          <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-1">Given desired net salary → required basic (Permanent, no allowances/OT)</span>
-        </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-          <div className="flex-1 w-full max-w-xs">
-            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Desired Net Salary (ETB)</label>
-            <input
-              type="number"
-              value={reverseInput}
-              onChange={(e) => setReverseInput(e.target.value)}
-              placeholder="e.g. 30000"
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-[#33383f] rounded-lg bg-white dark:bg-[#15181d] text-gray-800 dark:text-gray-200 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300"
-            />
-          </div>
-          <button onClick={handleReverse} className="px-4 py-2 rounded-lg bg-gray-950 text-white dark:bg-[#3a4149] dark:hover:bg-gray-600 text-xs font-semibold hover:bg-gray-800 transition-colors">
-            Calculate
-          </button>
-          {reverseResult && (
-            <div className="flex gap-4 text-xs">
-              <div>
-                <p className="text-gray-500 dark:text-gray-400">Required Basic</p>
-                <p className="font-bold text-gray-950 dark:text-gray-100 text-sm">{formatETB(reverseResult.basic)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500 dark:text-gray-400">Hourly Rate ({SETTINGS.standardMonthlyHours}h)</p>
-                <p className="font-bold text-gray-950 dark:text-gray-100 text-sm">{formatETB(reverseResult.hourly)}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Business rule note */}
-      <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-xs text-amber-800">
-        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-        <p>
-          Business rules applied: only <strong>Active</strong> employees count in totals · <strong>Contractual / Intern</strong> are
-          force-exempt from tax &amp; pension · allowances are 100% taxable · pension on basic only · overtime uses a flat{' '}
-          {SETTINGS.overtimeMultiplier}x multiplier (law defines 1.25x / 1.5x / 2.0x tiers). Verify brackets against the Negarit Gazeta
-          before statutory filing.
-        </p>
-      </div>
     </div>
   )
 }

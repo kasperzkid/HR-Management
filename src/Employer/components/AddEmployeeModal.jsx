@@ -1,24 +1,44 @@
 import { useState } from 'react'
 import { X, User, Mail, Briefcase, Building, Calendar, Hash, Check } from 'lucide-react'
-import { DEPARTMENTS } from '../data/employeeData'
+import LuxuryDatePicker from '../components/LuxuryDatePicker'
+import { SETTINGS } from '../data/settingsData'
+const DEPARTMENTS = ['All Departments', ...(SETTINGS.departments || [])]
 
-function AddEmployeeModal({ isOpen, onClose, onAdd }) {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    jobTitle: '',
-    department: 'Design Team',
-    employeeId: `A0${Math.floor(Math.random() * 9 + 1)}DEVP${Math.floor(Math.random() * 900 + 100)}`,
-    joinDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
-    status: 'Active',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-    location: 'Remote',
-    salary: '$95,000'
+function AddEmployeeModal({ isOpen, onClose, onAdd, editingEmployee = null, onEdit = null }) {
+  const [formData, setFormData] = useState(() => {
+    if (editingEmployee) {
+      return {
+        name: editingEmployee.name || '',
+        email: editingEmployee.email || '',
+        jobTitle: editingEmployee.jobTitle || '',
+        department: editingEmployee.department || 'Design Team',
+        employeeId: editingEmployee.employeeId || '',
+        joinDate: editingEmployee.joinDate || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
+        status: editingEmployee.status || editingEmployee.employmentStatus || 'Active',
+        avatar: editingEmployee.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        location: editingEmployee.location || 'Remote',
+        salary: editingEmployee.salary || (editingEmployee.basicSalary != null ? `$${Number(editingEmployee.basicSalary).toLocaleString('en-US')}` : '$95,000')
+      }
+    }
+    return {
+      name: '',
+      email: '',
+      jobTitle: '',
+      department: 'Design Team',
+      employeeId: `A0${Math.floor(Math.random() * 9 + 1)}DEVP${Math.floor(Math.random() * 900 + 100)}`,
+      joinDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
+      status: 'Active',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      location: 'Remote',
+      salary: '$95,000'
+    }
   })
 
   if (!isOpen) return null
 
-  const handleSubmit = (e) => {
+  const isEditing = Boolean(editingEmployee)
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!formData.name.trim() || !formData.email.trim() || !formData.jobTitle.trim()) return
 
@@ -29,11 +49,24 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
       .substring(0, 2)
       .toUpperCase()
 
-    onAdd({
-      id: `emp-${Date.now()}`,
+    const salary = Number(String(formData.salary).replace(/[^\d.-]/g, '')) || 0
+    const payload = {
       ...formData,
+      employmentStatus: formData.status,
+      basicSalary: salary,
+      salary,
       initials: initials || 'EM'
-    })
+    }
+
+    if (isEditing && onEdit) {
+      onEdit({
+        ...editingEmployee,
+        ...payload,
+        id: editingEmployee.id
+      })
+    } else {
+      await onAdd(payload)
+    }
     onClose()
   }
 
@@ -43,8 +76,12 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-[#262b31]">
           <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Add New Employee</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Enter details to onboard a new team member</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {isEditing ? 'Edit Employee' : 'Add New Employee'}
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {isEditing ? `Update details for ${editingEmployee.name}` : 'Enter details to onboard a new team member'}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -116,6 +153,9 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
                   {DEPARTMENTS.filter(d => d !== 'All Departments').map((dep) => (
                     <option key={dep} value={dep}>{dep}</option>
                   ))}
+                  {formData.department && !DEPARTMENTS.includes(formData.department) && (
+                    <option value={formData.department}>{formData.department}</option>
+                  )}
                 </select>
               </div>
             </div>
@@ -139,13 +179,11 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Join Date</label>
               <div className="relative">
-                <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-                <input
-                  type="text"
-                  value={formData.joinDate}
-                  onChange={(e) => setFormData({ ...formData, joinDate: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-300 dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200"
-                />
+                <LuxuryDatePicker
+              value={formData.joinDate}
+              onChange={(date) => setFormData({ ...formData, joinDate: date })}
+              placeholder="Select date"
+            />
               </div>
             </div>
           </div>
@@ -188,7 +226,7 @@ function AddEmployeeModal({ isOpen, onClose, onAdd }) {
               type="submit"
               className="px-5 py-2 text-xs font-semibold text-white bg-gray-950 hover:bg-gray-800 dark:bg-[#1c2026] dark:hover:bg-[#2a3139] rounded-lg shadow-xs transition-colors"
             >
-              Add Employee
+              {isEditing ? 'Save Changes' : 'Add Employee'}
             </button>
           </div>
         </form>

@@ -1,46 +1,40 @@
+import './env.js'
 import express from 'express'
 import cors from 'cors'
 
-import authRoutes from './routes/auth.routes.js'
-import employerRoutes from './routes/employer.routes.js'
-import hrManagerRoutes from './routes/hr-manager.routes.js'
-import messageRoutes from './routes/message.routes.js'
-import { authenticate, requireSession, authorize } from './middleware/auth.js'
-import { UPLOAD_DIR } from './middleware/upload.js'
+import authRoutes      from './routes/auth.routes.js'
+import employerRoutes   from './routes/employer.routes.js'
+import hrManagerRoutes  from './routes/hr-manager.routes.js'
+import messagesRoutes    from './routes/messages.routes.js'
+import announcementsRoutes from './routes/announcements.routes.js'
+import { requirePermission } from './middleware/rbac.middleware.js'
 
 const app = express()
 
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '4mb' }))
 
-// Served uploaded message attachments
-app.use('/uploads', express.static(UPLOAD_DIR))
-
-// Public routes
+// ─── Public routes ────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
 
-// Protected routes — messaging (any authenticated role)
-app.use('/api/messages', authenticate, requireSession, messageRoutes)
+// ─── Protected / dashboard routes ─────────────────────────────
+app.use('/api/employer',   employerRoutes)
+app.use('/api/hr-manager', hrManagerRoutes)
+app.use('/api/messages', messagesRoutes)
 
-// Protected routes — employer only
-app.use(
-  '/api/employer',
-  authenticate,
-  requireSession,
-  authorize('EMPLOYER', 'HR_MANAGER'),
-  employerRoutes
-)
+// Announcements are read by every signed-in account - the employee portal shows
+// them too - so the read is left to the route's own filtering. Writing is HR
+// work and is permission-checked.
+//
+// The guard sits here rather than inside the router because the announcement
+// router and controller are the user's own in-progress files, and a guard in
+// front of them gets the 403 enforced without editing them. The controller
+// keeps its own role check as a second layer.
+app.post('/api/announcements', ...requirePermission('announcements.create'))
+app.delete('/api/announcements/:id', ...requirePermission('announcements.delete'))
+app.use('/api/announcements', announcementsRoutes)
 
-// Protected routes — hr-manager only
-app.use(
-  '/api/hr-manager',
-  authenticate,
-  requireSession,
-  authorize('HR_MANAGER', 'EMPLOYER'),
-  hrManagerRoutes
-)
-
-// 404 fallback
+// ─── 404 fallback ─────────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ message: 'Not found' })
 })

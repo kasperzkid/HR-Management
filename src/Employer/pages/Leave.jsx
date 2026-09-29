@@ -1,33 +1,63 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus, TriangleAlert } from 'lucide-react'
-import { ALL_LEAVE } from '../data/leaveData'
 import { leaveBalance, findOverlaps, formatDate } from '../lib/leave'
 import LuxuryDataTable from '../components/LuxuryDataTable'
 import ApplyLeaveModal from '../components/ApplyLeaveModal'
-import { getCurrentEmployee } from '../lib/currentUser'
+import { resolveEmployee, getCurrentUser } from '../lib/currentUser'
+import { createLeaveRequest } from '../lib/employerApi'
+import { fetchEmployees, fetchLeaveRequests } from '../lib/employerApi'
 
 const STATUS_STYLES = {
-  Approved: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60',
-  Pending: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60',
+  Approved: 'text-emerald-700 dark:text-emerald-400',
+  Pending: 'text-amber-700 dark:text-amber-400',
   Rejected: 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60',
 }
 
 const LEAVE_COLORS = {
-  Annual: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400',
-  Sick: 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400',
-  Maternity: 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-400',
-  Paternity: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
-  Study: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
-  Unpaid: 'bg-gray-100 text-gray-600 dark:bg-[#1c2026] dark:text-gray-400',
+  'Annual Leave': 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400',
+  'Sick Leave': 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400',
+  'Maternity Leave': 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-400',
+  'Paternity Leave': 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+  'Study Leave': 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400',
+  'Unpaid Leave': 'bg-gray-100 text-gray-600 dark:bg-[#1c2026] dark:text-gray-400',
 }
 
 function Leave() {
-  const currentEmployee = getCurrentEmployee()
-  const [requests, setRequests] = useState(() =>
-    ALL_LEAVE.filter((r) => r.employeeId === currentEmployee.employeeId)
+  const user = getCurrentUser()
+  const [employees, setEmployees] = useState([])
+  const [leaveRequests, setLeaveRequests] = useState([])
+  const currentEmployee = useMemo(
+    () => resolveEmployee(employees, user),
+    [employees, user],
+  )
+  const requests = useMemo(
+    () =>
+      leaveRequests.filter(
+        (r) => r.employeeId === currentEmployee.id || r.businessId === currentEmployee.employeeId,
+      ),
+    [leaveRequests, currentEmployee?.id, currentEmployee?.employeeId],
   )
   const [showForm, setShowForm] = useState(false)
   const [toast, setToast] = useState(null)
+  const [pendingReload, setPendingReload] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([fetchEmployees(), fetchLeaveRequests()])
+      .then(([emps, leaves]) => {
+        if (!cancelled) {
+          setEmployees(emps)
+          setLeaveRequests(Array.isArray(leaves) ? leaves : leaves?.requests || [])
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setPendingReload(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pendingReload])
 
   const showToast = (msg) => {
     setToast(msg)
@@ -42,10 +72,31 @@ function Leave() {
     [currentEmployee.joinDate, requests]
   )
 
-  const handleApply = (newReq) => {
-    setRequests((prev) => [newReq, ...prev])
+  const handleApply = async (newReq) => {
+    try {
+      const result = await createLeaveRequest({
+        employeeId: currentEmployee.id || currentEmployee.employeeId,
+        leaveType: newReq.leaveType,
+        startDate: newReq.startDate,
+        endDate: newReq.endDate,
+        remarks: newReq.remarks,
+      })
+      const request = result?.request || result?.leaveRequest || result
+      window.dispatchEvent(new CustomEvent('hr-leave-request-created', { detail: request }))
+      try {
+        localStorage.setItem('hr-leave-request-created', JSON.stringify({ id: request?.id, at: Date.now() }))
+      } catch {}
+      if ('BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('hr-leave-requests')
+        channel.postMessage({ type: 'created', request })
+        channel.close()
+      }
+      setPendingReload(true)
+      showToast('Leave request submitted successfully for approval')
+    } catch (err) {
+      showToast(err.message || 'Failed to submit leave request')
+    }
     setShowForm(false)
-    showToast('Leave request submitted successfully for approval')
   }
 
   return (
@@ -206,7 +257,7 @@ function Leave() {
             align: 'center',
             render: (r) => (
               <div className="flex items-center gap-2">
-                <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-semibold ${STATUS_STYLES[r.approvalStatus]}`}>
+                <span className={`text-[10.5px] font-semibold ${STATUS_STYLES[r.approvalStatus] || ''}`}>
                   {r.approvalStatus}
                 </span>
                 {overlapIds.has(r.id) && (
