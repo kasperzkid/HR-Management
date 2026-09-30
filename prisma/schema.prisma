@@ -8,106 +8,243 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
-  role      String
-  createdAt DateTime @default(now())
+  id                  Int       @id @default(autoincrement())
+  name                String
+  email               String    @unique
+  password            String
+  mustChangePassword  Boolean   @default(false)
+  role                String
+  employeeId          String?   @unique
+  employee            Employee? @relation(fields: [employeeId], references: [id])
+  createdAt           DateTime  @default(now())
+
+  // ── Role-based access control ───────────────────────────────────────
+  //
+  // `role` above is left exactly as it was: a coarse "which portal is this
+  // person in" marker that messaging, feedback, announcements and the existing
+  // test suites all compare against. It is deliberately NOT the fine-grained
+  // grant, because a PAYROLL_STAFF account still has to look like HR staff to
+  // that older code.
+  //
+  // `hrRoleId` is the fine-grained grant. NULL means this account holds no HR
+  // role at all, which is every EMPLOYEE/EMPLOYER account - they are outside
+  // the RBAC system entirely and can never satisfy a permission check.
+  isActive            Boolean   @default(true)
+  hrRoleId            Int?
+  hrRole              Role?     @relation("UserHrRole", fields: [hrRoleId], references: [id], onDelete: SetNull)
+
+  // Individual tweaks on top of whatever the role grants. A DENY row here beats
+  // both the role and an ALLOW row, so one person can be given or have taken
+  // away a single permission without cloning the role.
+  permissionOverrides UserPermission[]
+
+  // Pending login-email change.
+  //
+  // A new address is NEVER written straight to `email`. It is held here, with
+  // a hash of a single-use verification token, until the new owner proves they
+  // can receive mail at it. `email` keeps working as the login address until
+  // then, so a typo or a mistyped address cannot lock the HR Admin out.
+  // All four fields are cleared together the moment the change is activated.
+  pendingEmail            String?
+  pendingEmailTokenHash   String?
+  pendingEmailExpiresAt   DateTime?
+  pendingEmailRequestedAt DateTime?
+
+  sentMessages        Message[] @relation("SentMessages")
+  receivedMessages    Message[] @relation("ReceivedMessages")
+  announcements       Announcement[]
+  resetTokens         PasswordResetToken[]
+
+  @@index([pendingEmailTokenHash])
+  @@index([hrRoleId])
+}
+
+// ── Role-based access control ────────────────────────────────────────────
+//
+// Three tables, deliberately small:
+//   Permission        one row per thing that can be allowed
+//   Role              a named bundle of permissions ("Payroll Staff")
+//   RolePermission    which permissions a role grants
+//   UserPermission    per-person ALLOW/DENY on top of the role
+//
+// The grant chain is: role grants, plus ALLOW overrides, minus DENY overrides.
+// Every read of a user's permissions goes through server/rbac/service.js, so
+// there is exactly one place that decides what a token is allowed to do.
+
+model Permission {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  name        String
+  description String   @default("")
+  group       String
+  sortOrder   Int      @default(0)
+
+  roles RolePermission[]
+  users UserPermission[]
+
+  @@index([group])
+}
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  name        String
+  description String   @default("")
+
+  // Built-in roles are seeded and cannot be deleted, and HR_ADMIN additionally
+  // cannot have its permission set edited: the one role whose whole job is to
+  // control the other roles must not become a lock-out vector.
+  isSystem    Boolean  @default(false)
+  isProtected Boolean  @default(false)
+
+  permissions RolePermission[]
+  users       User[]          @relation("UserHrRole")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserPermission {
+  userId       Int
+  permissionId Int
+
+  // ALLOW adds a permission the role does not carry; DENY removes one it does.
+  // DENY always wins, so an explicit removal cannot be undone by a later ALLOW.
+  effect       String    @default("ALLOW")
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime   @default(now())
+
+  @@id([userId, permissionId])
+  @@index([permissionId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Employee {
-  id                  String   @id
-  employeeId          String   @unique
-  name                String
-  gender              String
-  dateOfBirth         String
-  joinDate            String
-  jobTitle            String
-  department          String
-  employmentType      String
-  basicSalary         Float
-  transportAllowance  Float
-  housingAllowance    Float
-  mealAllowance       Float
-  otherAllowance      Float
-  otherDeductions     Float
-  loanDeductions      Float
-  bankName            String
-  bankAccount         String
-  tin                 String
-  pensionId           String
-  phone               String
-  email               String
-  address             String
-  emergencyContact    String
-  employmentStatus    String
-  exitDate            String?
-  notes               String?
-  status              String
-  avatar              String
-  location            String
-  salary              Float
-  manager             String
+  id                 String   @id
+  employeeId         String   @unique
+  name               String
+  gender             String
+  dateOfBirth        String
+  joinDate           String
+  jobTitle           String
+  department         String
+  employmentType     String
+  basicSalary        Float
+  transportAllowance Float
+  housingAllowance   Float
+  mealAllowance      Float
+  otherAllowance     Float
+  otherDeductions    Float
+  loanDeductions     Float
+  bankName           String
+  bankAccount        String
+  tin                String
+  pensionId          String
+  phone              String
+  ethioTelecomPhone  String   @default("")
+  email              String
+  address            String
+  emergencyContact   String
+  employmentStatus   String
+  exitDate           String?
+  notes              String?
+  status             String
+  avatar             String
+  location           String
+  salary             Float
+  manager            String
   roleType            String
   initials             String
-  createdAt            DateTime @default(now())
+  githubUrl          String   @default("")
+  linkedinUrl        String   @default("")
+  portfolioUrl       String   @default("")
+  skills             String   @default("")
+  resumeStorageName  String?
+  resumeFileName     String?
+  resumeMimeType     String?
+  resumeFileSize     Int?
 
-  attendance           Attendance[]
-  leaveRequests        LeaveRequest[]
-  payrollRecords       PayrollRecord[]
+  // The document an employee attaches to keep their recorded status current -
+  // a transfer letter, a medical certificate, a study leave approval and so on.
+  // It is separate from `status` and `employmentStatus`, which are the short
+  // labels HR keeps in the directory: this is the evidence behind them.
+  statusFileStorageName String?
+  statusFileName        String?
+  statusFileMimeType    String?
+  statusFileSize        Int?
+
+  createdAt          DateTime @default(now())
+
+  attendance     Attendance[]
+  leaveRequests  LeaveRequest[]
+  payrollRecords PayrollRecord[]
+  user           User?
 }
 
 model Attendance {
-  id                    String   @id
-  employeeId            String
-  employeeName          String
-  department            String
-  date                  String
+  id           String @id
+  employeeId   String
+  employeeName String
+  department   String
+  date         String
 
-  // Attendance status:
-  // PRESENT
-  // LATE
-  // PENDING_REVIEW
-  // ABSENT
-  // LEAVE
-  // WEEKEND
-  status                String
+  status String
 
-  // Actual employee times
-  checkIn               String?
-  checkOut              String?
+  checkIn  String?
+  checkOut String?
 
-  // Late information
-  late                  Int      @default(0)
-  earlyDeparture        Int      @default(0)
+  late           Int @default(0)
+  earlyDeparture Int @default(0)
 
-  // Working/overtime hours
-  regular                Float    @default(0)
-  overtime               Float    @default(0)
+  regular  Float @default(0)
+  overtime Float @default(0)
 
-  // Location verification
   checkInLatitude       Float?
   checkInLongitude      Float?
-  checkInLocationStatus String?   // VERIFIED / REJECTED
+  checkInLocationStatus String?
 
-  checkOutLatitude      Float?
-  checkOutLongitude     Float?
-  checkOutLocationStatus String?  // VERIFIED / REJECTED
+  checkOutLatitude       Float?
+  checkOutLongitude      Float?
+  checkOutLocationStatus String?
 
-  // Required check-in time used when calculating lateness
-  requiredCheckInTime   String?
+  requiredCheckInTime String?
 
-  // Late-review workflow
-  reviewStatus           String?  // PENDING / ACCEPTED / REJECTED
-  reviewedBy             String?
-  reviewedAt             String?
-  reviewRemarks          String?
+  reviewStatus  String?
+  reviewedBy    String?
+  reviewedAt    String?
+  reviewRemarks String?
 
-  createdAt             DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  employee              Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 }
+
 model LeaveRequest {
   id             String   @id
   employeeId     String
@@ -122,40 +259,41 @@ model LeaveRequest {
   approvedBy     String?
   approvedDate   String?
   remarks        String?
+  rejectionReason String?
   balance        Float?
   createdAt      DateTime @default(now())
 
-  employee       Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 }
 
 model PayrollRecord {
-  id                   String   @id
-  employeeId           String
-  employeeName         String
-  department           String
-  payrollMonth         String
+  id           String @id
+  employeeId   String
+  employeeName String
+  department   String
+  payrollMonth String
 
-  basicSalary          Float
-  transportAllowance   Float
-  housingAllowance     Float
-  mealAllowance        Float
-  otherAllowance       Float
-  overtimePay          Float
-  grossSalary          Float
+  basicSalary        Float
+  transportAllowance Float
+  housingAllowance   Float
+  mealAllowance      Float
+  otherAllowance     Float
+  overtimePay        Float
+  grossSalary        Float
 
-  pensionDeduction     Float
-  incomeTax            Float
-  loanDeduction        Float
-  otherDeduction       Float
-  totalDeductions      Float
-  netSalary            Float
+  pensionDeduction Float
+  incomeTax        Float
+  loanDeduction    Float
+  otherDeduction   Float
+  totalDeductions  Float
+  netSalary        Float
 
-  employerPension      Float
-  employerCost         Float
+  employerPension Float
+  employerCost    Float
 
-  createdAt            DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  employee             Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@unique([employeeId, payrollMonth])
 }
@@ -164,4 +302,40 @@ model Setting {
   id    Int    @id @default(autoincrement())
   key   String @unique
   value String
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  category    String   @default("General")
+  priority    String   @default("Normal")
+  published   Boolean  @default(true)
+  recipientEmployeeId String?
+  authorId    Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([published, createdAt])
+  @@index([authorId])
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  senderId       Int
+  receiverId     Int
+  text           String
+  attachmentUrl  String?
+  attachmentName String?
+  attachmentType String?
+  attachmentSize Int?
+  read           Boolean  @default(false)
+  isComplain     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
 }

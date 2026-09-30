@@ -17,13 +17,20 @@ import {
   getPunchState,
   subscribePunch,
   applyPunchStatus,
-  WORK_END_MINUTES,
-  WORK_START_MINUTES,
+  getWorkStartMinutes,
+  getWorkEndMinutes,
+  getWorkStartDisplay,
+  getWorkEndDisplay,
   isWorkDay,
 } from '../lib/workTime'
 import { emergencyCheckOutApi, fetchPunchStatusApi } from '../lib/punchApi'
 import { broadcastPunchFeedback } from './PunchWidget'
-import { getPunchLocation, PUNCH_RADIUS_METERS, formatDistance } from '../lib/geo'
+import {
+  getPunchLocation,
+  getPunchRadiusMeters,
+  isGeoRestrictionEnabled,
+  formatDistance,
+} from '../lib/geo'
 import GeoBlockModal from './GeoBlockModal'
 
 // ─────────────────────────────────────────────────────────────
@@ -79,7 +86,11 @@ export function EmergencyCheckOutButton({ onEvent }) {
   const { checkedIn, checkedOut, checkInAt } = punch
 
   const canEmergencyCheckOut =
-    checkedIn && !checkedOut && isWorkDay(day) && minutes >= WORK_START_MINUTES && minutes < WORK_END_MINUTES
+    checkedIn &&
+    !checkedOut &&
+    isWorkDay(day) &&
+    minutes >= getWorkStartMinutes() &&
+    minutes < getWorkEndMinutes()
 
   async function submitEmergency(e) {
     e.preventDefault()
@@ -95,9 +106,10 @@ export function EmergencyCheckOutButton({ onEvent }) {
     try {
       setBusy(true)
       const coords = await getPunchLocation()
-      if (coords.distanceMeters > PUNCH_RADIUS_METERS) {
+      const radius = getPunchRadiusMeters()
+      if (isGeoRestrictionEnabled() && coords.distanceMeters > radius) {
         setGeoBlock(
-          `You are ${formatDistance(coords.distanceMeters)} from the office. Emergency check-out is blocked outside the ${PUNCH_RADIUS_METERS}m radius.`
+          `You are ${formatDistance(coords.distanceMeters)} from the office. Emergency check-out is blocked outside the ${radius}m radius.`
         )
         setEmergencyOpen(false)
         setRemark('')
@@ -149,10 +161,10 @@ export function EmergencyCheckOutButton({ onEvent }) {
             ? 'Day already closed'
             : !isWorkDay(day)
             ? 'Emergency check-out is unavailable on weekends'
-            : minutes < WORK_START_MINUTES
-            ? 'Emergency check-out opens at 8:00 AM (UTC+3)'
-            : minutes >= WORK_END_MINUTES
-            ? 'Use Check Out after 5:30 PM (UTC+3)'
+            : minutes < getWorkStartMinutes()
+            ? `Emergency check-out opens at ${getWorkStartDisplay()} (UTC+3)`
+            : minutes >= getWorkEndMinutes()
+            ? `Use Check Out after ${getWorkEndDisplay()} (UTC+3)`
             : 'Leave early with a reason — HR is notified'
         }
         className={`h-9 px-3 rounded-lg border-2 flex items-center gap-1.5 text-[11px] font-bold transition-all ${
@@ -283,16 +295,25 @@ export default function PunchCard() {
   useEffect(() => subscribePunch(setPunch), [])
 
   useEffect(() => {
-    fetchPunchStatusApi()
-      .then(applyPunchStatus)
-      .catch(() => {})
+    const refresh = () => {
+      fetchPunchStatusApi()
+        .then(applyPunchStatus)
+        .catch(() => {})
+    }
+    refresh()
+    const interval = setInterval(refresh, 30000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', refresh)
+    }
   }, [])
 
   const { minutes, day } = useMemo(() => getAddisNow(), [tick])
   const { checkedIn, checkedOut, checkOutAt } = punch
 
   useEffect(() => {
-    setCheckOutUnlocked(minutes >= WORK_END_MINUTES && isWorkDay(day))
+    setCheckOutUnlocked(minutes >= getWorkEndMinutes() && isWorkDay(day))
   }, [minutes, day])
 
   const stats = {
@@ -317,7 +338,7 @@ export default function PunchCard() {
           icon={TrendingDown}
           label="Avg Early Departure"
           value={`${stats.avgEarlyMin}m`}
-          hint="Average minutes before 5:30 PM"
+          hint={`Average minutes before ${getWorkEndDisplay()}`}
           tone="bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
         />
         <StatusCard
@@ -334,8 +355,8 @@ export default function PunchCard() {
           hint={
             stats.pendingCheckOut
               ? checkOutUnlocked
-                ? 'Unlocked now — 5:30 PM passed'
-                : `${remainingLabel(minutes)} until 5:30 PM`
+                ? `Unlocked now — ${getWorkEndDisplay()} passed`
+                : `${remainingLabel(minutes)} until ${getWorkEndDisplay()}`
               : checkedOut
               ? `Out at ${checkOutAt}`
               : 'Check in from the header'

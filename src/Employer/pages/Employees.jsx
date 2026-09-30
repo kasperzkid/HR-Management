@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Search,
   SlidersHorizontal,
@@ -18,6 +18,7 @@ import AddEmployeeModal from '../components/AddEmployeeModal'
 import EmployeeDetailsModal from '../components/EmployeeDetailsModal'
 import DirectoryView from '../components/DirectoryView'
 import OrgChartView from '../components/OrgChartView'
+import { fetchEmployees, createEmployee, resetEmployeePassword } from '../lib/employerApi'
 
 function Employees() {
   const [employees, setEmployees] = useState(INITIAL_EMPLOYEES)
@@ -38,6 +39,13 @@ function Employees() {
   const [recordsPerPage, setRecordsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [toastMessage, setToastMessage] = useState(null)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+
+  useEffect(() => {
+    fetchEmployees()
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
+      .catch((error) => showToast(error.message || 'Failed to load employees'))
+  }, [])
 
   const showToast = (msg) => {
     setToastMessage(msg)
@@ -88,15 +96,26 @@ function Employees() {
   const handleSelectRow = (id) =>
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
 
-  const handleAddEmployee = (newEmp) => {
-    setEmployees([newEmp, ...employees])
-    showToast(`Added ${newEmp.name} to the team`)
+  const handleAddEmployee = async (newEmp) => {
+    const result = await createEmployee(newEmp)
+    const savedEmployee = result.employee || result
+    setEmployees((current) => [savedEmployee, ...current])
+    showToast(`Added ${savedEmployee.name} to the team`)
   }
 
   const handleUpdateStatus = (id, newStatus) => {
     setEmployees(employees.map((e) => (e.id === id ? { ...e, status: newStatus, employmentStatus: newStatus } : e)))
     if (selectedEmployee?.id === id) setSelectedEmployee((prev) => ({ ...prev, status: newStatus }))
     showToast(`Updated status to ${newStatus}`)
+  }
+
+  const handleResetPassword = async (id) => {
+    try {
+      return await resetEmployeePassword(id)
+    } catch (error) {
+      showToast(error.message || 'Failed to reset employee password')
+      throw error
+    }
   }
 
   const handleDeleteEmployee = (id) => {
@@ -106,11 +125,7 @@ function Employees() {
   }
 
   const handleBulkDelete = () => {
-    if (confirm(`Are you sure you want to delete ${selectedIds.length} employee(s)?`)) {
-      setEmployees(employees.filter((e) => !selectedIds.includes(e.id)))
-      setSelectedIds([])
-      showToast('Selected employees removed')
-    }
+    setConfirmBulkDelete(true)
   }
 
   const handleExportCSV = () => {
@@ -496,7 +511,9 @@ function Employees() {
         onClose={() => { setIsDetailsModalOpen(false); setSelectedEmployee(null) }}
         onUpdateStatus={handleUpdateStatus}
         onDelete={handleDeleteEmployee}
+        onResetPassword={handleResetPassword}
       />
+      {confirmBulkDelete && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"><section role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><h2 className="font-bold text-gray-900">Delete selected employees?</h2><p className="mt-2 text-sm text-gray-600">Delete {selectedIds.length} selected employee(s)? This action cannot be undone.</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setConfirmBulkDelete(false)} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold">Cancel</button><button type="button" onClick={() => { setEmployees(employees.filter((e) => !selectedIds.includes(e.id))); setSelectedIds([]); setConfirmBulkDelete(false); showToast('Selected employees removed') }} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white">Delete employees</button></div></section></div>}
     </div>
   )
 }

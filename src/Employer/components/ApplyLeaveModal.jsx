@@ -232,7 +232,7 @@ function ApplyLeaveModal({ isOpen, onClose, onApply, employee = {} }) {
               <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
                 8. Approval Status
               </label>
-              <div className="h-9 px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5">
+              <div className="h-9 text-amber-800 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5">
                 <Clock size={13} />
                 <span>Pending HR Approval</span>
               </div>
@@ -242,7 +242,7 @@ function ApplyLeaveModal({ isOpen, onClose, onApply, employee = {} }) {
               <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
                 9 & 10. Approved By / Date
               </label>
-              <div className="h-9 px-3 py-1.5 rounded-xl border border-gray-200 dark:border-[#262b31] bg-gray-50 dark:bg-[#1c2026] text-gray-500 dark:text-gray-400 text-xs font-medium flex items-center gap-1.5">
+              <div className="h-9 text-gray-500 dark:text-gray-400 text-xs font-medium flex items-center gap-1.5">
                 <ShieldCheck size={13} />
                 <span className="truncate">Pending review</span>
               </div>

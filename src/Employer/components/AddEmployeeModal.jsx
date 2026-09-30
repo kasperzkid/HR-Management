@@ -38,7 +38,7 @@ function AddEmployeeModal({ isOpen, onClose, onAdd, editingEmployee = null, onEd
 
   const isEditing = Boolean(editingEmployee)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!formData.name.trim() || !formData.email.trim() || !formData.jobTitle.trim()) return
 
@@ -49,8 +49,12 @@ function AddEmployeeModal({ isOpen, onClose, onAdd, editingEmployee = null, onEd
       .substring(0, 2)
       .toUpperCase()
 
+    const salary = Number(String(formData.salary).replace(/[^\d.-]/g, '')) || 0
     const payload = {
       ...formData,
+      employmentStatus: formData.status,
+      basicSalary: salary,
+      salary,
       initials: initials || 'EM'
     }
 
@@ -61,10 +65,7 @@ function AddEmployeeModal({ isOpen, onClose, onAdd, editingEmployee = null, onEd
         id: editingEmployee.id
       })
     } else {
-      onAdd({
-        id: `emp-${Date.now()}`,
-        ...payload
-      })
+      await onAdd(payload)
     }
     onClose()
   }

@@ -31,6 +31,7 @@ import {
   Contact,
   Home,
   Users,
+  KeyRound,
 } from 'lucide-react'
 
 function getDefaultEmployee() {
@@ -166,7 +167,7 @@ function SectionHeader({ icon: Icon, title }) {
   )
 }
 
-function TabPanel({ employee, activeTab, status, setStatus }) {
+function TabPanel({ employee, activeTab, status, setStatus, onResetPassword, resetPassword, resetting }) {
   const e = employee
 
   if (activeTab === 'overview') {
@@ -180,6 +181,28 @@ function TabPanel({ employee, activeTab, status, setStatus }) {
           <DetailRow icon={Home} label="Address" value={e.address} />
           <DetailRow icon={Contact} label="Emergency Contact" value={e.emergencyContact} />
           <DetailRow icon={Users} label="Manager" value={e.manager} />
+        </div>
+
+        <div className="mt-4 p-4 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <SectionHeader icon={KeyRound} title="Employee Login Password" />
+          <p className="text-[10px] text-gray-500 dark:text-gray-400 mb-3">
+            Reset the employee login if the temporary password was lost. The employee must change it after signing in.
+          </p>
+          <button
+            type="button"
+            disabled={resetting || !onResetPassword}
+            onClick={onResetPassword}
+            className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-white bg-gray-900 hover:bg-gray-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <KeyRound size={13} />
+            {resetting ? 'Resetting...' : 'Reset Temporary Password'}
+          </button>
+          {resetPasswordNotice && (
+            <div className="mt-3 p-3 rounded-lg border border-amber-200 bg-white dark:border-amber-900/40 dark:bg-[#1c2026]">
+              <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">Temporary password issued</p>
+              <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400">{resetPasswordNotice}</p>
+            </div>
+          )}
         </div>
 
         <div className="mt-4">
@@ -566,13 +589,37 @@ function TabPanel({ employee, activeTab, status, setStatus }) {
   return null
 }
 
-function EmployeeDetailsModal({ employee, isOpen, onClose, onUpdateStatus, onDelete, onEdit }) {
+function EmployeeDetailsModal({ employee, isOpen, onClose, onUpdateStatus, onDelete, onEdit, onResetPassword }) {
   const defaultEmployee = getDefaultEmployee()
   const currentEmployee = employee || defaultEmployee
   const [activeTab, setActiveTab] = useState('overview')
   const [status, setStatus] = useState(
     currentEmployee.status || currentEmployee.employmentStatus || 'Active'
   )
+  const [resetPasswordNotice, setResetPasswordNotice] = useState('')
+  const [resetting, setResetting] = useState(false)
+  const [confirmAction, setConfirmAction] = useState('')
+
+  const handleResetPassword = async () => {
+    if (!onResetPassword || resetting) return
+    if (!confirmAction) { setConfirmAction('reset'); return }
+    if (confirmAction !== 'reset') return
+    setConfirmAction('')
+    setResetting(true)
+    setResetPasswordNotice('')
+    try {
+      // Nothing is emailed to the employee, so the new password comes back in
+      // the response and is shown here to pass on. It is the only copy of it.
+      const result = await onResetPassword(currentEmployee.id)
+      setResetPasswordNotice(
+        result?.temporaryPassword
+          ? `${result.temporaryPassword} — share it with the employee. It expires once they sign in.`
+          : 'The password was reset, but the new value could not be displayed. Try again.',
+      )
+    } finally {
+      setResetting(false)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -648,18 +695,13 @@ function EmployeeDetailsModal({ employee, isOpen, onClose, onUpdateStatus, onDel
 
         {/* Tab Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          <TabPanel employee={currentEmployee} activeTab={activeTab} status={status} setStatus={setStatus} />
+          <TabPanel employee={currentEmployee} activeTab={activeTab} status={status} setStatus={setStatus} onResetPassword={handleResetPassword} resetPassword={resetPasswordNotice} resetting={resetting} />
         </div>
 
         {/* Footer */}
         <div className="border-t border-gray-100 dark:border-[#262b31] px-6 py-3 flex items-center justify-between bg-gray-50/50 dark:bg-[#1c2026]/50">
           <button
-            onClick={() => {
-              if (confirm(`Are you sure you want to remove ${currentEmployee.name}? This action cannot be undone.`)) {
-                onDelete(currentEmployee.id)
-                onClose()
-              }
-            }}
+            onClick={() => setConfirmAction('delete')}
             className="flex items-center gap-1.5 text-[11px] font-medium text-rose-600 hover:text-rose-700 px-3 py-2 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
           >
             <Trash2 size={14} />
@@ -682,6 +724,7 @@ function EmployeeDetailsModal({ employee, isOpen, onClose, onUpdateStatus, onDel
             </button>
           </div>
         </div>
+        {confirmAction && <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4"><section role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-[#15181d]"><h3 className="font-bold text-gray-900 dark:text-white">{confirmAction === 'delete' ? 'Remove employee?' : 'Reset password?'}</h3><p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{confirmAction === 'delete' ? `Remove ${currentEmployee.name}? This action cannot be undone.` : `Reset the login password for ${currentEmployee.name}?`}</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setConfirmAction('')} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600">Cancel</button><button type="button" onClick={() => { if (confirmAction === 'delete') { onDelete(currentEmployee.id); onClose(); setConfirmAction('') } else handleResetPassword() }} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white">Confirm</button></div></section></div>}
       </div>
     </div>
   )

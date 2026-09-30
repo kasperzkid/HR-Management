@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bell, MessageSquare, Check, Info, CalendarCheck, Wallet } from 'lucide-react'
+import { Bell, MessageSquare, Check, Info, CalendarCheck, Wallet, Megaphone } from 'lucide-react'
 import { useMessaging } from '../context/messagingStore'
 import ProfileMenu from './ProfileMenu'
 import PunchWidget from './PunchWidget'
@@ -9,6 +9,7 @@ const NOTIF_ICONS = {
   leave: { icon: CalendarCheck, color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200' },
   payroll: { icon: Wallet, color: 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100' },
   message: { icon: MessageSquare, color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-200' },
+  announcement: { icon: Megaphone, color: 'bg-cyan-50 text-[#0092B8] dark:bg-cyan-950/40 dark:text-cyan-300' },
 }
 
 function Topbar() {
@@ -99,25 +100,29 @@ function Topbar() {
                       navigate(`/employer/inbox/${n.contactId}`)
                       setNotifOpen(false)
                       dismissNotification(n.id)
+                    } else if (n.type === 'announcement') {
+                      dismissNotification(n.id)
+                      setNotifOpen(false)
                     }
                   }
                   return (
                     <div
                       key={n.id}
                       onClick={goToMessage}
-                      className={`px-4 py-3 flex items-start gap-3 transition-colors ${
-                        n.type === 'message' ? 'cursor-pointer hover:bg-gray-100/60 dark:hover:bg-[#1c2026]' : ''
-                      } ${n.unread ? 'bg-gray-50/60 dark:bg-[#1c2026]' : ''}`}
+                      className={n.type === 'announcement'
+                        ? `mx-3 my-2 flex cursor-pointer items-start gap-3 rounded-2xl border border-cyan-100 bg-white p-3.5 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/40 dark:border-[#33383f] dark:bg-[#15181d] dark:hover:bg-[#1c2026] ${n.unread ? 'ring-1 ring-cyan-100 dark:ring-cyan-900' : ''}`
+                        : `px-4 py-3 flex items-start gap-3 transition-colors ${n.type === 'message' ? 'cursor-pointer hover:bg-gray-100/60 dark:hover:bg-[#1c2026]' : ''} ${n.unread ? 'bg-gray-50/60 dark:bg-[#1c2026]' : ''}`}
                     >
                       <div className={`w-8 h-8 rounded-full ${meta.color} flex items-center justify-center shrink-0`}>
                         <Icon size={15} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">{n.title}</p>
+                          <p className={`text-xs font-semibold text-gray-800 dark:text-gray-100 ${n.type === 'announcement' ? '' : 'truncate'}`}>{n.title}</p>
                           {n.unread && <span className="w-1.5 h-1.5 rounded-full bg-gray-950 dark:bg-gray-100 shrink-0" />}
                         </div>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{n.message}</p>
+                        <p className="break-words text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{n.message}</p>
+                        {n.type === 'announcement' && <span className="mt-2 inline-flex rounded-full bg-cyan-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#007a99] dark:bg-cyan-950/50 dark:text-cyan-300">{n.category}{n.priority !== 'Normal' ? ` · ${n.priority}` : ''}</span>}
                         <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{n.time}</p>
                       </div>
                     </div>

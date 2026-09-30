@@ -3,9 +3,12 @@ import {
   BriefcaseBusiness,
   ArrowRight,
   LayoutGrid,
+  MoreHorizontal,
   Table2,
   Building2,
   ChevronDown,
+  Copy,
+  Check,
   Mail,
   Phone,
   Search,
@@ -13,9 +16,19 @@ import {
   UserPlus,
   Users,
   X,
+  KeyRound,
+  ExternalLink,
+  Link2,
+  FileText,
+  Download,
 } from 'lucide-react'
 
-import { Table } from '../../components/ui'
+import { PageTitle, Table } from '../../components/ui'
+import { useSearchParams } from 'react-router-dom'
+import { authHeaders, describeAuthFailure, downloadEmployeeResume } from '../../lib/hrApi'
+import { withEmailFromName } from '../../lib/employeeEmail'
+import { useAccess } from '../../lib/rbac'
+import TableDataTools from '../components/TableDataTools'
 
 const API_URL = 'http://localhost:4000/api/hr-manager'
 
@@ -25,11 +38,7 @@ const EMPLOYMENT_TYPES = [
   'Intern',
 ]
 
-const STATUSES = [
-  'Active',
-  'On Leave',
-  'Resigned',
-]
+const STATUSES = ['Active']
 
 const GENDERS = [
   'Male',
@@ -40,9 +49,28 @@ const DEFAULT_DEPARTMENTS = [
   'HR',
 ]
 
+const ETHIOPIAN_BANKS = [
+  'Commercial Bank of Ethiopia (CBE)',
+  'Awash Bank',
+  'Bank of Abyssinia',
+  'Dashen Bank',
+  'Hibret Bank',
+  'Wegagen Bank',
+  'Nib International Bank',
+  'Zemen Bank',
+  'Oromia Bank',
+  'Amhara Bank',
+  'Bunna Bank',
+  'Cooperative Bank of Oromia',
+  'Enat Bank',
+  'Lion International Bank',
+  'Telebirr',
+]
+
 const emptyForm = {
   employeeId: '',
   firstName: '',
+  grandfatherName: '',
   lastName: '',
   gender: 'Male',
   dateOfBirth: '',
@@ -299,7 +327,7 @@ function normalizeEmployee(employee) {
 function statusClasses(status) {
   switch (status) {
     case 'Active':
-      return 'bg-emerald-50 text-emerald-700'
+      return 'text-emerald-700'
 
     case 'On Leave':
       return 'bg-amber-50 text-amber-700'
@@ -316,6 +344,7 @@ function Field({
   label,
   children,
   required = false,
+  hint = '',
 }) {
   return (
     <label className="block">
@@ -330,6 +359,12 @@ function Field({
       </span>
 
       {children}
+
+      {hint && (
+        <span className="mt-1 block text-[10px] leading-4 text-slate-400">
+          {hint}
+        </span>
+      )}
     </label>
   )
 }
@@ -343,6 +378,22 @@ function inputClassName() {
     'focus:border-[#4755AE]',
     'focus:ring-2 focus:ring-[#4755AE]/10',
   ].join(' ')
+}
+
+function PhoneFieldInput({ name = 'phone', value, onChange, className }) {
+  const normalized = String(value || '').replace(/[\s()-]/g, '')
+  const complete = /^(0[79]\d{8}|\+251[79]\d{8})$/.test(normalized)
+  const wrong = normalized.length >= 10 && !complete
+  const national = normalized.replace(/^\+251/, '0')
+  const detectedNetwork = /^07/.test(national) ? 'Safaricom' : /^09/.test(national) ? 'Ethio Telecom' : ''
+
+  return (
+    <div>
+      <input className={`${className || inputClassName()} ${wrong ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-100' : ''}`} name={name} value={value} onChange={onChange} placeholder="07XXXXXXXX or 09XXXXXXXX" inputMode="tel" aria-invalid={wrong} />
+      {detectedNetwork && !wrong && <p className="mt-1 text-[11px] font-medium text-slate-500">Detected network: <span className="font-bold text-[#4755AE]">{detectedNetwork}</span></p>}
+      {wrong && <p className="mt-1 text-xs font-medium text-rose-600">Wrong phone number. Enter a valid 07... or 09... mobile number.</p>}
+    </div>
+  )
 }
 
 function SectionTitle({
@@ -480,8 +531,23 @@ function EmployeeModal({
   function handleChange(event) {
     const {
       name,
-      value,
+      value: rawValue,
     } = event.target
+
+    const value =
+      name === 'firstName' ||
+      name === 'lastName' ||
+      name === 'grandfatherName'
+        ? rawValue.replace(/[^\p{L}\s]/gu, '')
+        : rawValue
+
+    if (
+      name === 'dateOfBirth' &&
+      value &&
+      value.split('-')[0].length > 4
+    ) {
+      return
+    }
 
     setForm((current) => ({
       ...current,
@@ -518,6 +584,11 @@ function EmployeeModal({
       return
     }
 
+    // Only presence is checked. The address becomes the employee's login, but
+    // it does not have to be a real or external mailbox - a company address
+    // such as employee@yanoltech.com is the normal case. The server applies the
+    // same rule, so the form and the API never disagree.
+
     if (!form.department) {
       setError('Department is required.')
       return
@@ -544,7 +615,9 @@ function EmployeeModal({
       ...form,
 
       employeeId:
-        form.employeeId.trim(),
+        form.employeeId
+          .trim()
+          .padStart(4, '0'),
 
       firstName,
       lastName,
@@ -672,7 +745,6 @@ function EmployeeModal({
               <SectionTitle
                 icon={Users}
                 title="Employee Identification"
-                description="Employee ID and personal information."
               />
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -769,13 +841,7 @@ function EmployeeModal({
                 </Field>
 
                 <Field label="Phone">
-                  <input
-                    className={inputClassName()}
-                    name="phone"
-                    value={form.phone}
-                    onChange={handleChange}
-                    placeholder="+251 9..."
-                  />
+                  <PhoneFieldInput value={form.phone} onChange={handleChange} />
                 </Field>
 
                 <Field label="Address">
@@ -806,7 +872,6 @@ function EmployeeModal({
               <SectionTitle
                 icon={BriefcaseBusiness}
                 title="Employment Information"
-                description="Job, department, employment type and dates."
               />
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -918,7 +983,6 @@ function EmployeeModal({
               <SectionTitle
                 icon={Building2}
                 title="Compensation"
-                description="Salary and allowance information used by payroll."
               />
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -991,7 +1055,6 @@ function EmployeeModal({
               <SectionTitle
                 icon={Building2}
                 title="Payroll Information"
-                description="Bank, TIN and pension identification details."
               />
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1082,30 +1145,177 @@ function EmployeeModal({
 
 function AddEmployeeDrawer({
   departments,
+  employees,
   onClose,
   onSave,
   saving,
 }) {
   const [step, setStep] = useState(1)
+  const [settingLists, setSettingLists] = useState({
+    departments: departments || [],
+    jobTitles: [],
+    employmentTypes: EMPLOYMENT_TYPES,
+    employmentStatuses: STATUSES,
+  })
+  const [addingSetting, setAddingSetting] = useState('')
+  const [newSettingValue, setNewSettingValue] = useState('')
+  const [bankNames, setBankNames] = useState(ETHIOPIAN_BANKS)
+  const [addingBank, setAddingBank] = useState(false)
+  const [newBankName, setNewBankName] = useState('')
+
+  useEffect(() => {
+    let active = true
+    fetch(`${API_URL}/settings`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!active) return
+        setSettingLists({
+          departments: data.departments || [],
+          jobTitles: data.jobTitles || [],
+          employmentTypes: data.employmentTypes || EMPLOYMENT_TYPES,
+          employmentStatuses: STATUSES,
+        })
+        setForm((current) => ({
+          ...current,
+          department: data.departments?.includes(current.department) ? current.department : (data.departments?.[0] || ''),
+          employmentType: data.employmentTypes?.includes(current.employmentType) ? current.employmentType : (data.employmentTypes?.[0] || ''),
+          status: 'Active',
+        }))
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [])
+
+  async function addSettingOption(key) {
+    const value = newSettingValue.trim()
+    if (!value) return
+    const currentList = settingLists[key] || []
+    if (currentList.some((item) => item.toLowerCase() === value.toLowerCase())) {
+      setNewSettingValue('')
+      setAddingSetting('')
+      return
+    }
+    try {
+      const currentResponse = await fetch(`${API_URL}/settings`)
+      const currentSettings = await currentResponse.json()
+      const updatedList = [...(currentSettings[key] || currentList), value]
+      const saveResponse = await fetch(`${API_URL}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...currentSettings, [key]: updatedList }),
+      })
+      const savedSettings = await saveResponse.json()
+      if (!saveResponse.ok) throw new Error(savedSettings.message || 'Could not save option.')
+      setSettingLists((current) => ({ ...current, [key]: savedSettings[key] || updatedList }))
+      const field = { departments: 'department', jobTitles: 'position', employmentTypes: 'employmentType', employmentStatuses: 'status' }[key]
+      if (field) setForm((current) => ({ ...current, [field]: value }))
+      setNewSettingValue('')
+      setAddingSetting('')
+      setError('')
+    } catch (saveError) {
+      setError(saveError.message || 'Could not save option.')
+    }
+  }
+
+  const nextEmployeeId = useMemo(() => {
+    // Always use the first available 4-digit Employee ID.
+    // This means an ID released by deleting an employee becomes
+    // available again before moving on to a higher ID.
+    const usedIds = new Set(
+      (employees || [])
+        .map((employee) =>
+          String(employee?.employeeId || '').trim()
+        )
+        .map((id) => {
+          const match = id.match(/^\d+$/)
+          return match ? Number(match[0]) : null
+        })
+        .filter(
+          (id) =>
+            Number.isInteger(id) &&
+            id > 0 &&
+            id <= 9999,
+        ),
+    )
+
+    let nextId = 1
+
+    while (usedIds.has(nextId) && nextId <= 9999) {
+      nextId += 1
+    }
+
+    return String(nextId).padStart(4, '0')
+  }, [employees])
 
   const [form, setForm] = useState({
     ...emptyForm,
+    employeeId: nextEmployeeId,
     department:
       departments[0] || 'HR',
   })
 
   const [error, setError] = useState('')
 
+  const availableDepartments = settingLists.departments
+
   function handleChange(event) {
     const {
       name,
-      value,
+      value: rawValue,
     } = event.target
 
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-    }))
+    const value =
+      name === 'firstName' ||
+      name === 'lastName' ||
+      name === 'grandfatherName'
+        ? rawValue.replace(/[^\p{L}\s]/gu, '')
+        : rawValue
+
+    if (
+      (name === 'dateOfBirth' || name === 'hireDate') &&
+      value &&
+      value.split('-')[0].length > 4
+    ) {
+      return
+    }
+
+    setForm((current) => {
+      if (name === 'employeeId') {
+        const digitsOnly = value
+          .replace(/\D/g, '')
+          .slice(0, 4)
+
+        return {
+          ...current,
+          employeeId: digitsOnly,
+        }
+      }
+
+      // The email field follows the name. Filling it in saves the HR Admin
+      // transcribing an address, and the field stays editable: once they type
+      // their own address it no longer looks generated, so the name stops
+      // overwriting it. What they end up with is what gets saved - the server
+      // takes the address as given.
+      if (name === 'firstName' || name === 'lastName') {
+        const updated = {
+          ...current,
+          [name]: value,
+        }
+
+        // Read the names back out of `updated`, not `current`: whichever field
+        // is being typed is already replaced above, and reading `current` would
+        // build the address from the previous keystroke.
+        return withEmailFromName(
+          updated,
+          `${updated.firstName} ${updated.lastName}`,
+        )
+      }
+
+      return {
+        ...current,
+        [name]: value,
+      }
+    })
 
     if (error) {
       setError('')
@@ -1126,8 +1336,27 @@ function AddEmployeeDrawer({
         return false
       }
 
+      const namePattern = /^[\p{L}\s]+$/u
+      if (!namePattern.test(form.firstName.trim())) {
+        setError('First name must contain letters only.')
+        return false
+      }
+
       if (!form.lastName.trim()) {
         setError('Last name is required.')
+        return false
+      }
+
+      if (!namePattern.test(form.lastName.trim())) {
+        setError('Last name must contain letters only.')
+        return false
+      }
+
+      if (
+        form.grandfatherName.trim() &&
+        !namePattern.test(form.grandfatherName.trim())
+      ) {
+        setError('Grandfather name must contain letters only.')
         return false
       }
 
@@ -1141,12 +1370,15 @@ function AddEmployeeDrawer({
         return false
       }
 
-      const emailPattern =
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      // Presence only, matching the server. A company address is a normal login
+      // and does not have to resolve to a real external mailbox.
 
-      if (!emailPattern.test(form.email.trim())) {
-        setError('Please enter a valid email address.')
-        return false
+      if (form.phone.trim()) {
+        const normalizedPhone = form.phone.replace(/[\s()-]/g, '')
+        if (!/^(0[79]\d{8}|\+251[79]\d{8})$/.test(normalizedPhone)) {
+          setError('Enter a valid Safaricom (07...) or Ethio Telecom (09...) number.')
+          return false
+        }
       }
 
       return true
@@ -1165,6 +1397,11 @@ function AddEmployeeDrawer({
 
       if (!form.hireDate) {
         setError('Join date is required.')
+        return false
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(form.hireDate)) {
+        setError('Join date must use a four-digit year.')
         return false
       }
 
@@ -1199,6 +1436,9 @@ function AddEmployeeDrawer({
     const lastName =
       form.lastName.trim()
 
+    const grandfatherName =
+      form.grandfatherName.trim()
+
     return {
       ...form,
 
@@ -1206,10 +1446,11 @@ function AddEmployeeDrawer({
         form.employeeId.trim(),
 
       firstName,
+      grandfatherName,
       lastName,
 
       name:
-        `${firstName} ${lastName}`,
+        [firstName, grandfatherName, lastName].filter(Boolean).join(' '),
 
       gender:
         form.gender || 'Male',
@@ -1454,21 +1695,17 @@ function AddEmployeeDrawer({
                 <SectionTitle
                   icon={Users}
                   title="Employee Identification"
-                  description="Employee ID and personal information."
                 />
 
                 <div className="grid gap-4 sm:grid-cols-2">
 
                   <Field
                     label="Employee ID"
-                    required
                   >
                     <input
                       className={inputClassName()}
-                      name="employeeId"
                       value={form.employeeId}
-                      onChange={handleChange}
-                      placeholder="e.g. EMP-001"
+                      readOnly
                     />
                   </Field>
 
@@ -1520,6 +1757,16 @@ function AddEmployeeDrawer({
                     />
                   </Field>
 
+                  <Field label="Grandfather Name (Optional)">
+                    <input
+                      className={inputClassName()}
+                      name="grandfatherName"
+                      value={form.grandfatherName}
+                      onChange={handleChange}
+                      placeholder="e.g. Bekele"
+                    />
+                  </Field>
+
                   <Field
                     label="Date of Birth"
                     required
@@ -1529,6 +1776,7 @@ function AddEmployeeDrawer({
                       className={inputClassName()}
                       name="dateOfBirth"
                       value={form.dateOfBirth}
+                      max="9999-12-31"
                       onChange={handleChange}
                     />
                   </Field>
@@ -1536,6 +1784,7 @@ function AddEmployeeDrawer({
                   <Field
                     label="Email"
                     required
+                    hint="Filled from the name. You can change it."
                   >
                     <input
                       type="email"
@@ -1548,13 +1797,7 @@ function AddEmployeeDrawer({
                   </Field>
 
                   <Field label="Phone">
-                    <input
-                      className={inputClassName()}
-                      name="phone"
-                      value={form.phone}
-                      onChange={handleChange}
-                      placeholder="+251 9..."
-                    />
+                    <PhoneFieldInput value={form.phone} onChange={handleChange} />
                   </Field>
 
                   <Field label="Address">
@@ -1588,7 +1831,6 @@ function AddEmployeeDrawer({
                 <SectionTitle
                   icon={BriefcaseBusiness}
                   title="Employment Information"
-                  description="Job, department, employment type and dates."
                 />
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1597,36 +1839,24 @@ function AddEmployeeDrawer({
                     label="Department"
                     required
                   >
-                    <select
-                      className={inputClassName()}
-                      name="department"
-                      value={form.department}
-                      onChange={handleChange}
-                    >
-                      {departments.map(
-                        (department) => (
-                          <option
-                            key={department}
-                            value={department}
-                          >
-                            {department}
-                          </option>
-                        ),
-                      )}
+                    <select className={inputClassName()} name="department" value={form.department} onChange={handleChange}>
+                      <option value="">Select department</option>
+                      {availableDepartments.map((item) => <option key={item} value={item}>{item}</option>)}
                     </select>
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" onClick={() => { setAddingSetting('departments'); setNewSettingValue('') }} className="text-xs font-semibold text-[#4755AE]">+ Add department</button>
+                    </div>
                   </Field>
 
                   <Field
                     label="Job Title"
                     required
                   >
-                    <input
-                      className={inputClassName()}
-                      name="position"
-                      value={form.position}
-                      onChange={handleChange}
-                      placeholder="e.g. HR Officer"
-                    />
+                    <select className={inputClassName()} name="position" value={form.position} onChange={handleChange}>
+                      <option value="">Select job title</option>
+                      {settingLists.jobTitles.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                    <button type="button" onClick={() => { setAddingSetting('jobTitles'); setNewSettingValue('') }} className="mt-2 text-xs font-semibold text-[#4755AE]">+ Add job title</button>
                   </Field>
 
                   <Field label="Employment Type">
@@ -1636,7 +1866,7 @@ function AddEmployeeDrawer({
                       value={form.employmentType}
                       onChange={handleChange}
                     >
-                      {EMPLOYMENT_TYPES.map(
+                      {settingLists.employmentTypes.map(
                         (type) => (
                           <option
                             key={type}
@@ -1647,6 +1877,7 @@ function AddEmployeeDrawer({
                         ),
                       )}
                     </select>
+                    <button type="button" onClick={() => { setAddingSetting('employmentTypes'); setNewSettingValue('') }} className="mt-2 text-xs font-semibold text-[#4755AE]">+ Add employment type</button>
                   </Field>
 
                   <Field label="Employment Status">
@@ -1656,7 +1887,7 @@ function AddEmployeeDrawer({
                       value={form.status}
                       onChange={handleChange}
                     >
-                      {STATUSES.map(
+                      {settingLists.employmentStatuses.map(
                         (status) => (
                           <option
                             key={status}
@@ -1678,6 +1909,7 @@ function AddEmployeeDrawer({
                       className={inputClassName()}
                       name="hireDate"
                       value={form.hireDate}
+                      max="9999-12-31"
                       onChange={handleChange}
                     />
                   </Field>
@@ -1705,7 +1937,6 @@ function AddEmployeeDrawer({
                   <SectionTitle
                     icon={Building2}
                     title="Compensation"
-                    description="Salary and allowance information used by payroll."
                   />
 
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -1778,19 +2009,36 @@ function AddEmployeeDrawer({
                   <SectionTitle
                     icon={Building2}
                     title="Payroll Information"
-                    description="Bank, TIN and pension identification details."
                   />
 
                   <div className="grid gap-4 sm:grid-cols-2">
 
                     <Field label="Bank Name">
-                      <input
-                        className={inputClassName()}
-                        name="bankName"
-                        value={form.bankName}
-                        onChange={handleChange}
-                        placeholder="Bank name"
-                      />
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#4755AE]" aria-label={form.bankName || 'Bank'}>
+                          {form.bankName ? <span className="text-xs font-bold">{form.bankName.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase()}</span> : <Building2 size={18} />}
+                        </span>
+                        <select className={inputClassName()} name="bankName" value={form.bankName} onChange={(event) => {
+                          if (event.target.value === '__add_bank__') { setAddingBank(true); return }
+                          handleChange(event)
+                        }}>
+                          <option value="">Select bank or service</option>
+                          {bankNames.map((bank) => <option key={bank} value={bank}>{bank}</option>)}
+                          {form.bankName && !bankNames.includes(form.bankName) && <option value={form.bankName}>{form.bankName}</option>}
+                          <option value="__add_bank__">+ Add bank name</option>
+                        </select>
+                      </div>
+                      {addingBank && <div className="mt-2 flex gap-2">
+                        <input className={`${inputClassName()} flex-1`} value={newBankName} onChange={(event) => setNewBankName(event.target.value)} placeholder="Enter bank or service name" />
+                        <button type="button" className="rounded-xl bg-[#4755AE] px-3 text-sm font-semibold text-white" onClick={() => {
+                          const name = newBankName.trim()
+                          if (!name) return
+                          setBankNames((current) => current.includes(name) ? current : [...current, name])
+                          setForm((current) => ({ ...current, bankName: name }))
+                          setNewBankName('')
+                          setAddingBank(false)
+                        }}>Add</button>
+                      </div>}
                     </Field>
 
                     <Field label="Bank Account">
@@ -1878,7 +2126,7 @@ function AddEmployeeDrawer({
 
                       <InfoItem
                         label="Full Name"
-                        value={`${form.firstName} ${form.lastName}`}
+                        value={[form.firstName, form.grandfatherName, form.lastName].filter(Boolean).join(' ')}
                       />
 
                       <InfoItem
@@ -2084,6 +2332,21 @@ function AddEmployeeDrawer({
               </div>
             )}
 
+            {addingSetting && (
+              <div className="mt-4 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <input
+                  autoFocus
+                  className={`${inputClassName()} flex-1`}
+                  value={newSettingValue}
+                  onChange={(event) => setNewSettingValue(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addSettingOption(addingSetting) } }}
+                  placeholder={`New ${addingSetting === 'jobTitles' ? 'job title' : addingSetting === 'employmentTypes' ? 'employment type' : addingSetting === 'employmentStatuses' ? 'employment status' : 'department'}`}
+                />
+                <button type="button" onClick={() => addSettingOption(addingSetting)} className="rounded-xl bg-[#4755AE] px-3 py-2 text-sm font-semibold text-white">Add</button>
+                <button type="button" onClick={() => { setAddingSetting(''); setNewSettingValue('') }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">Cancel</button>
+              </div>
+            )}
+
           </div>
 
           {/* Footer */}
@@ -2161,6 +2424,152 @@ function AddEmployeeDrawer({
   )
 }
 
+function TemporaryCredentialsModal({ credentials, onClose }) {
+  const [copied, setCopied] = useState('')
+
+  async function copyText(value, type) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(type)
+      window.setTimeout(() => setCopied(''), 1800)
+    } catch (error) {
+      console.error('Copy credentials error:', error)
+    }
+  }
+
+  async function copyCredentials() {
+    const text = [
+      `Employee: ${credentials.employeeName || 'Employee'}`,
+      `Employee ID: ${credentials.employeeId || ''}`,
+      `Login email: ${credentials.email || ''}`,
+      `Temporary password: ${credentials.temporaryPassword || ''}`,
+    ].join('\n')
+
+    await copyText(text, 'all')
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="border-b border-slate-100 px-6 py-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <Check size={21} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">
+                Employee Added
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                The employee and their login account have been created. Share the login email and temporary password below with them.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 px-6 py-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+              Employee
+            </p>
+            <p className="mt-1 text-sm font-bold text-slate-900">
+              {credentials.employeeName || 'Employee'}
+            </p>
+            {credentials.employeeId && (
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Employee ID: {credentials.employeeId}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-400">
+              Login Email
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
+              <input
+                readOnly
+                value={credentials.email || ''}
+                className="min-w-0 flex-1 bg-transparent px-2 text-sm font-semibold text-slate-800 outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => copyText(credentials.email || '', 'email')}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
+              >
+                {copied === 'email' ? <Check size={14} /> : <Copy size={14} />}
+                {copied === 'email' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-400">
+              Temporary Password
+            </label>
+            {/* Always shown. Nothing is emailed to the employee's address, so
+                this is the only copy of the password that exists - the HR Admin
+                reads it out or copies it across. */}
+            {credentials.temporaryPassword ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-center gap-2">
+                  <KeyRound size={15} className="shrink-0 text-amber-600" />
+                  <input
+                    readOnly
+                    value={credentials.temporaryPassword}
+                    aria-label="Temporary password"
+                    className="min-w-0 flex-1 bg-transparent font-mono text-sm font-bold text-amber-900 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyText(credentials.temporaryPassword, 'password')}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-100 px-2.5 py-1.5 text-xs font-bold text-amber-800 transition hover:bg-amber-200"
+                  >
+                    {copied === 'password' ? <Check size={13} /> : <Copy size={13} />}
+                    {copied === 'password' ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-amber-800">
+                  Share this with the employee - it is not emailed, and the
+                  employee will be asked to change it the first time they sign
+                  in.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                The password is not available to display. Use &quot;Reset
+                Temporary Password&quot; on this employee to issue a new one.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+            The employee signs in with this email and the temporary password, and is required to set their own password immediately afterwards.
+          </div>
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 px-6 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={copyCredentials}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            {copied === 'all' ? <Check size={16} /> : <Copy size={16} />}
+            {copied === 'all' ? 'Credentials Copied' : 'Copy Credentials'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998]"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* =========================================================
    VIEW EMPLOYEE
 ========================================================= */
@@ -2168,11 +2577,62 @@ function AddEmployeeDrawer({
 function EmployeeViewModal({
   employee,
   onClose,
+  onResetPassword,
 }) {
+  const [resetPasswordNotice, setResetPasswordNotice] = useState('')
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [resettingPassword, setResettingPassword] = useState(false)
+  const [downloadingResume, setDownloadingResume] = useState(false)
+
   if (!employee) return null
 
   const name =
     getEmployeeName(employee)
+
+  const skills = String(employee.skills || '')
+    .split(/[\n,]/)
+    .map((skill) => skill.trim())
+    .filter(Boolean)
+
+  async function resetPasswordForEmployee() {
+    if (resettingPassword) return
+    if (!confirmReset) { setConfirmReset(true); return }
+    setConfirmReset(false)
+    setResettingPassword(true)
+    setResetPasswordNotice('')
+    try {
+      // Nothing is emailed to the employee, so the new password comes back
+      // here to be shown once for the HR Admin to share.
+      const data = await onResetPassword(employee)
+      setResetPasswordNotice(
+        data?.temporaryPassword
+          ? `New temporary password: ${data.temporaryPassword} — share it with the employee. It expires once they sign in.`
+          : 'The password was reset, but the new value could not be displayed. Try again.',
+      )
+    } catch (error) {
+      window.alert(error.message || 'Failed to reset employee password')
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
+  async function downloadResume() {
+    if (downloadingResume) return
+    setDownloadingResume(true)
+    try {
+      const blob = await downloadEmployeeResume(employee.id)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = employee.resumeFileName || 'resume'
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      window.alert(error.message || 'Failed to download employee resume')
+    } finally {
+      setDownloadingResume(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
@@ -2247,6 +2707,76 @@ function EmployeeViewModal({
 
             </div>
           </div>
+
+          <section className="mt-6 rounded-2xl border border-slate-200 p-5">
+            <div className="flex items-center gap-2">
+              <Link2 size={16} className="text-slate-500" />
+              <h3 className="text-sm font-bold text-slate-900">Professional Profile</h3>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {[
+                ['GitHub', employee.githubUrl],
+                ['LinkedIn', employee.linkedinUrl],
+                ['Portfolio', employee.portfolioUrl],
+              ].map(([label, url]) => (
+                <div key={label} className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1.5 inline-flex max-w-full items-center gap-1.5 break-all text-sm font-semibold text-[#4755AE] hover:underline"
+                    >
+                      {url}
+                      <ExternalLink size={13} className="shrink-0" />
+                    </a>
+                  ) : (
+                    <p className="mt-1.5 text-sm text-slate-400">Not provided</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Skills</p>
+              {skills.length ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {skills.map((skill) => (
+                    <span key={skill} className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1.5 text-sm text-slate-400">No skills provided</p>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <FileText size={17} className="shrink-0 text-slate-400" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Resume / CV</p>
+                  <p className="mt-1 truncate text-sm font-semibold text-slate-700">
+                    {employee.resumeFileName || 'No resume uploaded'}
+                  </p>
+                </div>
+              </div>
+              {employee.resumeFileName && (
+                <button
+                  type="button"
+                  onClick={downloadResume}
+                  disabled={downloadingResume}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50"
+                >
+                  <Download size={14} />
+                  {downloadingResume ? 'Downloading…' : 'Download resume'}
+                </button>
+              )}
+            </div>
+          </section>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
 
@@ -2329,6 +2859,34 @@ function EmployeeViewModal({
 
           </div>
 
+          {onResetPassword && (
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
+            <div className="flex items-center gap-2">
+              <KeyRound size={16} className="text-amber-700" />
+              <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Employee Login Password</p>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-600">
+              Reset the login if the employee lost their temporary password. The new one is shown here to pass on, and they must change it after signing in.
+            </p>
+            <button
+              type="button"
+              onClick={resetPasswordForEmployee}
+              disabled={resettingPassword}
+              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#4755AE] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <KeyRound size={13} />
+            {resettingPassword ? 'Resetting...' : 'Reset Temporary Password'}
+            </button>
+            {confirmReset && <div className="mt-3 rounded-xl border border-amber-200 bg-white p-3"><p className="text-sm font-semibold text-slate-800">Reset the login password for {name}?</p><div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setConfirmReset(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">Cancel</button><button type="button" onClick={resetPasswordForEmployee} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white">Confirm reset</button></div></div>}
+            {resetPasswordNotice && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-white p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Temporary password issued</p>
+                <p className="mt-1 text-xs leading-5 text-slate-700">{resetPasswordNotice}</p>
+              </div>
+            )}
+          </div>
+          )}
+
           {employee.notes && (
             <div className="mt-5 rounded-2xl border border-slate-200 p-4">
 
@@ -2374,6 +2932,9 @@ function InfoItem({
 
 function EmployeeCard({
   employee,
+  index,
+  selected,
+  onToggleSelected,
   onEdit,
   onView,
   onDelete,
@@ -2388,6 +2949,11 @@ function EmployeeCard({
 
   return (
     <article className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+
+      <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
+        <span className="flex items-center gap-2"><input type="checkbox" checked={selected} onChange={(event) => onToggleSelected(employee.id, event.target.checked)} aria-label={`Select ${name}`} /> #{index + 1}</span>
+        <span>{getEmployeeId(employee)}</span>
+      </div>
 
       <div className="flex items-start justify-between">
 
@@ -2501,8 +3067,9 @@ function EmployeeCard({
 
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className={onEdit ? 'mt-4 grid grid-cols-2 gap-2' : 'mt-4 grid gap-2'}>
 
+        {onEdit && (
         <button
           type="button"
           onClick={() => onEdit(employee)}
@@ -2510,6 +3077,7 @@ function EmployeeCard({
         >
           Edit
         </button>
+        )}
 
         <button
           type="button"
@@ -2521,6 +3089,7 @@ function EmployeeCard({
 
       </div>
 
+      {onDelete && (
       <button
         type="button"
         onClick={() => onDelete(employee)}
@@ -2529,6 +3098,7 @@ function EmployeeCard({
         <Trash2 size={13} />
         Delete Employee
       </button>
+      )}
 
     </article>
   )
@@ -2539,12 +3109,17 @@ function EmployeeTable({
   onEdit,
   onView,
   onDelete,
+  canEdit,
   onQuickUpdate,
+  selectedIds,
+  onToggleSelected,
+  onToggleAll,
 }) {
   const [editingRowId, setEditingRowId] = useState(null)
   const [draftEmployeeId, setDraftEmployeeId] = useState('')
   const [draftStatus, setDraftStatus] = useState('Active')
   const [savingRowId, setSavingRowId] = useState(null)
+  const [actionMenuId, setActionMenuId] = useState(null)
 
   const statusOptions = ['Active', 'On Leave', 'Resigned']
 
@@ -2583,6 +3158,8 @@ function EmployeeTable({
         <Table className="min-w-[980px] w-full border-collapse">
           <Table.Header>
             <Table.Row className="bg-slate-50/90">
+              <Table.Head className="px-3 py-3"><input type="checkbox" checked={employees.length > 0 && employees.every((employee) => selectedIds.includes(employee.id))} onChange={(event) => onToggleAll(employees, event.target.checked)} aria-label="Select all employees" /></Table.Head>
+              <Table.Head className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">#</Table.Head>
               <Table.Head className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Employee</Table.Head>
               <Table.Head className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Employee ID</Table.Head>
               <Table.Head className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Department</Table.Head>
@@ -2593,12 +3170,14 @@ function EmployeeTable({
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {employees.map((employee) => {
+            {employees.map((employee, index) => {
               const name = getEmployeeName(employee)
               const position = employee.jobTitle || employee.position || 'Employee'
 
               return (
                 <Table.Row key={employee.id} className="border-t border-slate-100 transition-colors hover:bg-slate-50/80">
+                  <Table.Cell className="px-3 py-3.5"><input type="checkbox" checked={selectedIds.includes(employee.id)} onChange={(event) => onToggleSelected(employee.id, event.target.checked)} aria-label={`Select ${name}`} /></Table.Cell>
+                  <Table.Cell className="px-3 py-3.5 text-xs text-slate-500">{index + 1}</Table.Cell>
                   <Table.Cell className="px-4 py-3.5">
                     <div className="flex min-w-[220px] items-center gap-3">
                       {employee.avatar ? (
@@ -2643,7 +3222,7 @@ function EmployeeTable({
                         ))}
                       </select>
                     ) : (
-                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${statusClasses(employee.status)}`}>
+                      <span className={`${employee.status === 'Active' ? 'text-emerald-700' : `rounded-full px-2.5 py-1 ${statusClasses(employee.status)}`} text-[10px] font-bold uppercase tracking-wide`}>
                         {employee.status}
                       </span>
                     )}
@@ -2661,13 +3240,24 @@ function EmployeeTable({
                           </button>
                         </>
                       ) : (
-                        <>
-                          <button type="button" onClick={() => startRowEdit(employee)} className="rounded-lg bg-blue-50 px-3 py-2 text-[11px] font-bold text-[#4755AE] transition hover:bg-blue-100">Edit</button>
-                          <button type="button" onClick={() => onView(employee)} className="rounded-lg bg-[#4755AE] px-3 py-2 text-[11px] font-bold text-white transition hover:bg-[#3d4998]">View</button>
-                          <button type="button" onClick={() => onDelete(employee)} className="rounded-lg px-2.5 py-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600" aria-label={`Delete ${name}`}>
-                            <Trash2 size={14} />
+                        <div className="relative flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setActionMenuId((current) => current === employee.id ? null : employee.id)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                            aria-label={`Actions for ${name}`}
+                            aria-expanded={actionMenuId === employee.id}
+                          >
+                            <MoreHorizontal size={16} />
                           </button>
-                        </>
+                          {actionMenuId === employee.id && (
+                            <div className="absolute right-0 top-10 z-20 w-32 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+                              <button type="button" onClick={() => { setActionMenuId(null); onView(employee) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50">View</button>
+                              {canEdit && <button type="button" onClick={() => { setActionMenuId(null); startRowEdit(employee) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-[#4755AE] hover:bg-indigo-50">Edit</button>}
+                              {onDelete && <button type="button" onClick={() => { setActionMenuId(null); onDelete(employee) }} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-50">Delete</button>}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </Table.Cell>
@@ -2686,6 +3276,16 @@ function EmployeeTable({
 ========================================================= */
 
 export default function Employees() {
+  const [searchParams] = useSearchParams()
+
+  // Which actions this account may take. Every one of these also has a matching
+  // permission check on the API route, so hiding a control and being refused by
+  // the server are the same decision made twice.
+  const { can } = useAccess()
+  const canAdd = can('employees.add')
+  const canEdit = can('employees.edit')
+  const canDelete = can('employees.delete')
+  const canResetPassword = can('employees.reset_password')
   const [employees, setEmployees] =
     useState([])
 
@@ -2700,9 +3300,16 @@ export default function Employees() {
 
   const [successMessage, setSuccessMessage] =
     useState('')
+    const [temporaryCredentials, setTemporaryCredentials] =
+  useState(null)
 
   const [search, setSearch] =
     useState('')
+
+  useEffect(() => {
+    const query = searchParams.get('search')
+    setSearch(query || '')
+  }, [searchParams])
 
   const [departmentFilter, setDepartmentFilter] =
     useState('All')
@@ -2724,6 +3331,9 @@ export default function Employees() {
 
   const [directoryView, setDirectoryView] =
     useState('card')
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([])
+  const [pendingDelete, setPendingDelete] = useState(null)
+
 
   async function loadEmployees() {
     try {
@@ -2766,6 +3376,54 @@ export default function Employees() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function importEmployees(rows) {
+    let next = 1
+    const existingIds = new Set(employees.map((employee) => String(employee.employeeId || '').trim()))
+    let imported = 0
+    for (const row of rows) {
+      const name = String(row.name || `${row.firstName || ''} ${row.lastName || ''}`.trim()).trim()
+      const email = String(row.email || '').trim()
+      if (!name || !email) continue
+      while (existingIds.has(String(next).padStart(4, '0'))) next += 1
+      const employeeId = String(row.employeeId || next.toString().padStart(4, '0')).trim()
+      const payload = {
+        ...row,
+        employeeId,
+        name,
+        email,
+        gender: row.gender || 'Male',
+        dateOfBirth: row.dateOfBirth || '',
+        joinDate: row.joinDate || row.hireDate || new Date().toISOString().slice(0, 10),
+        jobTitle: row.jobTitle || row.position || '',
+        department: row.department || '',
+        employmentType: row.employmentType || 'Permanent',
+        employmentStatus: row.employmentStatus || row.status || 'Active',
+        status: row.status || row.employmentStatus || 'Active',
+      }
+      const response = await fetch(`${API_URL}/employees`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(`${employeeId}: ${result.message || 'Import failed.'}`)
+      existingIds.add(employeeId)
+      imported += 1
+    }
+    await loadEmployees()
+    return `Imported ${imported} employee(s); rows without a name or email were skipped.`
+  }
+
+  async function handleResetPassword(employee) {
+    const response = await fetch(`${API_URL}/employees/${employee.id}/reset-password`, {
+      method: 'POST',
+      headers: authHeaders(),
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.message || 'Failed to reset employee password')
+    return data
   }
 
   useEffect(() => {
@@ -2891,250 +3549,300 @@ export default function Employees() {
     setEditingEmployee(null)
   }
 
-  async function handleSave(
-    employeeData,
-  ) {
-    try {
-      setSaving(true)
-      setError('')
-      setSuccessMessage('')
+async function handleSave(employeeData) {
+  try {
+    setSaving(true)
+    setError('')
+    setSuccessMessage('')
+    setTemporaryCredentials(null)
 
-      const employeeId =
-        employeeData.employeeId?.trim()
+    const employeeId = employeeData.employeeId?.trim()
 
-      if (!employeeId) {
-        throw new Error(
-          'Employee ID is required.',
-        )
-      }
+    if (!employeeId) {
+      throw new Error('Employee ID is required.')
+    }
 
-      const databaseId =
-        editingEmployee?.id ||
-        employeeData.id ||
-        employeeId
+    const databaseId =
+      editingEmployee?.id ||
+      employeeData.id ||
+      employeeId
 
-      const payload = {
-        id: databaseId,
+    const payload = {
+      id: databaseId,
 
-        employeeId,
+      employeeId,
 
-        name:
-          employeeData.name ||
-          'Unnamed Employee',
+      name:
+        employeeData.name ||
+        'Unnamed Employee',
 
-        gender:
-          employeeData.gender ||
-          'Male',
+      gender:
+        employeeData.gender || '',
 
-        dateOfBirth:
-          employeeData.dateOfBirth ||
-          '',
+      dateOfBirth:
+        employeeData.dateOfBirth || '',
 
-        joinDate:
-          employeeData.joinDate ||
-          employeeData.hireDate ||
-          '',
+      joinDate:
+        employeeData.joinDate ||
+        employeeData.hireDate ||
+        '',
 
-        jobTitle:
-          employeeData.jobTitle ||
-          employeeData.position ||
-          '',
+      jobTitle:
+        employeeData.jobTitle ||
+        employeeData.position ||
+        '',
 
-        department:
-          employeeData.department ||
-          'HR',
+      department:
+        employeeData.department || '',
 
-        employmentType:
-          employeeData.employmentType ||
-          'Permanent',
+      employmentType:
+        employeeData.employmentType || '',
 
-        basicSalary:
-          Number(
-            employeeData.basicSalary || 0,
-          ),
+      basicSalary:
+        Number(employeeData.basicSalary || 0),
 
-        transportAllowance:
-          Number(
-            employeeData.transportAllowance ||
-              0,
-          ),
+      transportAllowance:
+        Number(
+          employeeData.transportAllowance || 0,
+        ),
 
-        housingAllowance:
-          Number(
-            employeeData.housingAllowance ||
-              0,
-          ),
+      housingAllowance:
+        Number(
+          employeeData.housingAllowance || 0,
+        ),
 
-        mealAllowance:
-          Number(
-            employeeData.mealAllowance ||
-              0,
-          ),
+      mealAllowance:
+        Number(
+          employeeData.mealAllowance || 0,
+        ),
 
-        otherAllowance:
-          Number(
-            employeeData.otherAllowance ||
-              0,
-          ),
+      otherAllowance:
+        Number(
+          employeeData.otherAllowance || 0,
+        ),
 
-        otherDeductions:
-          Number(
-            employeeData.otherDeductions ||
-              0,
-          ),
+      otherDeductions:
+        Number(
+          employeeData.otherDeductions || 0,
+        ),
 
-        loanDeductions:
-          Number(
-            employeeData.loanDeductions ||
-              0,
-          ),
+      loanDeductions:
+        Number(
+          employeeData.loanDeductions || 0,
+        ),
 
-        bankName:
-          employeeData.bankName || '',
+      bankName:
+        employeeData.bankName || '',
 
-        bankAccount:
-          employeeData.bankAccount || '',
+      bankAccount:
+        employeeData.bankAccount || '',
 
-        tin:
-          employeeData.tin || '',
+      tin:
+        employeeData.tin || '',
 
-        pensionId:
-          employeeData.pensionId || '',
+      pensionId:
+        employeeData.pensionId || '',
 
-        phone:
-          employeeData.phone || '',
+      phone:
+        employeeData.phone || '',
 
-        email:
-          employeeData.email || '',
+      email:
+        employeeData.email || '',
 
-        address:
-          employeeData.address || '',
+      address:
+        employeeData.address || '',
 
-        emergencyContact:
-          employeeData.emergencyContact ||
-          '',
+      emergencyContact:
+        employeeData.emergencyContact || '',
 
-        employmentStatus:
-          employeeData.employmentStatus ||
-          employeeData.status ||
-          'Active',
+      employmentStatus:
+        employeeData.employmentStatus ||
+        employeeData.status ||
+        'Active',
 
-        notes:
-          employeeData.notes || '',
+      exitDate:
+        employeeData.exitDate ||
+        null,
 
-        status:
-          employeeData.status ||
-          employeeData.employmentStatus ||
-          'Active',
+      notes:
+        employeeData.notes || '',
 
-        avatar:
-          employeeData.avatar || '',
+      status:
+        employeeData.status ||
+        employeeData.employmentStatus ||
+        'Active',
 
-        location:
-          employeeData.location || '',
+      avatar:
+        employeeData.avatar || '',
 
-        salary:
-          Number(
-            employeeData.salary ||
-              employeeData.basicSalary ||
-              0,
-          ),
+      location:
+        employeeData.location || '',
 
-        manager:
-          employeeData.manager || '',
+      salary:
+        Number(
+          employeeData.salary ||
+          employeeData.basicSalary ||
+          0,
+        ),
 
-        roleType:
-          employeeData.roleType || '',
+      manager:
+        employeeData.manager || '',
 
-        initials:
-          employeeData.initials ||
-          getInitials(employeeData),
-      }
+      roleType:
+        employeeData.roleType || '',
 
-      const isEditing =
-        Boolean(editingEmployee)
+      initials:
+        employeeData.initials ||
+        getInitials(employeeData),
+    }
 
-      const url = isEditing
-        ? `${API_URL}/employees/${editingEmployee.id}`
-        : `${API_URL}/employees`
+    const isEditing =
+      Boolean(editingEmployee)
 
-      const response = await fetch(
-        url,
-        {
-          method: isEditing
-            ? 'PUT'
-            : 'POST',
+    const url = isEditing
+      ? `${API_URL}/employees/${editingEmployee.id}`
+      : `${API_URL}/employees`
 
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
+    /*
+     * Both POST /employees and PUT /employees/:id sit behind requireAuth on
+     * the server, so this request has to carry the HR admin's bearer token.
+     *
+     * It used to hand-write its headers as just Content-Type, which meant the
+     * token never left the browser and the server answered a perfectly
+     * signed-in admin with "Authentication required". authHeaders() is the
+     * helper the rest of this file already uses; it is what puts the
+     * Authorization header on the request.
+     */
+    const response = await fetch(
+      url,
+      {
+        method: isEditing
+          ? 'PUT'
+          : 'POST',
 
-          body: JSON.stringify(
-            payload,
-          ),
-        },
-      )
+        headers: authHeaders({
+          'Content-Type':
+            'application/json',
+        }),
 
-      const data =
-        await response.json()
+        body: JSON.stringify(payload),
+      },
+    )
 
-      if (!response.ok) {
-        throw new Error(
+    const data =
+      await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        describeAuthFailure(response, data) ||
           data?.message ||
-            data?.error ||
-            (response.status === 409
-              ? 'Employee ID already exists.'
-              : 'Failed to save employee.'),
-        )
-      }
+          data?.error ||
+          'Failed to save employee.',
+      )
+    }
 
+    /*
+     * --------------------------------------------------------
+     * EDIT EXISTING EMPLOYEE
+     * --------------------------------------------------------
+     */
+
+    if (isEditing) {
       const savedEmployee =
         normalizeEmployee(data)
 
       setEmployees(
-        (current) => {
-          if (isEditing) {
-            return current.map(
-              (employee) =>
-                employee.id ===
-                editingEmployee.id
-                  ? savedEmployee
-                  : employee,
-            )
-          }
-
-          return [
-            ...current,
-            savedEmployee,
-          ]
-        },
+        (current) =>
+          current.map(
+            (employee) =>
+              employee.id ===
+              editingEmployee.id
+                ? savedEmployee
+                : employee,
+          ),
       )
 
       setSuccessMessage(
-        isEditing
-          ? 'Employee updated successfully.'
-          : 'Employee added successfully.',
+        'Employee updated successfully.',
       )
 
       setModalOpen(false)
       setEditingEmployee(null)
 
       await loadEmployees()
-    } catch (err) {
-      console.error(
-        'Save employee error:',
-        err,
+
+      return
+    }
+
+    /*
+     * --------------------------------------------------------
+     * NEW EMPLOYEE
+     * --------------------------------------------------------
+     *
+     * Backend now returns:
+     *
+     * {
+     *   employee: {...},
+     *   account: {
+     *     email: "...",
+     *     temporaryPassword: "..."
+     *   }
+     * }
+     */
+
+    const savedEmployee =
+      normalizeEmployee(
+        data.employee,
       )
 
-      setError(
-        err.message ||
-          'Unable to save employee.',
-      )
-    } finally {
-      setSaving(false)
+    setEmployees(
+      (current) => [
+        ...current,
+        savedEmployee,
+      ],
+    )
+
+    if (data.account) {
+      setTemporaryCredentials({
+        employeeId:
+          data.employee?.employeeId ||
+          employeeData.employeeId ||
+          '',
+        email:
+          data.account.email || '',
+        // Nothing is emailed, so the password always comes back here for the
+        // HR Admin to pass on.
+        temporaryPassword:
+          data.account.temporaryPassword || '',
+        employeeName:
+          data.employee?.name ||
+          employeeData.name ||
+          'Employee',
+      })
     }
+
+    setSuccessMessage(
+      'Employee and login account created successfully.',
+    )
+
+    setModalOpen(false)
+    setEditingEmployee(null)
+
+    await loadEmployees()
+  } catch (err) {
+    console.error(
+      'Save employee error:',
+      err,
+    )
+
+    setError(
+      err.message ||
+        'Unable to save employee.',
+    )
+  } finally {
+    setSaving(false)
   }
+}
 
   async function handleQuickTableUpdate(employee, changes) {
     try {
@@ -3143,7 +3851,7 @@ export default function Employees() {
 
       const response = await fetch(`${API_URL}/employees/${employee.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(changes),
       })
 
@@ -3172,18 +3880,8 @@ export default function Employees() {
   async function handleDelete(
     employee,
   ) {
-    const name =
-      getEmployeeName(employee)
-
-    const employeeId =
-      getEmployeeId(employee)
-
-    const confirmed =
-      window.confirm(
-        `Delete ${name} (${employeeId})? This action cannot be undone.`,
-      )
-
-    if (!confirmed) {
+    if (!pendingDelete) {
+      setPendingDelete(employee)
       return
     }
 
@@ -3195,6 +3893,11 @@ export default function Employees() {
         `${API_URL}/employees/${employee.id}`,
         {
           method: 'DELETE',
+
+          // DELETE /employees/:id is behind requireAuth too. This call sent no
+          // headers at all, so deleting an employee failed with
+          // "Authentication required" even while signed in.
+          headers: authHeaders(),
         },
       )
 
@@ -3203,7 +3906,8 @@ export default function Employees() {
 
       if (!response.ok) {
         throw new Error(
-          data?.message ||
+          describeAuthFailure(response, data) ||
+            data?.message ||
             data?.error ||
             'Failed to delete employee.',
         )
@@ -3220,6 +3924,7 @@ export default function Employees() {
       setSuccessMessage(
         'Employee deleted successfully.',
       )
+      setPendingDelete(null)
     } catch (err) {
       console.error(
         'Delete employee error:',
@@ -3236,32 +3941,35 @@ export default function Employees() {
   return (
     <div className="min-h-full bg-[#F3F4F6] text-slate-950">
 
-      <main className="mx-auto max-w-[1600px] px-5 py-6 sm:px-8">
-
-        {/* Header */}
-        <header className="animate-employee-hero mb-8 flex flex-col justify-between gap-5 bg-[#F3F4F6] px-6 py-2 sm:px-10 sm:py-3 lg:flex-row lg:items-center">
-          <div className="flex items-center gap-4">
-            <div>
-              <p className="text-base font-medium tracking-normal text-cyan-600">
-                Employee Management
-              </p>
-              <h1 className="mt-1 text-[36px] font-bold leading-tight tracking-[-0.035em] text-slate-950 sm:text-[40px]">
-                Manage Your Team
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                View, add, edit and manage all employees in your organization.
-              </p>
-            </div>
+      {pendingDelete && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4">
+        <section role="alertdialog" aria-modal="true" aria-labelledby="delete-employee-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <h2 id="delete-employee-title" className="text-lg font-bold text-slate-900">Delete employee?</h2>
+          <p className="mt-2 text-sm text-slate-600">Delete {getEmployeeName(pendingDelete)} ({getEmployeeId(pendingDelete)})? This action cannot be undone.</p>
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" onClick={() => setPendingDelete(null)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={() => handleDelete(pendingDelete)} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Delete</button>
           </div>
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="animate-add-employee-button flex w-fit items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-md"
-          >
-            <UserPlus size={18} />
-            Add Employee
-          </button>
-        </header>
+        </section>
+      </div>}
+
+      <main className="w-full max-w-[1600px] px-5 py-6 sm:px-8">
+
+        <PageTitle
+          eyebrow="Employee Management"
+          title="Manage Your Team"
+          description="View, add, edit and manage all employees in your organization."
+          className="animate-employee-hero mb-8 px-0 py-2"
+          action={canAdd ? (
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="animate-add-employee-button flex w-fit items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-md"
+            >
+              <UserPlus size={18} />
+              Add Employee
+            </button>
+          ) : null}
+        />
 
         {/* Summary */}
         <section className="animate-employee-summary mb-9 grid gap-4 bg-[#F3F4F6] p-0 sm:grid-cols-2 lg:grid-cols-4">
@@ -3471,7 +4179,20 @@ export default function Employees() {
 
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <TableDataTools
+                filename="employees"
+                rows={(selectedEmployeeIds.length ? employees.filter((employee) => selectedEmployeeIds.includes(employee.id)) : filteredEmployees).map((employee) => ({
+                  employeeId: getEmployeeId(employee),
+                  name: getEmployeeName(employee),
+                  email: employee.email || '',
+                  department: employee.department || '',
+                  jobTitle: employee.jobTitle || employee.position || '',
+                  status: employee.status || '',
+                  joinDate: employee.joinDate || employee.hireDate || '',
+                }))}
+                onImport={canAdd ? importEmployees : undefined}
+              />
 
               <div className="flex items-center rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200/70">
                 <button
@@ -3499,11 +4220,6 @@ export default function Employees() {
                   <LayoutGrid size={15} />
                   Card
                 </button>
-              </div>
-
-              <div className="hidden items-center gap-2 text-xs text-slate-400 md:flex">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                Database connected
               </div>
 
             </div>
@@ -3540,6 +4256,7 @@ export default function Employees() {
                 or add a new employee.
               </p>
 
+              {canAdd && (
               <button
                 type="button"
                 onClick={openAddModal}
@@ -3548,27 +4265,35 @@ export default function Employees() {
                 <UserPlus size={15} />
                 Add Employee
               </button>
+              )}
 
             </div>
           ) : (
             directoryView === 'table' ? (
               <EmployeeTable
                 employees={filteredEmployees}
-                onEdit={openEditModal}
+                selectedIds={selectedEmployeeIds}
+                onToggleSelected={(id, checked) => setSelectedEmployeeIds((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))}
+                onToggleAll={(rows, checked) => setSelectedEmployeeIds((current) => checked ? [...new Set([...current, ...rows.map((item) => item.id)])] : current.filter((id) => !rows.some((row) => row.id === id)))}
+                onEdit={canEdit ? openEditModal : null}
                 onView={setViewEmployee}
-                onDelete={handleDelete}
+                onDelete={canDelete ? handleDelete : null}
                 onQuickUpdate={handleQuickTableUpdate}
+                canEdit={canEdit}
               />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {filteredEmployees.map(
-                  (employee) => (
+                  (employee, index) => (
                     <EmployeeCard
                       key={employee.id}
                       employee={employee}
-                      onEdit={openEditModal}
+                      index={index}
+                      selected={selectedEmployeeIds.includes(employee.id)}
+                      onToggleSelected={(id, checked) => setSelectedEmployeeIds((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id))}
+                      onEdit={canEdit ? openEditModal : null}
                       onView={setViewEmployee}
-                      onDelete={handleDelete}
+                      onDelete={canDelete ? handleDelete : null}
                     />
                   ),
                 )}
@@ -3594,6 +4319,7 @@ export default function Employees() {
         ) : (
           <AddEmployeeDrawer
             departments={departments}
+            employees={employees}
             onClose={closeModal}
             onSave={handleSave}
             saving={saving}
@@ -3601,9 +4327,17 @@ export default function Employees() {
         )
       )}
 
+      {temporaryCredentials && (
+        <TemporaryCredentialsModal
+          credentials={temporaryCredentials}
+          onClose={() => setTemporaryCredentials(null)}
+        />
+      )}
+
       {viewEmployee && (
         <EmployeeViewModal
           employee={viewEmployee}
+          onResetPassword={canResetPassword ? handleResetPassword : null}
           onClose={() =>
             setViewEmployee(null)
           }

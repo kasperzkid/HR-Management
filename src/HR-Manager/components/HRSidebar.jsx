@@ -2,14 +2,15 @@ import { useEffect, useState } from 'react'
 import {
   BarChart3,
   CalendarDays,
-  Check,
   ChevronRight,
   ClipboardList,
   FileBarChart,
   FileText,
   LayoutDashboard,
+  Megaphone,
   Moon,
   Settings,
+  ShieldCheck,
   Sun,
   Users,
   Wallet,
@@ -17,51 +18,97 @@ import {
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
+/**
+ * Navigation, each entry naming the permission that makes it reachable.
+ *
+ * A link is hidden when the account does not hold the permission, and the route
+ * behind it is guarded by the same permission on both the client and the
+ * server. Hiding it is a courtesy that stops somebody opening a screen full of
+ * buttons that would all fail; the 403 is what actually stops them.
+ *
+ * The dashboard aggregates every module, so it asks for any one of them rather
+ * than a permission of its own.
+ */
 const navigation = [
   {
     label: 'Dashboard',
     path: '/hr-manager',
     icon: LayoutDashboard,
     end: true,
+    anyOf: [
+      'employees.view',
+      'attendance.view',
+      'leave.view',
+      'payroll.view',
+      'payment_slips.view',
+      'reports.view',
+      'users.view',
+    ],
   },
   {
     label: 'Employees',
     path: '/hr-manager/employees',
     icon: Users,
+    permission: 'employees.view',
   },
   {
     label: 'Attendance',
     path: '/hr-manager/attendance',
     icon: CalendarDays,
+    permission: 'attendance.view',
   },
   {
     label: 'Leave Management',
     path: '/hr-manager/leave',
     icon: ClipboardList,
+    permission: 'leave.view',
   },
   {
     label: 'Payroll',
     path: '/hr-manager/payroll',
     icon: Wallet,
+    permission: 'payroll.view',
   },
   {
     label: 'Payment Slips',
     path: '/hr-manager/payslips',
     icon: FileText,
+    permission: 'payment_slips.view',
+  },
+  {
+    label: 'Company Announcements',
+    path: '/hr-manager/announcements',
+    icon: Megaphone,
+    permission: 'announcements.view',
   },
   {
     label: 'HR Reports',
     path: '/hr-manager/reports',
     icon: FileBarChart,
+    permission: 'reports.view',
   },
   {
     label: 'HR Settings',
     path: '/hr-manager/settings',
     icon: Settings,
+    permission: 'settings.view',
+  },
+  {
+    label: 'User & Role Management',
+    path: '/hr-manager/users',
+    icon: ShieldCheck,
+    anyOf: ['users.view', 'users.permissions'],
   },
 ]
 
-function HRSidebar({ mobileOpen = false, onClose }) {
+function isVisible(item, permissions) {
+  if (item.anyOf) {
+    return item.anyOf.some((permission) => permissions.includes(permission))
+  }
+  return permissions.includes(item.permission)
+}
+
+function HRSidebar({ mobileOpen = false, onClose, permissions = [] }) {
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('hr-theme') === 'dark'
   })
@@ -135,30 +182,7 @@ function HRSidebar({ mobileOpen = false, onClose }) {
         >
           <div className="flex items-center gap-3">
             {/* Logo */}
-            <div
-              className={[
-                'relative flex h-10 w-10 items-center justify-center',
-                'rounded-xl text-sm font-bold',
-                'transition-all duration-300',
-                'hover:scale-105 hover:rotate-3',
-                darkMode
-                  ? 'bg-white text-slate-950'
-                  : 'bg-slate-900 text-white',
-              ].join(' ')}
-            >
-              <span className="relative z-10">YT</span>
-
-              <div
-                className={[
-                  'absolute inset-0 rounded-xl',
-                  'opacity-0 transition-opacity duration-300',
-                  'hover:opacity-100',
-                  darkMode
-                    ? 'bg-slate-200'
-                    : 'bg-slate-700',
-                ].join(' ')}
-              />
-            </div>
+            <img src="/logo.png" alt="Yanol-HR" className="relative flex h-10 w-10 rounded-xl object-contain transition-all duration-300 hover:scale-105" />
 
             <div className="min-w-0">
               <p
@@ -220,7 +244,9 @@ function HRSidebar({ mobileOpen = false, onClose }) {
           </p>
 
           <div className="space-y-1.5">
-            {navigation.map((item) => {
+            {navigation
+              .filter((item) => isVisible(item, permissions))
+              .map((item) => {
               const Icon = item.icon
 
               return (
@@ -326,49 +352,34 @@ function HRSidebar({ mobileOpen = false, onClose }) {
         </nav>
 
         {/* ---------------------------------------------------------
-            DARK MODE TOGGLE
+            LIGHT / DARK MODE
         --------------------------------------------------------- */}
         <div
           className={[
-            'border-t px-3 py-3',
-            darkMode
-              ? 'border-slate-800'
-              : 'border-slate-200',
+            'border-t p-3',
+            darkMode ? 'border-slate-800' : 'border-slate-200',
           ].join(' ')}
         >
           <button
             type="button"
             onClick={toggleDarkMode}
             className={[
-              'group flex w-full items-center gap-3 rounded-xl',
-              'px-3 py-2.5 text-left',
+              'group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left',
               'transition-all duration-300',
               darkMode
-                ? 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+                ? 'bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-950',
             ].join(' ')}
           >
-            {/* Animated icon container */}
-            <span
-              className={[
-                'flex h-9 w-9 shrink-0 items-center justify-center',
-                'rounded-lg transition-all duration-500',
-                'group-hover:scale-105',
-                darkMode
-                  ? 'bg-slate-900'
-                  : 'bg-slate-100',
-              ].join(' ')}
-            >
+            <span className={[
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+              'transition-all duration-500 group-hover:scale-105',
+              darkMode ? 'bg-slate-800' : 'bg-white shadow-sm',
+            ].join(' ')}>
               {darkMode ? (
-                <Moon
-                  size={18}
-                  className="rotate-[-15deg] transition-transform duration-500 group-hover:rotate-0"
-                />
+                <Moon size={18} className="rotate-[-15deg] transition-transform duration-500 group-hover:rotate-0" />
               ) : (
-                <Sun
-                  size={18}
-                  className="transition-transform duration-500 group-hover:rotate-45"
-                />
+                <Sun size={18} className="transition-transform duration-500 group-hover:rotate-45" />
               )}
             </span>
 
@@ -376,114 +387,15 @@ function HRSidebar({ mobileOpen = false, onClose }) {
               <span className="block text-sm font-semibold">
                 {darkMode ? 'Dark Mode' : 'Light Mode'}
               </span>
-
-              <span
-                className={[
-                  'block text-[11px] transition-colors duration-300',
-                  darkMode
-                    ? 'text-slate-500'
-                    : 'text-slate-400',
-                ].join(' ')}
-              >
-                {darkMode
-                  ? 'Dark appearance enabled'
-                  : 'Light appearance enabled'}
+              <span className={['block text-[11px]', darkMode ? 'text-slate-500' : 'text-slate-400'].join(' ')}>
+                {darkMode ? 'Dark appearance enabled' : 'Light appearance enabled'}
               </span>
             </span>
 
-            {/* Toggle switch */}
-            <span
-              className={[
-                'relative h-5 w-9 shrink-0 rounded-full',
-                'transition-colors duration-300',
-                darkMode
-                  ? 'bg-white'
-                  : 'bg-slate-300',
-              ].join(' ')}
-            >
-              <span
-                className={[
-                  'absolute top-0.5 h-4 w-4 rounded-full',
-                  'shadow-sm transition-all duration-300',
-                  darkMode
-                    ? 'left-[18px] bg-slate-950'
-                    : 'left-0.5 bg-white',
-                ].join(' ')}
-              />
+            <span className={['relative h-5 w-9 shrink-0 rounded-full transition-colors duration-300', darkMode ? 'bg-white' : 'bg-slate-300'].join(' ')}>
+              <span className={['absolute top-0.5 h-4 w-4 rounded-full shadow-sm transition-all duration-300', darkMode ? 'left-[18px] bg-slate-950' : 'left-0.5 bg-white'].join(' ')} />
             </span>
           </button>
-        </div>
-
-        {/* ---------------------------------------------------------
-            BOTTOM USER AREA
-        --------------------------------------------------------- */}
-        <div
-          className={[
-            'border-t p-3',
-            darkMode
-              ? 'border-slate-800'
-              : 'border-slate-200',
-          ].join(' ')}
-        >
-          <div
-            className={[
-              'group flex items-center gap-3 rounded-xl px-3 py-3',
-              'transition-all duration-300',
-              darkMode
-                ? 'bg-slate-900 hover:bg-slate-800'
-                : 'bg-slate-50 hover:bg-slate-100',
-            ].join(' ')}
-          >
-            {/* Avatar */}
-            <div
-              className={[
-                'flex h-9 w-9 shrink-0 items-center justify-center',
-                'rounded-full text-sm font-semibold',
-                'transition-all duration-300',
-                'group-hover:scale-105',
-                darkMode
-                  ? 'bg-slate-700 text-white'
-                  : 'bg-slate-200 text-slate-700',
-              ].join(' ')}
-            >
-              HR
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p
-                className={[
-                  'truncate text-sm font-semibold',
-                  'transition-colors duration-300',
-                  darkMode
-                    ? 'text-white'
-                    : 'text-slate-900',
-                ].join(' ')}
-              >
-                HR Manager
-              </p>
-
-              <p
-                className={[
-                  'truncate text-xs transition-colors duration-300',
-                  darkMode
-                    ? 'text-slate-500'
-                    : 'text-slate-500',
-                ].join(' ')}
-              >
-                Human Resources
-              </p>
-            </div>
-
-            <Check
-              size={15}
-              className={[
-                'shrink-0 transition-all duration-300',
-                darkMode
-                  ? 'text-slate-500'
-                  : 'text-slate-400',
-              ].join(' ')}
-            />
-          </div>
         </div>
       </aside>
     </>

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { X, UserPlus, User, Briefcase, DollarSign, CreditCard, UploadCloud, FileText, ChevronRight, ChevronLeft } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { X, UserPlus, FileText } from 'lucide-react'
 import { useEmployeeForm } from './add-employee-modal/useEmployeeForm'
 import {
   PersonalSection,
@@ -9,36 +9,40 @@ import {
   DocumentsSection,
 } from './add-employee-modal/formSections'
 
-const STEPS = [
-  { key: 'personal', icon: User, label: 'Personal & ID' },
-  { key: 'job', icon: Briefcase, label: 'Job & Employment' },
-  { key: 'compensation', icon: DollarSign, label: 'Compensation' },
-  { key: 'banking', icon: CreditCard, label: 'Banking & Tax' },
-  { key: 'documents', icon: UploadCloud, label: 'Documents' },
-  { key: 'notes', icon: FileText, label: 'Notes & Review' },
-]
-
-function sectionMissingFields(key, form) {
-  if (key === 'personal') {
-    const m = []
-    if (!form.name?.trim()) m.push('Full Name')
-    return m
-  }
-  if (key === 'job') {
-    const m = []
-    if (!form.jobTitle?.trim()) m.push('Job Title')
-    if (!form.department?.trim()) m.push('Department')
-    return m
-  }
-  return []
+// Which fields belong to which section. Used for one job only: when a save is
+// refused, this works out which section to scroll to, so a mistake three screens
+// up is brought into view instead of just being reported in a corner.
+const SECTION_FIELDS = {
+  personal: ['employeeId', 'name', 'gender', 'dateOfBirth', 'phone', 'email', 'address', 'emergencyContact', 'identityIdNumber'],
+  job: ['jobTitle', 'department', 'employmentType', 'joinDate', 'exitDate'],
+  compensation: ['basicSalary', 'transportAllowance', 'housingAllowance', 'mealAllowance', 'otherAllowance'],
+  banking: ['bankName', 'bankAccount', 'tin', 'pensionId'],
 }
 
+const SECTION_ORDER = ['personal', 'job', 'compensation', 'banking']
+
+/**
+ * Employee registration, as one page.
+ *
+ * Every section is on screen at once and you scroll through it. This replaced a
+ * stepper that hid five of the six sections behind a Next button, which made it
+ * hard to see what the form was actually going to ask for and forced a click
+ * through each step to reach a figure further down.
+ *
+ * What replaced the stepper, and why nothing was lost:
+ *   - The Next button's job was to stop you reaching a section with a missing
+ *     required field. The same fields are enforced on save instead, and the
+ *     form reports every problem at once rather than one per click.
+ *   - The tab strip's job was to show progress. The sections are already
+ *     numbered 1-6, so the numbering carries that.
+ *   - Back becomes Cancel, which the X in the header never replaced cleanly.
+ */
 export default function AddEmployeeModal({
   isOpen, onClose, onSave, existingEmployees = [], editingEmployee = null, onEdit = null,
 }) {
   const form = useEmployeeForm({ isOpen, onClose, onSave, existingEmployees, editingEmployee, onEdit })
-  const [active, setActive] = useState(0)
   const [err, setErr] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const {
     formData, errors, shouldShowExitDate, basicSalaryNum, grossMonthly,
@@ -47,48 +51,45 @@ export default function AddEmployeeModal({
     addCertificateEntry, updateCertificateEntry, removeCertificate, handleSubmit,
   } = form
 
+  // One node per section, so a refused save can scroll to the first problem.
+  const sectionRefs = useRef({})
+
+  const registerSection = (key) => (node) => {
+    sectionRefs.current[key] = node
+  }
+
   if (!isOpen) return null
 
-  const step = STEPS[active]
-
-  const go = (i) => {
-    if (i === active) return
-    if (i > active) {
-      const miss = sectionMissingFields(STEPS[active].key, formData)
-      if (miss.length) { setErr(`Complete first: ${miss.join(', ')}`); return }
-    }
-    setErr(''); setActive(i)
-  }
-
-  const next = () => {
-    const miss = sectionMissingFields(step.key, formData)
-    if (miss.length) { setErr(`Complete first: ${miss.join(', ')}`); return }
-    setErr(''); setActive((s) => Math.min(s + 1, STEPS.length - 1))
-  }
-  const back = () => { setErr(''); setActive((s) => Math.max(s - 1, 0)) }
-  const isLast = active === STEPS.length - 1
-
-  const STEP_FIELDS = {
-    personal: ['employeeId', 'name', 'gender', 'dateOfBirth', 'phone', 'email', 'address', 'emergencyContact', 'identityIdNumber'],
-    job: ['jobTitle', 'department', 'employmentType', 'joinDate', 'exitDate'],
-    compensation: ['basicSalary', 'transportAllowance', 'housingAllowance', 'mealAllowance', 'otherAllowance'],
-    banking: ['bankName', 'bankAccount', 'tin', 'pensionId'],
-  }
-
   const handleFormSubmit = async (e) => {
+    // Guarded because a single always-visible button is easy to double-click
+    // while the upload and save are in flight, and two clicks used to mean two
+    // employee records.
+    if (saving) return
+
+    setErr('')
+    setSaving(true)
+
     try {
-      const ok = await form.handleSubmit(e)
+      const ok = await handleSubmit(e)
       if (ok) return
-      const firstBad = STEPS.findIndex((s) => STEP_FIELDS[s.key]?.some((f) => errors[f]))
-      if (firstBad !== -1 && firstBad !== active) {
-        setErr(`Please fix the highlighted fields in "${STEPS[firstBad].label}"`)
-        setActive(firstBad)
-      } else {
-        setErr('Please fix the highlighted fields before saving')
+
+      // handleSubmit has populated `errors` with everything that is wrong.
+      // Scroll to the first section that owns one, so the message and the
+      // highlighted field are on screen together.
+      const firstBad = SECTION_ORDER.find((key) =>
+        SECTION_FIELDS[key]?.some((field) => errors[field]),
+      )
+
+      if (firstBad && sectionRefs.current[firstBad]) {
+        sectionRefs.current[firstBad].scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
       }
-      setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
     } catch (error) {
       setErr(error.message || 'Unable to save employee')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -116,62 +117,39 @@ export default function AddEmployeeModal({
           </button>
         </div>
 
-        {/* ─── TOP TABS ─── */}
-        <div className="border-b border-gray-200 dark:border-[#262b31] bg-gray-50/60 dark:bg-[#0d1015] px-3 pt-2 overflow-x-auto shrink-0">
-          <nav className="flex items-end gap-0.5 min-w-max" aria-label="Employee form sections">
-            {STEPS.map((s, i) => {
-              const Icon = s.icon
-              const active_ = i === active
-              const done = i < active
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => go(i)}
-                  className={`group relative flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl border border-b-0 transition-all cursor-pointer whitespace-nowrap ${
-                    active_
-                      ? 'bg-white dark:bg-[#15181d] border-gray-200 dark:border-[#33383f] text-gray-950 dark:text-gray-100 shadow-sm -mb-px z-10'
-                      : done
-                      ? 'bg-emerald-50/60 dark:bg-emerald-950/10 border-transparent text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20'
-                      : 'bg-transparent border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100/60 dark:hover:bg-[#1c2026]'
-                  }`}
-                >
-                  <Icon size={14} className={active_ ? 'text-blue-600 dark:text-blue-400' : done ? 'text-emerald-500' : ''} />
-                  <span>{s.label}</span>
-                  {done && (
-                    <span className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 flex items-center justify-center text-[10px] font-bold">
-                      ✓
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </nav>
-        </div>
-
-        {/* ─── CONTENT ─── */}
-        <form onSubmit={handleFormSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-
-          {/* Scrollable section body */}
+        {/* ─── CONTENT: every section, one scroll ─── */}
+        <form
+          onSubmit={handleFormSubmit}
+          // The browser's own bubbles are switched off deliberately. They would
+          // stop the submit before the real validation runs, so a field would
+          // be flagged in the browser but carry none of this form's styled
+          // messages, and the section scroll-to-error below would never happen.
+          noValidate
+          className="flex-1 flex flex-col min-h-0 overflow-hidden"
+        >
           <div className="flex-1 overflow-y-auto px-6 py-6 text-xs min-w-0">
 
-          {step.key === 'personal' && (
-            <PersonalSection formData={formData} errors={errors} isDuplicateId={isDuplicateId} hasIdentity={hasIdentity} handleChange={handleChange} handleFileChange={handleFileChange} removeFile={removeFile} />
-          )}
-          {step.key === 'job' && (
-            <JobSection formData={formData} errors={errors} shouldShowExitDate={shouldShowExitDate} handleChange={handleChange} />
-          )}
-          {step.key === 'compensation' && (
-            <CompensationSection formData={formData} errors={errors} grossMonthly={grossMonthly} basicSalaryNum={basicSalaryNum} handleChange={handleChange} />
-          )}
-          {step.key === 'banking' && (
-            <BankingSection formData={formData} isDuplicateTin={isDuplicateTin} hasTin={hasTin} hasBankAccount={hasBankAccount} handleChange={handleChange} />
-          )}
-          {step.key === 'documents' && (
-            <DocumentsSection formData={formData} handleFileChange={handleFileChange} removeFile={removeFile} addCertificateEntry={addCertificateEntry} updateCertificateEntry={updateCertificateEntry} removeCertificate={removeCertificate} />
-          )}
-          {step.key === 'notes' && (
-            <div className="space-y-4">
+            <div ref={registerSection('personal')}>
+              <PersonalSection formData={formData} errors={errors} isDuplicateId={isDuplicateId} hasIdentity={hasIdentity} handleChange={handleChange} handleFileChange={handleFileChange} removeFile={removeFile} />
+            </div>
+
+            <div ref={registerSection('job')} className="mt-8">
+              <JobSection formData={formData} errors={errors} shouldShowExitDate={shouldShowExitDate} handleChange={handleChange} />
+            </div>
+
+            <div ref={registerSection('compensation')} className="mt-8">
+              <CompensationSection formData={formData} errors={errors} grossMonthly={grossMonthly} basicSalaryNum={basicSalaryNum} handleChange={handleChange} />
+            </div>
+
+            <div ref={registerSection('banking')} className="mt-8">
+              <BankingSection formData={formData} isDuplicateTin={isDuplicateTin} hasTin={hasTin} hasBankAccount={hasBankAccount} handleChange={handleChange} />
+            </div>
+
+            <div className="mt-8">
+              <DocumentsSection formData={formData} handleFileChange={handleFileChange} removeFile={removeFile} addCertificateEntry={addCertificateEntry} updateCertificateEntry={updateCertificateEntry} removeCertificate={removeCertificate} />
+            </div>
+
+            <div className="mt-8 space-y-4">
               <div className="flex items-center justify-between pb-1.5 border-b border-gray-100 dark:border-[#262b31]">
                 <div className="flex items-center gap-2">
                   <FileText size={15} className="text-gray-900 dark:text-gray-100" />
@@ -189,32 +167,31 @@ export default function AddEmployeeModal({
                 className="w-full px-3 py-2 text-xs rounded-lg border border-gray-300 bg-white dark:bg-[#15181d] dark:border-[#33383f] dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:placeholder:text-gray-500"
               />
             </div>
-          )}
 
-          {/* Step error */}
-          {err && (
-            <p className="mt-4 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-3 py-2">{err}</p>
-          )}
+            {/* Save-time error */}
+            {err && (
+              <p className="mt-5 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 rounded-lg px-3 py-2">{err}</p>
+            )}
           </div>
 
-          {/* Step nav (pinned) */}
+          {/* Actions (pinned) */}
           <div className="shrink-0 px-6 py-4 border-t border-gray-200 dark:border-[#262b31] bg-gray-50/70 dark:bg-[#0d1015] flex items-center justify-between gap-3">
-            <button type="button" onClick={back} disabled={active === 0}
-              className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-[#15181d] hover:bg-gray-100 dark:hover:bg-[#1c2026] border border-gray-300 dark:border-[#33383f] rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
-              <ChevronLeft size={14} /> Back
+            <button type="button" onClick={onClose} disabled={saving}
+              className="px-4 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-[#15181d] hover:bg-gray-100 dark:hover:bg-[#1c2026] border border-gray-300 dark:border-[#33383f] rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+              Cancel
             </button>
-            {!isLast ? (
-              <button type="button" onClick={next}
-                className="px-5 py-2 text-xs font-bold text-white bg-gray-950 hover:bg-black dark:hover:bg-gray-600 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5">
-                Next <ChevronRight size={14} />
-              </button>
-            ) : (
-              <button type="submit"
-                className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-2">
-                <UserPlus size={15} />
-                <span>{editingEmployee ? 'Save Changes' : 'Add Employee'}</span>
-              </button>
-            )}
+
+            <button type="submit" disabled={saving}
+              className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-2">
+              <UserPlus size={15} />
+              <span>
+                {saving
+                  ? 'Saving...'
+                  : editingEmployee
+                    ? 'Save Changes'
+                    : 'Add Employee'}
+              </span>
+            </button>
           </div>
         </form>
       </div>

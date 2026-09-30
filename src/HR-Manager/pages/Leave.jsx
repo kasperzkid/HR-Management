@@ -7,6 +7,7 @@ import {
   Clock3,
   Edit3,
   FileText,
+  Loader2,
   Search,
   UserCheck,
   Users,
@@ -15,9 +16,11 @@ import {
   Save,
 } from 'lucide-react'
 
-import { PageTitle, Table } from '../../components/ui'
+import { Button, PageTitle, SummaryCard, Table } from '../../components/ui'
+import TableDataTools from '../components/TableDataTools'
+import { useAccess } from '../../lib/rbac'
 
-const API_BASE = 'http://localhost:4000/api/hr-manager'
+const API_BASE = '/api/hr-manager'
 
 const LEAVE_TYPES = [
   'Annual Leave',
@@ -98,6 +101,7 @@ function normalizeEmployee(employee) {
 }
 
 function normalizeLeaveRequest(request) {
+  const status = String(request.approvalStatus || request.status || 'Pending').trim().toLowerCase()
   return {
     ...request,
 
@@ -138,9 +142,7 @@ function normalizeLeaveRequest(request) {
     days:
       Number(request.days || 0),
 
-    approvalStatus:
-      request.approvalStatus ||
-      'Pending',
+    approvalStatus: status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending',
 
     approvedBy:
       request.approvedBy ||
@@ -154,6 +156,10 @@ function normalizeLeaveRequest(request) {
       request.remarks ||
       '',
 
+    rejectionReason:
+      request.rejectionReason ||
+      '',
+
     balance:
       request.balance === null ||
       request.balance === undefined
@@ -164,14 +170,14 @@ function normalizeLeaveRequest(request) {
 
 function getStatusClasses(status) {
   if (status === 'Approved') {
-    return 'bg-emerald-50 text-emerald-700'
+    return 'text-emerald-700'
   }
 
   if (status === 'Rejected') {
     return 'bg-red-50 text-red-700'
   }
 
-  return 'bg-amber-50 text-amber-700'
+  return 'text-amber-700'
 }
 
 function getLeaveTypeClasses(type) {
@@ -188,6 +194,41 @@ function getLeaveTypeClasses(type) {
   }
 
   return 'bg-slate-100 text-slate-700'
+}
+
+// Text-only status/leave-type colours for the two tables on this page. The
+// shared getStatusClasses / getLeaveTypeClasses above keep their original
+// background chips for the modals, so they are left untouched.
+function getStatusTextClasses(status) {
+  if (status === 'Approved') {
+    return 'text-emerald-700'
+  }
+
+  if (status === 'Rejected') {
+    return 'text-rose-700'
+  }
+
+  if (status === 'Pending') {
+    return 'text-amber-700'
+  }
+
+  return 'text-slate-700'
+}
+
+function getLeaveTypeTextClasses(type) {
+  if (type === 'Annual Leave') {
+    return 'text-[#007a99]'
+  }
+
+  if (type === 'Sick Leave') {
+    return 'text-rose-700'
+  }
+
+  if (type === 'Maternity Leave') {
+    return 'text-purple-700'
+  }
+
+  return 'text-slate-700'
 }
 
 function Field({
@@ -357,7 +398,7 @@ function ReviewModal({
                 HR Review
               </p>
 
-              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
                 Pending
               </span>
             </div>
@@ -510,7 +551,7 @@ function ReviewModal({
           </section>
 
           <section>
-            <Field label="HR Review Remark">
+            <Field label="Review Remark / Rejection Reason">
               <textarea
                 rows={4}
                 value={reviewRemarks}
@@ -519,7 +560,7 @@ function ReviewModal({
                     event.target.value,
                   )
                 }
-                placeholder="Enter an approval or rejection remark..."
+                placeholder="Add a review remark, or enter the reason when rejecting..."
                 className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10"
               />
             </Field>
@@ -541,31 +582,31 @@ function ReviewModal({
               Cancel
             </button>
 
-            <button
+            {onReject && (
+            <Button
               type="button"
               onClick={onReject}
               disabled={saving}
-              className="flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              icon={XCircle}
+              loading={saving}
+              loadingText="Processing..."
             >
-              <XCircle size={17} />
+              Reject Request
+            </Button>
+            )}
 
-              {saving
-                ? 'Processing...'
-                : 'Reject Request'}
-            </button>
-
-            <button
+            {onApprove && (
+            <Button
               type="button"
               onClick={onApprove}
               disabled={saving}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
+              icon={Check}
+              loading={saving}
+              loadingText="Processing..."
             >
-              <Check size={17} />
-
-              {saving
-                ? 'Processing...'
-                : 'Approve Request'}
-            </button>
+              Approve Request
+            </Button>
+            )}
           </div>
         </div>
       </div>
@@ -682,7 +723,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                 >
                   <option value="">
                     Select employee
@@ -746,7 +787,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                 >
                   {LEAVE_TYPES.map(
                     (type) => (
@@ -774,7 +815,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
                 />
               </Field>
@@ -792,7 +833,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
                 />
               </Field>
@@ -814,7 +855,7 @@ function EditLeaveModal({
                       event.target.value,
                     )
                   }
-                  disabled={saving}
+                  disabled
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
                 />
               </Field>
@@ -843,16 +884,8 @@ function EditLeaveModal({
                   }
                   disabled={saving}
                 >
-                  {APPROVAL_STATUSES.map(
-                    (status) => (
-                      <option
-                        key={status}
-                        value={status}
-                      >
-                        {status}
-                      </option>
-                    ),
-                  )}
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
                 </SelectField>
               </Field>
             </div>
@@ -869,14 +902,9 @@ function EditLeaveModal({
               <textarea
                 rows={5}
                 value={form.remarks}
-                onChange={(event) =>
-                  onChange(
-                    'remarks',
-                    event.target.value,
-                  )
-                }
-                disabled={saving}
-                placeholder="Enter leave request remarks..."
+                readOnly
+                disabled
+                placeholder="Employee remarks"
                 className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none transition focus:border-[#4755AE] focus:ring-2 focus:ring-[#4755AE]/10 disabled:bg-slate-50"
               />
             </Field>
@@ -897,27 +925,17 @@ function EditLeaveModal({
 
           {form.approvalStatus ===
             'Rejected' && (
-            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3">
-              <p className="text-sm font-semibold text-red-800">
-                Rejected request
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-red-700">
-                A rejected request does not count against the employee's approved leave balance.
-              </p>
-            </div>
-          )}
-
-          {form.approvalStatus ===
-            'Pending' && (
-            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
-              <p className="text-sm font-semibold text-amber-800">
-                Returned to Pending
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-amber-700">
-                This request will return to the HR review queue and must be reviewed again.
-              </p>
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+              <p className="text-sm font-semibold text-red-800">Reason for rejection</p>
+              <textarea
+                rows={3}
+                value={form.rejectionReason || ''}
+                onChange={(event) => onChange('rejectionReason', event.target.value)}
+                disabled={saving}
+                required
+                placeholder="Explain why this leave request is rejected."
+                className="mt-3 w-full resize-y rounded-xl border border-red-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              />
             </div>
           )}
 
@@ -937,18 +955,16 @@ function EditLeaveModal({
               Cancel
             </button>
 
-            <button
+            <Button
               type="button"
               onClick={onSave}
               disabled={saving}
-              className="flex items-center justify-center gap-2 rounded-xl bg-[#4755AE] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3d4998] disabled:cursor-not-allowed disabled:opacity-60"
+              icon={Save}
+              loading={saving}
+              loadingText="Saving Changes..."
             >
-              <Save size={17} />
-
-              {saving
-                ? 'Saving Changes...'
-                : 'Save Changes'}
-            </button>
+              Save Changes
+            </Button>
           </div>
         </div>
       </div>
@@ -957,6 +973,9 @@ function EditLeaveModal({
 }
 
 function Leave() {
+  const { can } = useAccess()
+  const canDecide = can('leave.decide')
+
   const [employees, setEmployees] =
     useState([])
 
@@ -1127,7 +1146,7 @@ function Leave() {
 
     return Array.isArray(data)
       ? data
-      : data.leaveRequests || []
+      : data.leaveRequests || data.requests || data.records || data.data?.leaveRequests || data.data?.requests || data.data || []
   }
 
   async function updateLeaveRequest(
@@ -1170,13 +1189,14 @@ function Leave() {
     setError('')
 
     try {
-      const [
-        employeeData,
-        requestData,
-      ] = await Promise.all([
+      const [employeeResult, requestResult] = await Promise.allSettled([
         fetchEmployees(),
         fetchLeaveRequests(),
       ])
+
+      if (requestResult.status === 'rejected') throw requestResult.reason
+      const employeeData = employeeResult.status === 'fulfilled' ? employeeResult.value : []
+      const requestData = requestResult.value
 
       const normalizedEmployees =
         employeeData.map(
@@ -1660,6 +1680,8 @@ function Leave() {
       remarks:
         request.remarks ||
         '',
+      rejectionReason:
+        request.rejectionReason || '',
     })
 
     setEditError('')
@@ -1713,72 +1735,17 @@ function Leave() {
 
     setEditError('')
 
-    if (!editForm.employeeId) {
-      setEditError(
-        'Please select an employee.',
-      )
-      return
-    }
+    const calculatedDays = editingRequest.days
 
-    if (!editForm.leaveType) {
-      setEditError(
-        'Please select a leave type.',
-      )
-      return
-    }
-
-    if (!editForm.requestDate) {
-      setEditError(
-        'Please select the request date.',
-      )
-      return
-    }
-
-    if (!editForm.startDate) {
-      setEditError(
-        'Please select the start date.',
-      )
-      return
-    }
-
-    if (!editForm.endDate) {
-      setEditError(
-        'Please select the end date.',
-      )
-      return
-    }
-
-    if (
-      editForm.endDate <
-      editForm.startDate
-    ) {
-      setEditError(
-        'The end date cannot be before the start date.',
-      )
-      return
-    }
-
-    const calculatedDays =
-      calculateWorkingDays(
-        editForm.startDate,
-        editForm.endDate,
-      )
-
-    if (calculatedDays <= 0) {
-      setEditError(
-        'The selected date range contains no working days.',
-      )
-      return
-    }
-
-    if (
-      !APPROVAL_STATUSES.includes(
-        editForm.approvalStatus,
-      )
-    ) {
+    if (!['Approved', 'Rejected'].includes(editForm.approvalStatus)) {
       setEditError(
         'Please select a valid approval status.',
       )
+      return
+    }
+
+    if (editForm.approvalStatus === 'Rejected' && !editForm.rejectionReason.trim()) {
+      setEditError('Please provide a reason for rejecting this request.')
       return
     }
 
@@ -1833,8 +1800,11 @@ function Leave() {
           : null,
 
         remarks:
-          editForm.remarks.trim() ||
-          null,
+          editingRequest.remarks || null,
+
+        rejectionReason: editForm.approvalStatus === 'Rejected'
+          ? editForm.rejectionReason.trim()
+          : null,
       }
 
       await updateLeaveRequest(
@@ -1897,8 +1867,7 @@ function Leave() {
         approvalStatus ===
         'Approved'
 
-      const remarks =
-        reviewRemarks.trim()
+      const remarks = reviewRemarks.trim()
 
       await updateLeaveRequest(
         request.id,
@@ -1913,12 +1882,18 @@ function Leave() {
             ? getTodayString()
             : null,
 
-          remarks:
-            remarks ||
-            request.remarks ||
-            null,
+          remarks: approved
+            ? remarks || request.remarks || null
+            : request.remarks || null,
+          rejectionReason: approved
+            ? null
+            : remarks || request.rejectionReason || null,
         },
       )
+
+      window.dispatchEvent(new CustomEvent('hr-leave-updated', {
+        detail: { id: request.id, approvalStatus },
+      }))
 
       const updatedRequests =
         await fetchLeaveRequests()
@@ -1997,6 +1972,11 @@ function Leave() {
       return
     }
 
+    if (!reviewRemarks.trim()) {
+      setError('Please enter a reason for rejecting this request.')
+      return
+    }
+
     await updateStatus(
       reviewingRequest,
       'Rejected',
@@ -2023,6 +2003,23 @@ function Leave() {
 
     setNotificationVisible(false)
     setNotificationRequest(null)
+  }
+
+  async function importLeaveRequests(records) {
+    let imported = 0
+    for (const record of records) {
+      if (!record.employeeId || !record.leaveType || !record.startDate || !record.endDate) continue
+      const response = await fetch(`${API_BASE}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(`${record.employeeId}: ${result.message || 'Import failed.'}`)
+      imported += 1
+    }
+    await loadInitialData()
+    return `Imported ${imported} leave request(s). Existing requests are unchanged.`
   }
 
   /*
@@ -2143,19 +2140,14 @@ function Leave() {
           action={
             <div className="flex items-center gap-2">
               {newRequestCount > 0 && (
-                <button
+                <Button
                   type="button"
                   onClick={clearNewRequestNotifications}
-                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
+                  icon={Check}
                 >
-                  <Check size={16} />
                   Mark New as Seen
-                </button>
+                </Button>
               )}
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                HR Review Inbox
-              </div>
             </div>
           }
           className="mb-8"
@@ -2188,104 +2180,26 @@ function Leave() {
         ====================================================== */}
 
         <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div
-            className={`rounded-2xl border bg-white p-5 shadow-sm ${
-              pendingCount > 0
-                ? 'border-amber-200 ring-1 ring-amber-100'
-                : 'border-slate-200'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Pending Review
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {pendingCount}
-                </p>
-
-                {pendingCount > 0 && (
-                  <p className="mt-1 text-xs font-medium text-amber-600">
-                    Requires HR action
-                  </p>
-                )}
-              </div>
-
-              <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                <Clock3 size={20} />
-
-                {pendingCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                    {pendingCount}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Total Requests
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {requests.length}
-                </p>
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
-                <FileText size={20} />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Approved
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {approvedCount}
-                </p>
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                <Check size={20} />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Approved Leave Days
-                </p>
-
-                <p className="mt-2 text-2xl font-bold text-slate-950">
-                  {formatNumber(
-                    totalApprovedDays,
-                  )}
-                </p>
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-                <CalendarDays size={20} />
-              </div>
-            </div>
-          </div>
+          {[
+            { title: 'Pending Review', description: pendingCount > 0 ? 'Requires HR action' : 'No pending HR action', value: pendingCount, icon: Clock3, iconVariant: 'amber' },
+            { title: 'Total Requests', description: 'All leave requests', value: requests.length, icon: FileText, iconVariant: 'blue' },
+            { title: 'Approved', description: 'Approved leave requests', value: approvedCount, icon: Check, iconVariant: 'green' },
+            { title: 'Approved Leave Days', description: 'Total approved days', value: formatNumber(totalApprovedDays), icon: CalendarDays, iconVariant: 'violet' },
+          ].map((stat, statIndex) => (
+            <SummaryCard
+              key={stat.title}
+              {...stat}
+              valueLabel="Records"
+              animationDelay={statIndex * 100}
+            />
+          ))}
         </section>
 
         {/* =====================================================
             FILTERS
         ====================================================== */}
 
-        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="mb-6">
           <div className="grid gap-4 lg:grid-cols-[minmax(240px,1.5fr)_repeat(3,minmax(150px,1fr))]">
             <div className="relative">
               <Search
@@ -2382,102 +2296,83 @@ function Leave() {
             LEAVE REQUEST INBOX
         ====================================================== */}
 
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-6 sm:flex-row sm:items-center">
+        <section id="leave-review-inbox" className="mt-6 overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
+          <div className="flex flex-col justify-between gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:px-7 sm:py-6">
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#0092B8]">
                   Employee Requests
                 </p>
 
                 {pendingCount > 0 && (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                  <span className="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700">
                     {pendingCount}
                   </span>
                 )}
               </div>
 
-              <h2 className="mt-1 text-lg font-bold">
+              <h2 className="mt-1 text-lg font-bold text-[#0092B8]">
                 Leave Review Inbox
               </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Employee-submitted requests awaiting HR review.
-              </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                Automatically checking for new requests
-              </div>
-
-              <p className="text-sm text-slate-500">
-                {filteredRequests.length}{' '}
-                request
-                {filteredRequests.length ===
-                1
-                  ? ''
-                  : 's'}
-              </p>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <TableDataTools filename="leave-requests" rows={requests} onImport={importLeaveRequests} showStatus={false} />
             </div>
           </div>
 
           {loading ? (
-            <div className="flex min-h-[300px] items-center justify-center">
-              <div className="text-center">
-                <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#4755AE]" />
-
-                <p className="text-sm font-medium text-slate-500">
-                  Loading employee leave requests...
-                </p>
-              </div>
+            <div className="flex min-h-[360px] items-center justify-center">
+              <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-500">
+                <Loader2 size={17} className="animate-spin" /> Loading employee leave requests…
+              </span>
             </div>
           ) : filteredRequests.length ===
             0 ? (
-            <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                <CalendarDays size={24} />
+            <div className="flex min-h-[360px] flex-col items-center justify-center px-6 py-12 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50 text-[#0092B8]">
+                <CalendarDays size={25} strokeWidth={1.8} />
               </div>
 
-              <h3 className="mt-4 text-sm font-bold text-slate-900">
+              <h3 className="mt-5 text-lg font-bold text-slate-900">
                 No leave requests found
               </h3>
 
-              <p className="mt-1 max-w-md text-sm text-slate-500">
+              <p className="mt-1.5 max-w-md text-sm text-slate-500">
                 Employee-submitted leave requests will automatically appear here.
               </p>
             </div>
           ) : (
+            <div>
             <div className="overflow-x-auto">
-              <Table className="w-full min-w-[1280px]">
+              <Table className="w-full min-w-[1280px] text-left text-sm" containerClassName="rounded-none border-0 shadow-none">
                 <Table.Header>
-                  <Table.Row className="border-b border-slate-100 bg-slate-50/60 text-left">
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  <Table.Row className="bg-slate-50/80">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Request
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Employee
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Leave Type
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Dates
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Days
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Status
                     </Table.Head>
 
-                    <Table.Head className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <Table.Head className="px-5 py-3.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       HR Action
                     </Table.Head>
                   </Table.Row>
@@ -2496,13 +2391,13 @@ function Leave() {
                           key={
                             request.id
                           }
-                          className={`border-b border-slate-50 transition ${
+                          className={`border-t border-slate-100 transition-colors ${
                             isNew
-                              ? 'bg-indigo-50/40 hover:bg-indigo-50/70'
-                              : 'hover:bg-slate-50/60'
+                              ? 'bg-cyan-50/50 hover:bg-cyan-50/80'
+                              : 'hover:bg-slate-50/70'
                           }`}
                         >
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <div className="flex items-start gap-2">
                               {isNew && (
                                 <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />
@@ -2515,7 +2410,7 @@ function Leave() {
                                   </p>
 
                                   {isNew && (
-                                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-600">
+                                    <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-bold text-rose-700">
                                       New
                                     </span>
                                   )}
@@ -2530,9 +2425,9 @@ function Leave() {
                             </div>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-[#4755AE]">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-50 text-xs font-bold text-[#0092B8]">
                                 {getEmployeeInitials(
                                   employees.find(
                                     (
@@ -2577,11 +2472,9 @@ function Leave() {
                             </div>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <span
-                              className={`inline-flex rounded-lg px-2.5 py-1.5 text-xs font-semibold ${getLeaveTypeClasses(
-                                request.leaveType,
-                              )}`}
+                              className={`inline-flex items-center text-xs font-semibold ${getLeaveTypeTextClasses(request.leaveType)}`}
                             >
                               {
                                 request.leaveType
@@ -2589,7 +2482,7 @@ function Leave() {
                             </span>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <p className="text-sm font-medium text-slate-700">
                               {
                                 request.startDate
@@ -2604,7 +2497,7 @@ function Leave() {
                             </p>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <span className="text-sm font-bold text-slate-900">
                               {formatNumber(
                                 request.days,
@@ -2616,9 +2509,9 @@ function Leave() {
                             </span>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                              className={`inline-flex items-center text-xs font-semibold ${getStatusTextClasses(
                                 request.approvalStatus,
                               )}`}
                             >
@@ -2628,7 +2521,7 @@ function Leave() {
                             </span>
                           </Table.Cell>
 
-                          <Table.Cell className="px-5 py-4">
+                          <Table.Cell className="px-5 py-3.5">
                             <div className="flex justify-end gap-2">
                               {request.approvalStatus ===
                               'Pending' ? (
@@ -2642,11 +2535,7 @@ function Leave() {
                                   disabled={
                                     saving
                                   }
-                                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                                    isNew
-                                      ? 'bg-[#4755AE] text-white hover:bg-[#3d4998]'
-                                      : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                                  }`}
+                                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0092B8] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#007a99] focus:outline-none focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
                                 >
                                   <UserCheck
                                     size={
@@ -2667,7 +2556,7 @@ function Leave() {
                                   disabled={
                                     saving
                                   }
-                                  className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-[#4755AE] transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                                 >
                                   <Edit3
                                     size={
@@ -2687,6 +2576,7 @@ function Leave() {
                 </Table.Body>
               </Table>
             </div>
+            </div>
           )}
         </section>
 
@@ -2695,31 +2585,29 @@ function Leave() {
             KEEPING THE BOTTOM SECTION
         ====================================================== */}
 
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-[#4755AE]">
-                <Users size={18} />
-              </div>
+        <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
+          <div className="flex items-start gap-3 border-b border-slate-100 px-5 py-5 sm:px-7 sm:py-6">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-[#0092B8]">
+              <Users size={19} />
+            </div>
 
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">
-                  Employee Leave Balance
-                </p>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#0092B8]">
+                Employee Leave Balance
+              </p>
 
-                <h2 className="mt-1 text-lg font-bold">
-                  Balance Summary
-                </h2>
+              <h2 className="mt-1 text-lg font-bold text-[#0092B8]">
+                Balance Summary
+              </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Only approved leave is counted against the employee balance.
-                </p>
-              </div>
+              <p className="mt-1.5 text-sm text-slate-500">
+                Only approved leave is counted against the employee balance.
+              </p>
             </div>
           </div>
 
-          <div className="p-6">
-            <div className="mb-5 max-w-md">
+          <div className="px-5 py-5 sm:px-7 sm:py-6">
+            <div className="max-w-md [&_select:focus]:border-[#0092B8] [&_select:focus]:ring-cyan-100">
               <Field label="Select Employee">
                 <SelectField
                   value={
@@ -2776,13 +2664,13 @@ function Leave() {
 
             {selectedEmployee ? (
               <>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Annual Entitled
                     </p>
 
-                    <p className="mt-2 text-xl font-bold text-slate-900">
+                    <p className="mt-2 text-2xl font-bold text-slate-900">
                       {formatNumber(
                         selectedEmployeeEntitlement,
                       )}
@@ -2793,12 +2681,12 @@ function Leave() {
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Annual Taken
                     </p>
 
-                    <p className="mt-2 text-xl font-bold text-slate-900">
+                    <p className="mt-2 text-2xl font-bold text-slate-900">
                       {formatNumber(
                         selectedEmployeeApprovedAnnual,
                       )}
@@ -2809,12 +2697,12 @@ function Leave() {
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
                       Remaining
                     </p>
 
-                    <p className="mt-2 text-xl font-bold text-emerald-700">
+                    <p className="mt-2 text-2xl font-bold text-emerald-700">
                       {formatNumber(
                         selectedEmployeeRemaining,
                       )}
@@ -2825,12 +2713,12 @@ function Leave() {
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-rose-100 bg-rose-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-rose-600">
+                  <div className="rounded-2xl border border-rose-100 bg-rose-50 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-rose-600">
                       Sick Days Used
                     </p>
 
-                    <p className="mt-2 text-xl font-bold text-rose-700">
+                    <p className="mt-2 text-2xl font-bold text-rose-700">
                       {formatNumber(
                         selectedEmployeeApprovedSick,
                       )}
@@ -2843,30 +2731,30 @@ function Leave() {
                 </div>
 
                 <div className="mt-6 overflow-x-auto">
-                  <Table className="w-full min-w-[800px]">
+                  <Table className="w-full min-w-[800px]" containerClassName="rounded-none border-0 shadow-none">
                     <Table.Header>
-                      <Table.Row className="border-b border-slate-100 text-left">
-                        <Table.Head className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      <Table.Row className="bg-slate-50/80 text-left">
+                        <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           Request
                         </Table.Head>
 
-                        <Table.Head className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           Leave Type
                         </Table.Head>
 
-                        <Table.Head className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           Start
                         </Table.Head>
 
-                        <Table.Head className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           End
                         </Table.Head>
 
-                        <Table.Head className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           Days
                         </Table.Head>
 
-                        <Table.Head className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        <Table.Head className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           Status
                         </Table.Head>
                       </Table.Row>
@@ -2878,7 +2766,7 @@ function Leave() {
                         <Table.Row>
                           <Table.Cell
                             colSpan={6}
-                            className="px-4 py-8 text-center text-sm text-slate-400"
+                            className="px-5 py-10 text-center text-sm text-slate-500"
                           >
                             No leave requests for this employee.
                           </Table.Cell>
@@ -2890,17 +2778,17 @@ function Leave() {
                               key={
                                 request.id
                               }
-                              className="border-b border-slate-50"
+                              className="transition-colors hover:bg-slate-50/70"
                             >
-                              <Table.Cell className="px-4 py-3 text-sm font-semibold text-slate-700">
+                              <Table.Cell className="px-5 py-3.5 text-sm font-semibold text-slate-900">
                                 {
                                   request.id
                                 }
                               </Table.Cell>
 
-                              <Table.Cell className="px-4 py-3">
+                              <Table.Cell className="px-5 py-3.5">
                                 <span
-                                  className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${getLeaveTypeClasses(
+                                  className={`inline-flex items-center text-xs font-semibold ${getLeaveTypeTextClasses(
                                     request.leaveType,
                                   )}`}
                                 >
@@ -2910,27 +2798,27 @@ function Leave() {
                                 </span>
                               </Table.Cell>
 
-                              <Table.Cell className="px-4 py-3 text-sm text-slate-600">
+                              <Table.Cell className="px-5 py-3.5 text-sm text-slate-600">
                                 {
                                   request.startDate
                                 }
                               </Table.Cell>
 
-                              <Table.Cell className="px-4 py-3 text-sm text-slate-600">
+                              <Table.Cell className="px-5 py-3.5 text-sm text-slate-600">
                                 {
                                   request.endDate
                                 }
                               </Table.Cell>
 
-                              <Table.Cell className="px-4 py-3 text-sm font-semibold text-slate-700">
+                              <Table.Cell className="px-5 py-3.5 text-sm font-bold text-slate-900">
                                 {formatNumber(
                                   request.days,
                                 )}
                               </Table.Cell>
 
-                              <Table.Cell className="px-4 py-3">
+                              <Table.Cell className="px-5 py-3.5">
                                 <span
-                                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClasses(
+                                  className={`inline-flex items-center text-xs font-semibold ${getStatusTextClasses(
                                     request.approvalStatus,
                                   )}`}
                                 >
@@ -2948,17 +2836,16 @@ function Leave() {
                 </div>
               </>
             ) : (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
-                <Users
-                  size={24}
-                  className="mx-auto text-slate-300"
-                />
+              <div className="flex min-h-[360px] flex-col items-center justify-center px-6 py-12 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50 text-[#0092B8]">
+                  <Users size={25} strokeWidth={1.8} />
+                </div>
 
-                <p className="mt-3 text-sm font-semibold text-slate-600">
+                <h3 className="mt-5 text-lg font-bold text-slate-900">
                   Select an employee
-                </p>
+                </h3>
 
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1.5 text-sm text-slate-500">
                   The employee's annual and sick leave balances will appear here.
                 </p>
               </div>
@@ -2966,66 +2853,6 @@ function Leave() {
           </div>
         </section>
 
-        {/* =====================================================
-            HR REVIEW WORKFLOW
-            KEEPING THE BOTTOM SECTION
-        ====================================================== */}
-
-        <section className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#4755AE] shadow-sm">
-              <Bell size={17} />
-            </div>
-
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                HR Leave Review Workflow
-              </h3>
-
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
-                <li>
-                  • Employees submit their leave requests from the Employee Dashboard.
-                </li>
-
-                <li>
-                  • Submitted requests automatically appear in this HR review inbox.
-                </li>
-
-                <li>
-                  • The HR dashboard checks for new requests automatically every 15 seconds.
-                </li>
-
-                <li>
-                  • New requests are highlighted and generate an HR notification.
-                </li>
-
-                <li>
-                  • HR reviews the request before approving or rejecting it.
-                </li>
-
-                <li>
-                  • Once a request is Approved or Rejected, an Edit button becomes available.
-                </li>
-
-                <li>
-                  • Editing an existing approved request can update the employee, leave type, dates, status, or remarks.
-                </li>
-
-                <li>
-                  • Returning an edited request to Pending sends it back into the HR review workflow.
-                </li>
-
-                <li>
-                  • HR cannot create a brand-new leave request from this screen.
-                </li>
-
-                <li>
-                  • Only Approved leave counts against the employee leave balance.
-                </li>
-              </ul>
-            </div>
-          </div>
-        </section>
       </main>
 
       {/* =======================================================
@@ -3047,10 +2874,10 @@ function Leave() {
           closeReviewModal
         }
         onApprove={
-          approveRequest
+          canDecide ? approveRequest : null
         }
         onReject={
-          rejectRequest
+          canDecide ? rejectRequest : null
         }
       />
 

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   TrendingUp,
   Users,
@@ -10,6 +11,7 @@ import {
   CheckCircle2,
   Hourglass,
   XCircle,
+  X,
   Landmark,
   Wallet,
   ArrowUpRight,
@@ -49,6 +51,48 @@ export function KpiCard({ label, value, sub, icon: Icon, iconCls, valueCls = 'te
 const FALLBACK_CHIP =
   'bg-gray-100 text-gray-600 border-gray-200 dark:bg-[#1c2026] dark:text-gray-400 dark:border-[#33383f]'
 
+/**
+ * In-page confirmation for a row action.
+ *
+ * These actions used to call `alert()`. A native modal parks itself over the
+ * whole app, blocks every other control, and looks like the browser complaining
+ * rather than the app confirming something - so the message belongs in the page,
+ * where it can be styled and dismissed without losing your place in the table.
+ */
+function ActionNotice({ notice, onDismiss }) {
+  if (!notice) return null
+
+  const success = notice.tone === 'success'
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`mb-4 flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm shadow-2xs ${
+        success
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-200'
+          : 'border-gray-200 bg-gray-50 text-gray-900 dark:border-[#262b31] dark:bg-[#1c2026] dark:text-gray-100'
+      }`}
+    >
+      <CheckCircle2
+        size={17}
+        className={`mt-0.5 shrink-0 ${
+          success ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'
+        }`}
+      />
+      <p className="flex-1 font-medium leading-snug">{notice.message}</p>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss message"
+        className="shrink-0 rounded-lg p-1 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-100"
+      >
+        <X size={15} />
+      </button>
+    </div>
+  )
+}
+
 // ═════════════════════════════════════════════════════════════
 // TAB 1: PAYROLL
 // ═════════════════════════════════════════════════════════════
@@ -66,6 +110,9 @@ export function PayrollTab({
     totalTaxSum,
     totalPensionSum,
   } = data
+
+  // Row actions report back here instead of opening a native dialog.
+  const [notice, setNotice] = useState(null)
 
   return (
     <>
@@ -292,6 +339,7 @@ export function PayrollTab({
 
       {/* Payroll Run History Ledger */}
       <section id="historical-payroll-ledger">
+        <ActionNotice notice={notice} onDismiss={() => setNotice(null)} />
         <LuxuryDataTable
           title="Payroll Run History Ledger"
           subtitle={`Selected-period certified run statements with statutory filing status`}
@@ -310,7 +358,7 @@ export function PayrollTab({
             >
               <div className="flex items-center justify-between">
                 <span className="font-bold text-gray-950 dark:text-gray-100 text-sm">{h.period}</span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60">
+                <span className="text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400">
                   {h.status}
                 </span>
               </div>
@@ -416,11 +464,19 @@ export function PayrollTab({
           dropdownActions={[
             {
               label: 'View Detailed Ledger',
-              onClick: (h) => alert(`Viewing ledger for ${h.period}: Gross ${formatETB(h.gross)}, Net ${formatETB(h.net)}`),
+              onClick: (h) =>
+                setNotice({
+                  tone: 'info',
+                  message: `Ledger opened for ${h.period} — gross ${formatETB(h.gross)}, net ${formatETB(h.net)}.`,
+                }),
             },
             {
               label: 'Download Bank Advice',
-              onClick: (h) => alert(`Bank advice file generated for ${h.period}`),
+              onClick: (h) =>
+                setNotice({
+                  tone: 'success',
+                  message: `Bank advice file generated for ${h.period}.`,
+                }),
             },
           ]}
         />
@@ -490,7 +546,7 @@ export function AttendanceTab({ data }) {
           >
             <div className="flex items-center justify-between">
               <span className="font-bold text-gray-950 dark:text-gray-100 text-sm">{a.employeeName}</span>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${STATUS_CHIP[a.status] || FALLBACK_CHIP}`}>
+              <span className={`text-[10.5px] font-bold ${String(STATUS_CHIP[a.status] || FALLBACK_CHIP).replace(/\bbg-[^\s]+|\bborder(?:-[^\s]+)?/g, '')}`}>
                 {a.status}
               </span>
             </div>
@@ -579,7 +635,7 @@ export function AttendanceTab({ data }) {
             align: 'center',
             sortable: true,
             render: (a) => (
-              <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${STATUS_CHIP[a.status] || FALLBACK_CHIP}`}>
+              <span className={`text-[10.5px] font-bold ${String(STATUS_CHIP[a.status] || FALLBACK_CHIP).replace(/\bbg-[^\s]+|\bborder(?:-[^\s]+)?/g, '')}`}>
                 {a.status}
               </span>
             ),
@@ -651,7 +707,7 @@ export function LeaveTab({ data }) {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-gray-950 dark:text-gray-100 text-sm">{l.employeeName}</span>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${STATUS_CHIP[l.approvalStatus] || FALLBACK_CHIP}`}>
+              <span className={`text-[10.5px] font-bold ${String(STATUS_CHIP[l.approvalStatus] || FALLBACK_CHIP).replace(/\bbg-[^\s]+|\bborder(?:-[^\s]+)?/g, '')}`}>
                 {l.approvalStatus}
               </span>
             </div>
@@ -715,7 +771,7 @@ export function LeaveTab({ data }) {
             align: 'center',
             sortable: true,
             render: (l) => (
-              <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${STATUS_CHIP[l.approvalStatus] || FALLBACK_CHIP}`}>
+              <span className={`text-[10.5px] font-bold ${String(STATUS_CHIP[l.approvalStatus] || FALLBACK_CHIP).replace(/\bbg-[^\s]+|\bborder(?:-[^\s]+)?/g, '')}`}>
                 {l.approvalStatus}
               </span>
             ),

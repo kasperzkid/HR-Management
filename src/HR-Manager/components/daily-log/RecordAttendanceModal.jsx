@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Clock, X } from 'lucide-react'
+import { getAttendanceConfig, getWorkStartMinutes } from '../../../Employer/lib/workTime'
 
 // ─────────────────────────────────────────────────────────────
 // RECORD ATTENDANCE MODAL
 // ─────────────────────────────────────────────────────────────
 export default function RecordAttendanceModal({ open, onClose, onSave, employees = [], initialData = null }) {
+  const config = getAttendanceConfig()
+  const defaultCheckIn = config?.checkInStartTime || '08:00'
+  const defaultCheckOut = config?.checkOutStartTime || '17:30'
+
   const [form, setForm] = useState({
     employeeId: employees[0]?.employeeId || 'EMP-001',
     date: new Date().toISOString().slice(0, 10),
-    checkIn: '08:00',
-    checkOut: '17:00',
+    checkIn: defaultCheckIn,
+    checkOut: defaultCheckOut,
     status: 'Present',
   })
 
@@ -18,20 +23,20 @@ export default function RecordAttendanceModal({ open, onClose, onSave, employees
       setForm({
         employeeId: initialData.employeeId || employees[0]?.employeeId || 'EMP-001',
         date: initialData.date || new Date().toISOString().slice(0, 10),
-        checkIn: initialData.checkIn || '08:00',
-        checkOut: initialData.checkOut || '17:00',
+        checkIn: initialData.checkIn || defaultCheckIn,
+        checkOut: initialData.checkOut || defaultCheckOut,
         status: initialData.status || 'Present',
       })
     } else {
       setForm({
         employeeId: employees[0]?.employeeId || 'EMP-001',
         date: new Date().toISOString().slice(0, 10),
-        checkIn: '08:00',
-        checkOut: '17:00',
+        checkIn: defaultCheckIn,
+        checkOut: defaultCheckOut,
         status: 'Present',
       })
     }
-  }, [initialData, employees, open])
+  }, [initialData, employees, open, defaultCheckIn, defaultCheckOut])
 
   if (!open) return null
 
@@ -44,14 +49,13 @@ export default function RecordAttendanceModal({ open, onClose, onSave, employees
     let late = 0
 
     if (form.status === 'Present') {
-      const [sh, sm] = (form.checkIn || '08:00').split(':').map(Number)
-      const [eh, em] = (form.checkOut || '17:00').split(':').map(Number)
+      const [sh, sm] = (form.checkIn || defaultCheckIn).split(':').map(Number)
+      const [eh, em] = (form.checkOut || defaultCheckOut).split(':').map(Number)
       const workedMinutes = eh * 60 + em - (sh * 60 + sm)
       const workedHours = Math.max(0, workedMinutes / 60)
       regularHrs = Math.min(8, Math.round(workedHours * 4) / 4)
       otHrs = Math.max(0, Math.round((workedHours - 8) * 4) / 4)
-      // Check if late past 08:00
-      const startScheduled = 8 * 60
+      const startScheduled = getWorkStartMinutes()
       if (sh * 60 + sm > startScheduled) {
         late = sh * 60 + sm - startScheduled
       }

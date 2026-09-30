@@ -28,6 +28,10 @@ export const fetchContactsApi = () => apiFetch('/contacts')
 
 export const fetchUsersApi = () => apiFetch('/users')
 
+// HR Admin inboxes — used by the employee portal to guarantee there is
+// always someone to raise a complaint with, even before any chat exists.
+export const fetchHrAdminsApi = () => apiFetch('/hr-admins')
+
 export const startConversationApi = (payload) =>
   apiFetch('/start', {
     method: 'POST',
@@ -36,10 +40,13 @@ export const startConversationApi = (payload) =>
 
 export const fetchThreadApi = (contactId) => apiFetch(`/${contactId}`)
 
-export const sendMessageApi = (contactId, text) =>
+export const sendMessageApi = (contactId, text, options = {}) =>
   apiFetch(`/${contactId}`, {
     method: 'POST',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({
+      text,
+      isComplain: Boolean(options.isComplain),
+    }),
   })
 
 export const updateMessageApi = (contactId, messageId, text) =>

@@ -5,17 +5,30 @@ import {
   isWorkDay,
   isWithinCheckInWindow,
   isCheckOutTime,
+  isWithinCheckOutWindow,
   remainingLabel,
   getPunchState,
   subscribePunch,
   applyPunchStatus,
+  getWorkStartDisplay,
+  getWorkStartMinutes,
+  getCheckInCutoffDisplay,
+  getCheckOutEndMinutes,
+  getWorkEndMinutes,
+  getWorkEndDisplay,
+  getCheckOutEndDisplay,
 } from '../lib/workTime'
 import {
   fetchPunchStatusApi,
   punchCheckInApi,
   punchCheckOutApi,
 } from '../lib/punchApi'
-import { getPunchLocation, PUNCH_RADIUS_METERS, formatDistance } from '../lib/geo'
+import {
+  getPunchLocation,
+  getPunchRadiusMeters,
+  isGeoRestrictionEnabled,
+  formatDistance,
+} from '../lib/geo'
 import GeoBlockModal from './GeoBlockModal'
 
 // Tiny event bus for punch feedback toasts (header + Attendance page)
@@ -26,11 +39,11 @@ export function broadcastPunchFeedback(detail) {
 }
 
 // Header punch widget — ONE button visible at a time:
-//   • Before check-in: shows Check In (disabled outside 08:00–14:00)
-//   • After check-in:  shows Check Out (visible but DISABLED until 17:30,
+//   • Before check-in: shows Check In (controlled by HR Settings)
+//   • After check-in:  shows Check Out (disabled until configured work end time,
 //                      with a live remaining-time countdown)
 //   • After check-out: shows today's completed times (view-only)
-// All rules are enforced by the backend; the UI mirrors the responses.
+// All rules are configured in the HR admin dashboard and enforced by the backend.
 export default function PunchWidget() {
   const [tick, setTick] = useState(0)
   const [punch, setPunch] = useState(getPunchState())
@@ -57,11 +70,20 @@ export default function PunchWidget() {
     return () => window.removeEventListener(PUNCH_FEEDBACK_EVENT, onFeedback)
   }, [])
 
-  // Load today's punch state from the backend on mount
+  // Load today's punch state and HR attendance configuration on mount, focus, and interval
   useEffect(() => {
-    fetchPunchStatusApi()
-      .then(applyPunchStatus)
-      .catch(() => applyPunchStatus({ checkedIn: false, checkedOut: false }))
+    const refresh = () => {
+      fetchPunchStatusApi()
+        .then(applyPunchStatus)
+        .catch(() => {})
+    }
+    refresh()
+    const interval = setInterval(refresh, 30000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', refresh)
+    }
   }, [])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps — `tick` refreshes the clock
@@ -71,19 +93,20 @@ export default function PunchWidget() {
 
   const isWeekend = !isWorkDay(day)
   const inWindow = isWithinCheckInWindow(minutes)
-  const atCheckOut = isCheckOutTime(minutes)
+  const withinCheckOutWindow = isWithinCheckOutWindow(minutes)
   const onLeave = punch.onLeave
 
   const canCheckIn = !onLeave && !isWeekend && inWindow && !checkedIn && !checkedOut
-  const canCheckOut = !onLeave && !isWeekend && atCheckOut && checkedIn && !checkedOut
+  const canCheckOut = !onLeave && !isWeekend && withinCheckOutWindow && checkedIn && !checkedOut
 
   async function handleCheckIn() {
     setBusy(true)
     try {
       const coords = await getPunchLocation()
-      if (coords.distanceMeters > PUNCH_RADIUS_METERS) {
+      const radius = getPunchRadiusMeters()
+      if (isGeoRestrictionEnabled() && coords.distanceMeters > radius) {
         setGeoBlock(
-          `You are ${formatDistance(coords.distanceMeters)} from the office. Check-in is blocked outside the ${PUNCH_RADIUS_METERS}m radius.`
+          `You are ${formatDistance(coords.distanceMeters)} from the office. Check-in is blocked outside the ${radius}m radius.`
         )
         return
       }
@@ -91,7 +114,7 @@ export default function PunchWidget() {
       applyPunchStatus({ checkedIn: true, checkIn: res.record?.checkIn, checkedOut: false })
       broadcastPunchFeedback({
         tone: 'ok',
-        text: `${res.message} (${formatDistance(coords.distanceMeters)} from office)`,
+        text: `${res.message}${isGeoRestrictionEnabled() ? ` (${formatDistance(coords.distanceMeters)} from office)` : ''}`,
       })
     } catch (err) {
       if (err.code === 'OUTSIDE_PUNCH_RADIUS' || err.code === 'LOCATION_REQUIRED') {
@@ -108,9 +131,10 @@ export default function PunchWidget() {
     setBusy(true)
     try {
       const coords = await getPunchLocation()
-      if (coords.distanceMeters > PUNCH_RADIUS_METERS) {
+      const radius = getPunchRadiusMeters()
+      if (isGeoRestrictionEnabled() && coords.distanceMeters > radius) {
         setGeoBlock(
-          `You are ${formatDistance(coords.distanceMeters)} from the office. Check-out is blocked outside the ${PUNCH_RADIUS_METERS}m radius.`
+          `You are ${formatDistance(coords.distanceMeters)} from the office. Check-out is blocked outside the ${radius}m radius.`
         )
         return
       }
@@ -118,7 +142,7 @@ export default function PunchWidget() {
       applyPunchStatus({ checkedIn: true, checkedOut: true, checkOut: res.record?.checkOut })
       broadcastPunchFeedback({
         tone: 'ok',
-        text: `${res.message} (${formatDistance(coords.distanceMeters)} from office)`,
+        text: `${res.message}${isGeoRestrictionEnabled() ? ` (${formatDistance(coords.distanceMeters)} from office)` : ''}`,
       })
     } catch (err) {
       if (err.code === 'OUTSIDE_PUNCH_RADIUS' || err.code === 'LOCATION_REQUIRED') {
@@ -165,9 +189,13 @@ export default function PunchWidget() {
             title={
               isWeekend
                 ? 'Check-in is disabled on weekends (Sat/Sun)'
+                : minutes < getWorkStartMinutes()
+                ? `Check-in opens at ${getWorkStartDisplay()} (UTC+3)`
                 : !inWindow
-                ? 'Check-in opens at 8:00 AM and closes at 2:00 PM (UTC+3)'
-                : 'Check in'
+                ? `Check-in window closed at ${getCheckInCutoffDisplay()} (UTC+3)`
+                : inWindow
+                ? `Check in — Present window ends at ${getCheckInCutoffDisplay()}`
+                : 'Late check-in — attendance will be marked Absent (A) and late time recorded'
             }
             className={`${base} ${
               canCheckIn
@@ -191,9 +219,13 @@ export default function PunchWidget() {
             title={
               !checkedIn
                 ? 'Check in first'
-                : atCheckOut
+                : minutes > getCheckOutEndMinutes()
+                ? `Check-out window closed at ${getCheckOutEndDisplay()} (UTC+3)`
+                : withinCheckOutWindow
                 ? 'Check out'
-                : `Check-out unlocks at 5:30 PM — ${remainingLabel(minutes)} remaining`
+                : minutes < getWorkEndMinutes()
+                ? `Check-out unlocks at ${getWorkEndDisplay()} — ${remainingLabel(minutes)} remaining`
+                : `Check-out window closed at ${getCheckOutEndDisplay()} (UTC+3)`
             }
             className={`${base} ${
               canCheckOut

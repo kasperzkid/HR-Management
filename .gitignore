@@ -11,6 +11,35 @@ node_modules
 dist
 dist-ssr
 *.local
+storage/resumes/
+storage/status-documents/
+
+# Environment files. These hold the real secrets - the SMTP App Password and
+# JWT_SECRET - and must never be committed. .env.example is the tracked
+# template that documents which variables are needed.
+.env
+.env.*
+!.env.example
+
+# Pre-migration database snapshots. Kept locally as a rollback point, never
+# committed.
+*.bak
+
+# Throwaway databases created by the verification scripts. They are rebuilt
+# from scratch on every run, so they are never worth committing.
+prisma/verify-*.db
+prisma/verify-*.db-journal
+
+# The local development database. It holds real people: password hashes, tax
+# IDs, bank account numbers, home addresses, dates of birth and salaries. It is
+# build output for this project, not source - the schema in prisma/schema.prisma
+# plus prisma/seed.js and prisma/seed-rbac.mjs are what belong in the repo. Each
+# person should build their own copy with `npm run db:push && npm run db:seed`.
+prisma/dev.db
+prisma/dev.db-journal
+
+# Server runtime data
+server/uploads
 
 # Editor directories and files
 .vscode/*

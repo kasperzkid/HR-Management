@@ -4,12 +4,14 @@ import {
   BarChart3,
   BriefcaseBusiness,
   Building2,
+  CheckCircle2,
   Download,
   FileText,
+  ShieldCheck,
   Users,
 } from 'lucide-react'
 
-import { PageTitle } from '../../components/ui'
+import { Button, PageTitle, SummaryCard, Table } from '../../components/ui'
 
 const API_URL = 'http://localhost:4000/api/hr-manager'
 
@@ -68,29 +70,29 @@ function formatMonth(month) {
   })
 }
 
-function StatCard({ icon: Icon, label, value, description }) {
+// `icon` is opt-in. Without it the markup is exactly what it always was, so
+// the other report sections are untouched.
+function ReportSection({ title, description, children, plain = false, icon: Icon, action }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
-          <p className="mt-1 text-xs text-slate-400">{description}</p>
-        </div>
-        <div className="rounded-xl bg-slate-100 p-3">
-          <Icon className="h-5 w-5 text-slate-700" />
-        </div>
-      </div>
-    </div>
-  )
-}
+    <section className={plain ? 'p-0' : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm'}>
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          {Icon ? (
+            <span
+              aria-hidden="true"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-teal-500 text-white shadow-sm shadow-sky-500/25"
+            >
+              <Icon size={19} strokeWidth={2.2} />
+            </span>
+          ) : null}
 
-function ReportSection({ title, description, children }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-5">
-        <h2 className="text-lg font-bold text-slate-950">{title}</h2>
-        <p className="mt-1 text-sm text-slate-500">{description}</p>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold tracking-tight text-slate-950">{title}</h2>
+            <p className="mt-1 text-sm leading-relaxed text-slate-500">{description}</p>
+          </div>
+        </div>
+
+        {action ? <div className="shrink-0">{action}</div> : null}
       </div>
       {children}
     </section>
@@ -431,30 +433,10 @@ function HRReports() {
           eyebrow="HR Reports"
           title="Workforce Reports"
           description="Database-backed workforce, attendance and payroll analytics for Yanol Tech."
-          action={
-            <button type="button" onClick={handleExport} disabled={loading || filteredRows.length === 0} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
-              <Download className="h-4 w-4" />
-              Export Report
-            </button>
-          }
           className="mb-8"
         />
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-slate-700" />
-
-            <div>
-              <h2 className="font-semibold text-slate-950">
-                Report Filters
-              </h2>
-
-              <p className="text-xs text-slate-500">
-                The selected month is loaded through the consolidated HR Reports API.
-              </p>
-            </div>
-          </div>
-
+        <div className="mb-6">
           <div className="grid gap-4 md:grid-cols-4">
             <label>
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -539,18 +521,6 @@ function HRReports() {
           </div>
         )}
 
-        {!loading && report && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-            Reports connected to the consolidated database API for{' '}
-            <strong>
-              {formatMonth(
-                report.period?.payrollMonth || month,
-              )}
-            </strong>
-            .
-          </div>
-        )}
-
         {loading ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500 shadow-sm">
             Loading live HR reports...
@@ -558,34 +528,40 @@ function HRReports() {
         ) : (
           <>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard
+              <SummaryCard
                 icon={Users}
-                label="Employees"
+                title="Employees"
                 value={stats.total}
                 description="Matching employees"
+                iconVariant="blue"
+                valueLabel="Employees"
               />
 
-              <StatCard
+              <SummaryCard
                 icon={BriefcaseBusiness}
-                label="Active Employees"
+                title="Active Employees"
                 value={stats.active}
                 description="Currently active"
+                iconVariant="green"
+                valueLabel="Employees"
               />
 
-              <StatCard
+              <SummaryCard
                 icon={Building2}
-                label="Departments"
+                title="Departments"
                 value={departmentReport.length}
                 description="Departments represented"
+                iconVariant="violet"
+                valueLabel="Departments"
               />
 
-              <StatCard
+              <SummaryCard
                 icon={FileText}
-                label="Average Salary"
-                value={formatCurrency(
-                  stats.averageSalary,
-                )}
+                title="Average Salary"
+                value={formatCurrency(stats.averageSalary)}
                 description="Average basic salary"
+                iconVariant="orange"
+                valueLabel="Amount"
               />
             </div>
 
@@ -698,7 +674,7 @@ function HRReports() {
                   ['Present', stats.present],
                   ['Absent', stats.absent],
                   ['Leave', stats.leave],
-                  ['Late Minutes', stats.lateMinutes],
+                  ['Late Hours', `${(Number(stats.lateMinutes || 0) / 60).toFixed(2)} h`],
                   [
                     'OT Hours',
                     stats.overtimeHours.toFixed(2),
@@ -850,19 +826,41 @@ function HRReports() {
             <ReportSection
               title="Data Quality & Validation"
               description="Validation checks generated by the HR Reports backend based on the workbook reporting requirements."
+              icon={ShieldCheck}
+              action={
+                <span
+                  className={
+                    alertTotal === 0
+                      ? 'inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700'
+                      : 'inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800'
+                  }
+                >
+                  {alertTotal === 0 ? (
+                    <CheckCircle2 size={13} strokeWidth={2.4} />
+                  ) : (
+                    <AlertTriangle size={13} strokeWidth={2.4} />
+                  )}
+                  {alertTotal === 0
+                    ? 'All checks passed'
+                    : `${alertTotal} flagged`}
+                </span>
+              }
             >
               {alertTotal === 0 ? (
-                <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <div className="rounded-lg bg-emerald-100 p-2">
-                    <FileText className="h-5 w-5 text-emerald-700" />
-                  </div>
+                <div className="flex items-center gap-4 rounded-2xl border border-emerald-200/80 bg-emerald-50/50 p-5">
+                  <span
+                    aria-hidden="true"
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white text-emerald-600 shadow-sm ring-1 ring-emerald-200/70"
+                  >
+                    <FileText size={20} strokeWidth={2.1} />
+                  </span>
 
-                  <div>
-                    <p className="font-semibold text-emerald-800">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-emerald-900">
                       No validation alerts
                     </p>
 
-                    <p className="text-sm text-emerald-700">
+                    <p className="mt-1 text-sm leading-relaxed text-emerald-700/90">
                       The current reporting checks did not find any flagged records.
                     </p>
                   </div>
@@ -877,21 +875,32 @@ function HRReports() {
                     .map(([key, value]) => (
                       <div
                         key={key}
-                        className="rounded-xl border border-amber-200 bg-amber-50 p-4"
+                        className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm ring-1 ring-slate-900/[0.03] transition duration-200 hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md"
                       >
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                        {/* A single amber edge carries the warning signal, so
+                            the number itself can stay in the page's own
+                            typography instead of shouting in orange. */}
+                        <span
+                          aria-hidden="true"
+                          className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-amber-400 to-orange-400"
+                        />
 
-                          <div>
-                            <p className="text-sm font-semibold text-amber-900">
-                              {key}
-                            </p>
+                        <div className="flex items-start justify-between gap-3 pl-2.5">
+                          <p
+                            className="min-w-0 flex-1 text-xs font-semibold leading-relaxed text-slate-600"
+                            title={key}
+                          >
+                            {key}
+                          </p>
 
-                            <p className="mt-1 text-2xl font-bold text-amber-800">
-                              {value}
-                            </p>
-                          </div>
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100">
+                            <AlertTriangle size={15} strokeWidth={2.3} />
+                          </span>
                         </div>
+
+                        <p className="mt-3 pl-2.5 text-3xl font-bold tabular-nums tracking-tight text-slate-950">
+                          {value}
+                        </p>
                       </div>
                     ))}
                 </div>
@@ -902,11 +911,24 @@ function HRReports() {
               title="Salary & Payroll Overview"
               description="Top basic salaries with payroll values supplied by the consolidated reports API."
             >
+              <div className="mb-3 flex justify-end">
+                <Button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={loading || filteredRows.length === 0}
+                  icon={Download}
+                  variant="outline"
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  Export Report
+                </Button>
+              </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[950px] text-left">
+                <Table className="w-full min-w-[950px] text-left">
                   <thead>
                     <tr className="border-b border-slate-200">
                       {[
+                        '#',
                         'Employee',
                         'Department',
                         'Status',
@@ -927,7 +949,7 @@ function HRReports() {
 
                   <tbody>
                     {salaryReport.map(
-                      (employee) => {
+                      (employee, index) => {
                         const id =
                           getEmployeeId(employee)
 
@@ -936,6 +958,7 @@ function HRReports() {
                             key={id}
                             className="border-b border-slate-100 last:border-0"
                           >
+                            <td className="px-3 py-4 text-xs font-semibold text-slate-400">{index + 1}</td>
                             <td className="px-3 py-4">
                               <p className="text-sm font-semibold text-slate-900">
                                 {getEmployeeName(
@@ -1006,20 +1029,10 @@ function HRReports() {
                       </tr>
                     )}
                   </tbody>
-                </table>
+                </Table>
               </div>
             </ReportSection>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500 shadow-sm">
-              <strong className="text-slate-700">
-                Reporting architecture:
-              </strong>{' '}
-              this page uses one consolidated{' '}
-              <code className="rounded bg-slate-100 px-1.5 py-0.5">
-                /api/hr-manager/reports
-              </code>{' '}
-              request. The backend combines Employees, Attendance, Leave and Payroll data according to the HR workbook reporting logic.
-            </div>
           </>
         )}
       </div>
