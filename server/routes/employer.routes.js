@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.middleware.js'
 import { handleResumeUpload } from '../middleware/resume-upload.js'
+import { handleStatusDocumentUpload } from '../middleware/status-document-upload.js'
 
 import {
   getDashboard,
@@ -9,6 +10,8 @@ import {
   updateMyProfile,
   uploadMyResume,
   downloadMyResume,
+  uploadMyStatusDocument,
+  downloadMyStatusDocument,
   getAttendance,
   getAttendanceConfig,
   checkIn,
@@ -40,6 +43,11 @@ router.get('/profile', getMyProfile)
 router.put('/profile', updateMyProfile)
 router.post('/profile/resume', handleResumeUpload, uploadMyResume)
 router.get('/profile/resume', downloadMyResume)
+
+// The document backing the employee's current status. Uploading replaces the
+// previous one.
+router.post('/profile/status-document', handleStatusDocumentUpload, uploadMyStatusDocument)
+router.get('/profile/status-document', downloadMyStatusDocument)
 router.post('/employees', createEmployee)
 router.put('/employees/:id', updateEmployee)
 router.delete('/employees/:id', deleteEmployee)

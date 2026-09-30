@@ -185,10 +185,20 @@ model Employee {
   linkedinUrl        String   @default("")
   portfolioUrl       String   @default("")
   skills             String   @default("")
-    resumeStorageName  String?
-    resumeFileName     String?
-    resumeMimeType     String?
-    resumeFileSize     Int?
+  resumeStorageName  String?
+  resumeFileName     String?
+  resumeMimeType     String?
+  resumeFileSize     Int?
+
+  // The document an employee attaches to keep their recorded status current -
+  // a transfer letter, a medical certificate, a study leave approval and so on.
+  // It is separate from `status` and `employmentStatus`, which are the short
+  // labels HR keeps in the directory: this is the evidence behind them.
+  statusFileStorageName String?
+  statusFileName        String?
+  statusFileMimeType    String?
+  statusFileSize        Int?
+
   createdAt          DateTime @default(now())
 
   attendance     Attendance[]

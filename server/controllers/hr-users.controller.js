@@ -180,6 +180,114 @@ export async function getRbacCatalogue(req, res) {
 }
 
 /** The roles, with whether this caller could actually assign each one. */
+/**
+ * Create a new role.
+ *
+ * The key is derived from the name rather than accepted from the caller, so it
+ * is always a safe identifier and always matches the name on screen. The
+ * permission list is checked against the same rule as everywhere else: an
+ * admin cannot build a role that hands out more than they hold, otherwise the
+ * first role they create could grant itself `users.permissions` and hand the
+ * next admin an escalation path.
+ *
+ * A new role is never protected, so it can always be edited afterwards.
+ */
+export async function createRole(req, res) {
+  try {
+    const name = String(req.body?.name || '').trim()
+    const description = String(req.body?.description || '').trim()
+
+    if (!name) {
+      return res.status(400).json({ message: 'Give the role a name.' })
+    }
+
+    if (name.length > 80) {
+      return res.status(400).json({ message: 'Role names must be 80 characters or fewer.' })
+    }
+
+    if (description.length > 400) {
+      return res
+        .status(400)
+        .json({ message: 'Role descriptions must be 400 characters or fewer.' })
+    }
+
+    const requested = req.body?.permissions
+    if (requested != null && !Array.isArray(requested)) {
+      return res.status(400).json({ message: 'Send "permissions" as an array of permission keys.' })
+    }
+
+    const catalogue = await prisma.permission.findMany({ select: { id: true, key: true } })
+    const idByKey = new Map(catalogue.map((row) => [row.key, row.id]))
+
+    const keys = [...new Set((requested || []).map((key) => String(key)))]
+
+    const unknown = keys.filter((key) => !idByKey.has(key))
+    if (unknown.length) {
+      return res.status(400).json({ message: `Unknown permission(s): ${unknown.join(', ')}` })
+    }
+
+    const { permissions: actorPermissions } = await actorContext(req)
+    const beyondActor = keys.filter((key) => !actorPermissions.has(key))
+
+    if (beyondActor.length) {
+      return res.status(403).json({
+        code: 'PERMISSION_EXCEEDS_ACTOR',
+        message:
+          'You cannot grant a permission you do not hold yourself. Beyond yours: ' +
+          beyondActor.join(', '),
+        permissions: beyondActor,
+      })
+    }
+
+    // Derived from the name, and unique against every existing key. The
+    // collision check is what turns a duplicate name into a clear message
+    // rather than a Prisma constraint error.
+    const base = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40)
+
+    if (!base) {
+      return res.status(400).json({
+        message: 'Give the role a name made of letters or numbers.',
+      })
+    }
+
+    let key = base
+    for (let suffix = 2; await prisma.role.findUnique({ where: { key } }); suffix += 1) {
+      key = `${base}_${suffix}`
+    }
+
+    const role = await prisma.role.create({
+      data: {
+        key,
+        name,
+        description,
+        isSystem: false,
+        isProtected: false,
+        ...(keys.length
+          ? {
+              permissions: {
+                create: keys.map((permissionKey) => ({
+                  permission: { connect: { key: permissionKey } },
+                })),
+              },
+            }
+          : {}),
+      },
+      select: { key: true, name: true, description: true, isSystem: true, isProtected: true },
+    })
+
+    return res.status(201).json({
+      role: { ...role, permissions: keys.sort() },
+      message: `Created the ${name} role with ${keys.length} permission(s).`,
+    })
+  } catch (error) {
+    return fail(res, error, 'Failed to create the role')
+  }
+}
+
 export async function listAssignableRoles(req, res) {
   try {
     const { permissions } = await actorContext(req)

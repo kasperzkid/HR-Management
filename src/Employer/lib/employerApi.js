@@ -30,6 +30,12 @@ export const uploadMyResume = (file) => {
   form.append('resume', file)
   return ef('/profile/resume', { method: 'POST', body: form })
 }
+
+export const uploadMyStatusDocument = (file) => {
+  const form = new FormData()
+  form.append('statusDocument', file)
+  return ef('/profile/status-document', { method: 'POST', body: form })
+}
 export async function downloadMyResume() {
   const response = await fetch(`${API_BASE}/profile/resume`, {
     headers: authHeaders(),
@@ -37,6 +43,17 @@ export async function downloadMyResume() {
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
     throw new Error(data.message || 'Failed to download resume')
+  }
+  return response.blob()
+}
+
+export async function downloadMyStatusDocument() {
+  const response = await fetch(`${API_BASE}/profile/status-document`, {
+    headers: authHeaders(),
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.message || 'Failed to download the status document')
   }
   return response.blob()
 }

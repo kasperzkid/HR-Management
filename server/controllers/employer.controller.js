@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { unlink } from 'node:fs/promises'
 import prisma from '../db.js'
 import { getResumeFilePath } from '../middleware/resume-upload.js'
+import { getStatusDocumentPath } from '../middleware/status-document-upload.js'
 import { getAttendanceConfigurationFromDb } from './hr-settings.controller.js'
 
 function getEmployeeRecordId(req) {
@@ -108,6 +109,12 @@ export async function getEmployees(req, res) {
 
 function professionalProfile(employee) {
   return {
+    // The two identifiers the employee owns and may correct themselves. They
+    // are read-only in the employee directory, where HR edits them, and
+    // editable here, so an employee who spots a typo is not stuck waiting on
+    // somebody else to fix it.
+    tin: employee.tin,
+    pensionId: employee.pensionId,
     githubUrl: employee.githubUrl,
     linkedinUrl: employee.linkedinUrl,
     portfolioUrl: employee.portfolioUrl,
@@ -115,6 +122,8 @@ function professionalProfile(employee) {
     avatar: employee.avatar,
     resumeFileName: employee.resumeFileName,
     resumeFileSize: employee.resumeFileSize,
+    statusFileName: employee.statusFileName,
+    statusFileSize: employee.statusFileSize,
   }
 }
 
@@ -145,11 +154,19 @@ export async function updateMyProfile(req, res) {
       })
     }
 
+    // Every field here is opt-in: it is written only when the request actually
+    // carries it. The settings screen saves different groups independently - a
+    // profile photo is one request, the professional links and skills another,
+    // and now the TIN and pension ID a third - so a handler that defaulted
+    // anything absent to '' would silently erase the other groups whenever one
+    // of them was saved. It already did exactly that for the links and skills
+    // when a photo was uploaded.
     const data = req.body || {}
-    const profileFields = ['githubUrl', 'linkedinUrl', 'portfolioUrl']
-    const profile = {}
+    const update = {}
 
-    for (const field of profileFields) {
+    for (const field of ['githubUrl', 'linkedinUrl', 'portfolioUrl']) {
+      if (data[field] === undefined) continue
+
       const value = String(data[field] ?? '').trim()
       if (value.length > 2048) {
         return res.status(400).json({ message: `${field} must be 2048 characters or fewer` })
@@ -162,22 +179,59 @@ export async function updateMyProfile(req, res) {
           return res.status(400).json({ message: `Enter a valid URL for ${field}` })
         }
       }
-      profile[field] = value
+      update[field] = value
     }
 
-    const skills = String(data.skills ?? '').trim()
-    if (skills.length > 4000) {
-      return res.status(400).json({ message: 'Skills must be 4000 characters or fewer' })
+    if (data.skills !== undefined) {
+      const skills = String(data.skills ?? '').trim()
+      if (skills.length > 4000) {
+        return res.status(400).json({ message: 'Skills must be 4000 characters or fewer' })
+      }
+      update.skills = skills
     }
 
-    const avatar = data.avatar === undefined ? employee.avatar : String(data.avatar || '')
-    if (avatar.length > 3 * 1024 * 1024 || (avatar && !/^data:image\/(png|jpeg|webp);base64,/i.test(avatar))) {
-      return res.status(400).json({ message: 'Profile photo must be a PNG, JPG, or WebP image no larger than 2 MB.' })
+    // The tax and pension identifiers. Both are the employee's own to correct,
+    // so both are accepted here - but the check is on shape, not on a fixed
+    // format: TINs are written with and without leading zeros and separators
+    // depending on who is typing them, and rejecting an unusual-but-real value
+    // would leave the employee unable to fix it at all. Letters, digits, spaces
+    // and dashes only, and a hard length ceiling.
+    for (const [field, label] of [
+      ['tin', 'TIN'],
+      ['pensionId', 'Pension ID'],
+    ]) {
+      if (data[field] === undefined) continue
+
+      const value = String(data[field] ?? '').trim()
+
+      if (value.length > 32) {
+        return res.status(400).json({ message: `${label} must be 32 characters or fewer` })
+      }
+
+      if (value && !/^[A-Za-z0-9 -]+$/.test(value)) {
+        return res
+          .status(400)
+          .json({ message: `${label} may only contain letters, numbers, spaces and dashes` })
+      }
+
+      update[field] = value
+    }
+
+    if (data.avatar !== undefined) {
+      const avatar = String(data.avatar || '')
+      if (avatar.length > 3 * 1024 * 1024 || (avatar && !/^data:image\/(png|jpeg|webp);base64,/i.test(avatar))) {
+        return res.status(400).json({ message: 'Profile photo must be a PNG, JPG, or WebP image no larger than 2 MB.' })
+      }
+      update.avatar = avatar
+    }
+
+    if (!Object.keys(update).length) {
+      return res.status(400).json({ message: 'Nothing to update.' })
     }
 
     const updatedEmployee = await prisma.employee.update({
       where: { id: employee.id },
-      data: { ...profile, skills, avatar },
+      data: update,
     })
 
     return res.json(professionalProfile(updatedEmployee))
@@ -233,6 +287,61 @@ export async function downloadMyResume(req, res) {
   } catch (error) {
     console.error('Employee resume download error:', error)
     return res.status(500).json({ message: 'Failed to download resume' })
+  }
+}
+
+/**
+ * The status document: the evidence an employee attaches to keep their
+ * recorded status current. Same lifecycle as the resume - the new file replaces
+ * the stored record, and only once the row is safely updated is the previous
+ * file removed, so a failure part-way leaves the old document still in place.
+ */
+export async function uploadMyStatusDocument(req, res) {
+  if (!req.file) {
+    return res.status(400).json({ message: 'Select a file to upload.' })
+  }
+
+  try {
+    const employee = await getCurrentEmployee(req)
+    if (!employee) {
+      await unlink(req.file.path).catch(() => {})
+      return res.status(403).json({ message: 'This account is not linked to an employee' })
+    }
+
+    const updatedEmployee = await prisma.employee.update({
+      where: { id: employee.id },
+      data: {
+        statusFileStorageName: req.file.filename,
+        statusFileName: req.file.originalname,
+        statusFileMimeType: req.file.mimetype,
+        statusFileSize: req.file.size,
+      },
+    })
+
+    if (employee.statusFileStorageName) {
+      const oldFilePath = getStatusDocumentPath(employee.statusFileStorageName)
+      if (oldFilePath) await unlink(oldFilePath).catch(() => {})
+    }
+
+    return res.json(professionalProfile(updatedEmployee))
+  } catch (error) {
+    await unlink(req.file.path).catch(() => {})
+    console.error('Employee status document upload error:', error)
+    return res.status(500).json({ message: 'Failed to save the status document' })
+  }
+}
+
+export async function downloadMyStatusDocument(req, res) {
+  try {
+    const employee = await getCurrentEmployee(req)
+    const filePath = getStatusDocumentPath(employee?.statusFileStorageName)
+    if (!employee || !filePath || !employee.statusFileName) {
+      return res.status(404).json({ message: 'No status document has been uploaded' })
+    }
+    return res.download(filePath, employee.statusFileName)
+  } catch (error) {
+    console.error('Employee status document download error:', error)
+    return res.status(500).json({ message: 'Failed to download the status document' })
   }
 }
 

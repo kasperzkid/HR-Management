@@ -4,6 +4,7 @@
  * Mounted under /api/hr-manager, so the paths are
  *   GET    /api/hr-manager/rbac/catalogue
  *   GET    /api/hr-manager/rbac/roles
+ *   POST   /api/hr-manager/rbac/roles
  *   PUT    /api/hr-manager/rbac/roles/:key
  *   GET    /api/hr-manager/hr-users
  *   POST   /api/hr-manager/hr-users
@@ -24,6 +25,7 @@ import { requirePermission } from '../middleware/rbac.middleware.js'
 import {
   getRbacCatalogue,
   listAssignableRoles,
+  createRole,
   updateRolePermissions,
   listHrUsers,
   getHrUser,
@@ -47,6 +49,10 @@ router.get(
 )
 
 router.get('/rbac/roles', requirePermission('users.view', 'users.permissions'), listAssignableRoles)
+
+// Inventing a role is the same power as reshaping one, so it carries the same
+// guard: only somebody who already administers permissions may do it.
+router.post('/rbac/roles', requirePermission('users.permissions'), createRole)
 
 // Changing what a role grants is the permission-management permission itself.
 router.put('/rbac/roles/:key', requirePermission('users.permissions'), updateRolePermissions)

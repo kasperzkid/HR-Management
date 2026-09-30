@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 storage/resumes/
+storage/status-documents/
 
 # Environment files. These hold the real secrets - the SMTP App Password and
 # JWT_SECRET - and must never be committed. .env.example is the tracked

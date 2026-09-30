@@ -19,6 +19,7 @@
     "verify:rbac": "node scripts/verify-rbac.mjs",
     "verify:employee-modal": "node scripts/verify-employee-modal.mjs",
     "verify:employee-flow": "node scripts/verify-employee-login-flow.mjs",
+    "verify:employee-profile": "node scripts/verify-employee-profile.mjs",
     "verify:employee-email": "node scripts/check-employee-email-helper.mjs",
     "verify:section-design": "node scripts/verify-section-design.mjs",
     "verify:live": "node scripts/live-check.mjs",

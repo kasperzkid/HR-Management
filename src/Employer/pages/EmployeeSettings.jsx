@@ -22,6 +22,7 @@ import {
   Upload,
   Download,
   Camera,
+  RefreshCw,
 } from 'lucide-react'
 import { useTheme } from '../../lib/theme'
 import { getCurrentUser, resolveEmployee } from '../lib/currentUser'
@@ -30,6 +31,8 @@ import {
   fetchMyEmployeeProfile,
   uploadMyResume,
   downloadMyResume,
+  uploadMyStatusDocument,
+  downloadMyStatusDocument,
   updateMyEmployeeProfile,
 } from '../lib/employerApi'
 import { fetchMe, updateProfileApi, changePasswordApi } from '../lib/userApi'
@@ -128,6 +131,9 @@ function PersonalInfoSection({
   onUploadResume,
   onDownloadResume,
   resumeUploading,
+  onUploadStatusDocument,
+  onDownloadStatusDocument,
+  statusUploading,
   onUploadPhoto,
   photoUploading,
   saving,
@@ -136,6 +142,8 @@ function PersonalInfoSection({
     name: '',
     email: '',
     phone: '',
+    tin: '',
+    pensionId: '',
     githubUrl: '',
     linkedinUrl: '',
     portfolioUrl: '',
@@ -147,6 +155,8 @@ function PersonalInfoSection({
       name: user?.name || '',
       email: user?.email || '',
       phone: employee?.phone || '',
+      tin: employee?.tin || '',
+      pensionId: employee?.pensionId || '',
       githubUrl: employee?.githubUrl || '',
       linkedinUrl: employee?.linkedinUrl || '',
       portfolioUrl: employee?.portfolioUrl || '',
@@ -154,9 +164,16 @@ function PersonalInfoSection({
     })
   }, [user, employee])
 
+  // Name and email live on the user account; the two identifiers live on the
+  // employee record. Both are saved by the same button, so the dirty check has
+  // to cover both or the button would stay greyed out with edits made.
   const identityDirty = useMemo(
-    () => form.name !== (user?.name || '') || form.email !== (user?.email || ''),
-    [form.name, form.email, user],
+    () =>
+      form.name !== (user?.name || '') ||
+      form.email !== (user?.email || '') ||
+      form.tin !== (employee?.tin || '') ||
+      form.pensionId !== (employee?.pensionId || ''),
+    [form.name, form.email, form.tin, form.pensionId, user, employee],
   )
   const professionalProfileDirty = useMemo(
     () =>
@@ -229,7 +246,30 @@ function PersonalInfoSection({
                 <Label>Employee ID</Label>
                 <TextInput value={employee?.employeeId || '—'} disabled />
               </div>
+              <div>
+                <Label>TIN</Label>
+                <TextInput
+                  value={form.tin}
+                  onChange={set('tin')}
+                  placeholder="e.g. 0001234567"
+                  maxLength={32}
+                />
+              </div>
+              <div>
+                <Label>Pension ID</Label>
+                <TextInput
+                  value={form.pensionId}
+                  onChange={set('pensionId')}
+                  placeholder="e.g. PEN-20481"
+                  maxLength={32}
+                />
+              </div>
             </div>
+            <p className="mt-3 text-[10px] text-gray-400">
+              Your TIN and pension ID are yours to correct. If HR has already used these
+              identifiers for payroll or pension deductions, check the change with them
+              first.
+            </p>
             <div className="flex justify-end mt-5">
               <button
                 onClick={() => onSave(form)}
@@ -350,6 +390,74 @@ function PersonalInfoSection({
           </div>
           <p className="mt-3 text-[10px] text-gray-400">Maximum file size: 10 MB.</p>
         </div>
+
+        {/* Status document */}
+        <div className="mt-5 border-t border-gray-100 pt-5 dark:border-[#262b31]">
+          <SectionHeader
+            icon={RefreshCw}
+            title="Updated Status Document"
+            description="Attach the letter or certificate that supports your current status, so HR can act on it without asking you for a copy."
+          />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              {employee?.statusFileName ? (
+                <>
+                  <p className="truncate text-xs font-semibold text-gray-900 dark:text-gray-100">
+                    {employee.statusFileName}
+                  </p>
+                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    {employee.statusFileSize
+                      ? `${(employee.statusFileSize / (1024 * 1024)).toFixed(2)} MB`
+                      : 'Uploaded'}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  No status document uploaded
+                </p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {employee?.statusFileName && (
+                <button
+                  type="button"
+                  onClick={onDownloadStatusDocument}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-[#33383f] dark:text-gray-200 dark:hover:bg-[#1c2026]"
+                >
+                  <Download size={14} /> Download
+                </button>
+              )}
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-gray-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-gray-800 dark:bg-[#3a4149] dark:hover:bg-gray-600">
+                {statusUploading ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Upload size={14} />
+                )}
+                {statusUploading
+                  ? 'Uploading…'
+                  : employee?.statusFileName
+                    ? 'Replace'
+                    : 'Upload'}
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg"
+                  className="sr-only"
+                  disabled={statusUploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) onUploadStatusDocument(file)
+                    event.target.value = ''
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+          <p className="mt-3 text-[10px] text-gray-400">
+            PDF, DOC, DOCX, PNG or JPG — maximum file size: 10 MB. Uploading a new one replaces
+            the previous document.
+          </p>
+        </div>
+
         <div className="flex justify-end mt-5">
           <button
             onClick={() => onSaveProfessionalProfile(form)}
@@ -375,8 +483,6 @@ function PersonalInfoSection({
             ['Job Title', employee?.jobTitle],
             ['Employment Type', employee?.employmentType],
             ['Joined', employee?.joinDate],
-            ['TIN', employee?.tin],
-            ['Pension ID', employee?.pensionId],
           ].map(([label, value]) => (
             <div
               key={label}
@@ -794,6 +900,7 @@ function EmployeeSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [resumeUploading, setResumeUploading] = useState(false)
+  const [statusUploading, setStatusUploading] = useState(false)
   const [photoUploading, setPhotoUploading] = useState(false)
   const [user, setUser] = useState(() => getCurrentUser())
   const [employee, setEmployee] = useState(null)
@@ -841,12 +948,33 @@ function EmployeeSettings() {
   const saveProfile = async (form) => {
     setSaving(true)
     try {
-      const res = await updateProfileApi({ name: form.name, email: form.email })
-      setUser(res.user)
-      try {
-        localStorage.setItem('user', JSON.stringify({ ...getCurrentUser(), ...res.user }))
-      } catch {}
-      showToast('Personal info saved')
+      // The account fields and the employee record are two different rows, so
+      // this is two requests. Each is sent only with what actually changed,
+      // which is what lets the server treat every field as opt-in - sending an
+      // untouched group as blank would clear the one that was not being saved.
+      let touched = false
+
+      if (form.name !== (user?.name || '') || form.email !== (user?.email || '')) {
+        const res = await updateProfileApi({ name: form.name, email: form.email })
+        setUser(res.user)
+        try {
+          localStorage.setItem('user', JSON.stringify({ ...getCurrentUser(), ...res.user }))
+        } catch {}
+        touched = true
+      }
+
+      const identifierChanges = {}
+
+      if (form.tin !== (employee?.tin || '')) identifierChanges.tin = form.tin
+      if (form.pensionId !== (employee?.pensionId || '')) identifierChanges.pensionId = form.pensionId
+
+      if (Object.keys(identifierChanges).length) {
+        const employeeProfile = await updateMyEmployeeProfile(identifierChanges)
+        setEmployee((current) => ({ ...current, ...employeeProfile }))
+        touched = true
+      }
+
+      showToast(touched ? 'Personal info saved' : 'Nothing to save')
     } catch (err) {
       showToast(err.message || 'Could not save changes')
     } finally {
@@ -917,6 +1045,33 @@ function EmployeeSettings() {
       URL.revokeObjectURL(url)
     } catch (err) {
       showToast(err.message || 'Could not download resume')
+    }
+  }
+
+  const uploadStatusDocument = async (file) => {
+    setStatusUploading(true)
+    try {
+      const profile = await uploadMyStatusDocument(file)
+      setEmployee((current) => ({ ...current, ...profile }))
+      showToast('Status document uploaded')
+    } catch (err) {
+      showToast(err.message || 'Could not upload the status document')
+    } finally {
+      setStatusUploading(false)
+    }
+  }
+
+  const downloadStatusDocument = async () => {
+    try {
+      const blob = await downloadMyStatusDocument()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = employee?.statusFileName || 'status-document'
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      showToast(err.message || 'Could not download the status document')
     }
   }
 
@@ -1006,12 +1161,15 @@ function EmployeeSettings() {
               loading={loading}
               saving={saving}
               resumeUploading={resumeUploading}
+              statusUploading={statusUploading}
               onUploadPhoto={uploadProfilePhoto}
               photoUploading={photoUploading}
               onSave={saveProfile}
               onSaveProfessionalProfile={saveProfessionalProfile}
               onUploadResume={uploadResume}
               onDownloadResume={downloadResume}
+              onUploadStatusDocument={uploadStatusDocument}
+              onDownloadStatusDocument={downloadStatusDocument}
             />
           )}
           {section === 'preferences' && <PreferencesSection />}

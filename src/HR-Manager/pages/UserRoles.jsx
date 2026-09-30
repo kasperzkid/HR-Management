@@ -222,10 +222,172 @@ function Modal({ title, eyebrow, onClose, children, footer, wide = false }) {
   )
 }
 
-function CreateHrUserModal({ catalogue, onClose, onCreated }) {
+/**
+ * Creating a role.
+ *
+ * The permission list starts from the role HR picks as a starting point rather
+ * than from nothing, because the common case is "almost the same as Payroll
+ * Staff, but also X". Permissions this admin does not hold are shown but cannot
+ * be ticked - the server would refuse them, and a checkbox that lies is worse
+ * than a disabled one.
+ */
+function CreateRoleModal({ catalogue, onClose, onCreated, creating, error, onCreate }) {
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [baseRoleKey, setBaseRoleKey] = useState('')
+  const [selected, setSelected] = useState(() => new Set())
+
+  const grantable = useMemo(() => new Set(catalogue?.grantable || []), [catalogue])
+  const roles = catalogue?.roles || []
+
+  // Pick up the chosen starting point's grants, but only the ones this admin
+  // can actually hand out, so the checkbox state is never something the server
+  // would reject.
+  useEffect(() => {
+    const base = roles.find((role) => role.key === baseRoleKey)
+    setSelected(new Set((base?.permissions || []).filter((key) => grantable.has(key))))
+  }, [baseRoleKey, roles, grantable])
+
+  function toggle(key) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const withheld = selected.size === 0
+
+  return (
+    <Modal
+      wide
+      title="Create a new role"
+      eyebrow="User & Role Management"
+      onClose={onClose}
+      footer={
+        <div className="flex flex-col-reverse items-center gap-2 sm:flex-row sm:justify-between">
+          <p className="text-xs text-slate-500">
+            {withheld
+              ? 'Nothing granted yet.'
+              : `${selected.size} permission${selected.size === 1 ? '' : 's'} selected.`}
+          </p>
+          <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+            <button
+              type="button"
+              disabled={creating}
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={creating || !name.trim()}
+              onClick={() => onCreate({ name: name.trim(), description: description.trim(), permissions: [...selected] })}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0092B8] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#007a99] disabled:opacity-50"
+            >
+              {creating ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+              {creating ? 'Creating…' : 'Create role'}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {error && (
+          <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-semibold text-slate-600">Role name</span>
+          <input
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="e.g. Payroll Reviewer"
+            maxLength={80}
+            className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:border-[#0092B8] focus:ring-2 focus:ring-cyan-100"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-semibold text-slate-600">Description</span>
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            rows={2}
+            maxLength={400}
+            placeholder="What is this role responsible for?"
+            className="w-full resize-y rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:border-[#0092B8] focus:ring-2 focus:ring-cyan-100"
+          />
+        </label>
+
+        <div>
+          <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+            Start from an existing role
+          </span>
+          <select
+            value={baseRoleKey}
+            onChange={(event) => setBaseRoleKey(event.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-[#0092B8] focus:ring-2 focus:ring-cyan-100"
+          >
+            <option value="">Start from nothing</option>
+            {roles
+              .filter((role) => !role.isProtected)
+              .map((role) => (
+                <option key={role.key} value={role.key}>
+                  {role.name}
+                </option>
+              ))}
+          </select>
+          <p className="mt-1.5 text-xs text-slate-500">
+            Copies that role&rsquo;s permissions, minus anything you do not hold. Then tick or
+            untick below.
+          </p>
+        </div>
+
+        <div>
+          <span className="mb-1.5 block text-xs font-semibold text-slate-600">
+            What this role grants
+          </span>
+          <PermissionMatrix
+            groups={catalogue.groups}
+            permissions={catalogue.permissions}
+            selected={selected}
+            roleGrants={new Set()}
+            grantable={catalogue.grantable}
+            disabled={false}
+            onToggle={toggle}
+          />
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Create an HR staff account, then optionally a role and a set of permissions.
+ *
+ * Ordered the way the work actually happens: who the person is, what role they
+ * hold, and what that role may do. Creating the role is a separate request and
+ * a separate step on purpose - a role outlives the account it was made for, and
+ * an admin who invents a good one will want to reuse it for the next person.
+ */
+function CreateHrUserModal({ catalogue, onClose, onCreated, onRoleCreated }) {
   const [form, setForm] = useState({ name: '', email: '', roleKey: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Inline role creation, driven by the same handlers the page uses so the two
+  // entry points cannot drift apart.
+  const [roleCreating, setRoleCreating] = useState(false)
+  const [roleError, setRoleError] = useState('')
+  const [roleOpen, setRoleOpen] = useState(false)
+
+  const [created, setCreated] = useState(null)
 
   const grantableSet = useMemo(() => new Set(catalogue?.grantable || []), [catalogue])
 
@@ -242,6 +404,32 @@ function CreateHrUserModal({ catalogue, onClose, onCreated }) {
 
   const selectedRole = assignableRoles.find((role) => role.key === form.roleKey)
 
+  async function createRole(payload) {
+    setRoleCreating(true)
+    setRoleError('')
+
+    try {
+      const result = await request('/rbac/roles', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+
+      // Add it to the in-memory catalogue so it is immediately selectable, and
+      // select it - the admin just described it, so that is the role they meant.
+      const role = { ...result.role, permissions: result.role.permissions || [] }
+      setForm((current) => ({ ...current, roleKey: role.key }))
+      onRoleCreated((catalogue?.roles || []).filter((item) => item.key !== role.key).concat(role))
+      setRoleOpen(false)
+
+      return role
+    } catch (createError) {
+      setRoleError(createError.message || 'Unable to create the role.')
+      return null
+    } finally {
+      setRoleCreating(false)
+    }
+  }
+
   async function submit(event) {
     event.preventDefault()
     setSaving(true)
@@ -252,7 +440,8 @@ function CreateHrUserModal({ catalogue, onClose, onCreated }) {
         method: 'POST',
         body: JSON.stringify(form),
       })
-      onCreated(result)
+
+      setCreated(result)
     } catch (submitError) {
       setError(submitError.message || 'Unable to create the account.')
     } finally {
@@ -260,116 +449,179 @@ function CreateHrUserModal({ catalogue, onClose, onCreated }) {
     }
   }
 
+  // ── Step two: the permissions, once the account exists ──────────────────
+  //
+  // The account is already created at this point, so the step reuses the same
+  // PermissionsModal the staff list uses rather than growing a second copy of
+  // the matrix and its override rules. The temporary password is carried in
+  // `created` and handed on only once this step finishes, so a failure here
+  // cannot cost the admin the only copy of it.
+  if (created) {
+    return (
+      <PermissionsModal
+        user={created.user}
+        catalogue={catalogue}
+        canManage
+        onClose={() => {
+          setCreated(null)
+          onCreated(created)
+        }}
+        onSaved={(user) => {
+          setCreated(null)
+          onCreated({ ...created, user })
+        }}
+      />
+    )
+  }
+
   return (
-    <Modal
-      title="Create HR staff account"
-      eyebrow="User & Role Management"
-      onClose={onClose}
-      footer={
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onClose}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            form="create-hr-user"
-            disabled={saving || !form.name.trim() || !form.email.trim() || !form.roleKey}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0092B8] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#007a99] disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-            {saving ? 'Creating…' : 'Create account'}
-          </button>
-        </div>
-      }
-    >
-      <form id="create-hr-user" onSubmit={submit} className="space-y-4">
-        {error && (
-          <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        )}
-
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-slate-600">Full name</span>
-          <input
-            autoFocus
-            required
-            value={form.name}
-            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-            placeholder="e.g. Hana Bekele"
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:border-[#0092B8] focus:ring-2 focus:ring-cyan-100"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-slate-600">Work email</span>
-          <input
-            required
-            type="email"
-            value={form.email}
-            onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-            placeholder="name@company.com"
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:border-[#0092B8] focus:ring-2 focus:ring-cyan-100"
-          />
-          <span className="mt-1 block text-xs text-slate-500">
-            This becomes the sign-in address. The temporary password is shown to you here.
-          </span>
-        </label>
-
-        <div>
-          <span className="mb-1.5 block text-xs font-semibold text-slate-600">Role</span>
-          <div className="space-y-2">
-            {assignableRoles.map((role) => (
-              <label
-                key={role.key}
-                className={[
-                  'flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition',
-                  form.roleKey === role.key
-                    ? 'border-[#0092B8] bg-cyan-50/50 ring-2 ring-cyan-100'
-                    : 'border-slate-200 hover:bg-slate-50',
-                ].join(' ')}
+    <>
+      <Modal
+        wide
+        title="Create HR staff account"
+        eyebrow="User & Role Management"
+        onClose={onClose}
+        footer={
+          <div className="flex flex-col-reverse items-center gap-2 sm:flex-row sm:justify-between">
+            <p className="text-xs text-slate-500">
+              Step 1 of 2 &mdash; the permissions can be tuned next.
+            </p>
+            <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={onClose}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
               >
-                <input
-                  type="radio"
-                  name="roleKey"
-                  className="mt-1"
-                  checked={form.roleKey === role.key}
-                  onChange={() => setForm((current) => ({ ...current, roleKey: role.key }))}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-bold text-slate-800">{role.name}</span>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
-                      {role.permissions.length} permission{role.permissions.length === 1 ? '' : 's'}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-5 text-slate-500">{role.description}</span>
-                </span>
-              </label>
-            ))}
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="create-hr-user"
+                disabled={saving || !form.name.trim() || !form.email.trim() || !form.roleKey}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0092B8] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#007a99] disabled:opacity-50"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                {saving ? 'Creating…' : 'Create account'}
+              </button>
+            </div>
           </div>
-
-          {selectedRole && (
-            <p className="mt-2 flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-              <Info className="mt-0.5 shrink-0 text-slate-400" size={14} />
-              You can fine-tune {selectedRole.name}&rsquo;s permissions straight after creating the
-              account.
+        }
+      >
+        <form id="create-hr-user" onSubmit={submit} className="space-y-4">
+          {error && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
             </p>
           )}
 
-          {!assignableRoles.length && (
-            <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              No role is within your own access, so you cannot create an account right now.
-            </p>
-          )}
-        </div>
-      </form>
-    </Modal>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Full name</span>
+            <input
+              autoFocus
+              required
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              placeholder="e.g. Hana Bekele"
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:border-[#0092B8] focus:ring-2 focus:ring-cyan-100"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Work email</span>
+            <input
+              required
+              type="email"
+              value={form.email}
+              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+              placeholder="name@company.com"
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:border-[#0092B8] focus:ring-2 focus:ring-cyan-100"
+            />
+            <span className="mt-1 block text-xs text-slate-500">
+              This becomes the sign-in address. The temporary password is shown to you here.
+            </span>
+          </label>
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-slate-600">Role</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRoleError('')
+                  setRoleOpen(true)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50"
+              >
+                <Plus size={12} />
+                Create a new role
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {assignableRoles.map((role) => (
+                <label
+                  key={role.key}
+                  className={[
+                    'flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition',
+                    form.roleKey === role.key
+                      ? 'border-[#0092B8] bg-cyan-50/50 ring-2 ring-cyan-100'
+                      : 'border-slate-200 hover:bg-slate-50',
+                  ].join(' ')}
+                >
+                  <input
+                    type="radio"
+                    name="roleKey"
+                    className="mt-1"
+                    checked={form.roleKey === role.key}
+                    onChange={() => setForm((current) => ({ ...current, roleKey: role.key }))}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-slate-800">{role.name}</span>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
+                        {role.permissions.length} permission{role.permissions.length === 1 ? '' : 's'}
+                      </span>
+                      {!role.isSystem && (
+                        <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-200">
+                          Custom
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-slate-500">{role.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {selectedRole && (
+              <p className="mt-2 flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                <Info className="mt-0.5 shrink-0 text-slate-400" size={14} />
+                {selectedRole.isSystem
+                  ? `On the next step you can give ${created?.user?.name || 'this person'} permissions that differ from ${selectedRole.name}.`
+                  : `This is a role you created. Its ${selectedRole.permissions.length} permission(s) can still be changed from the Roles tab.`}
+              </p>
+            )}
+
+            {!assignableRoles.length && (
+              <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                No role is within your own access, so you cannot create an account right now.
+              </p>
+            )}
+          </div>
+        </form>
+      </Modal>
+
+      {roleOpen && (
+        <CreateRoleModal
+          catalogue={catalogue}
+          creating={roleCreating}
+          error={roleError}
+          onClose={() => setRoleOpen(false)}
+          onCreate={createRole}
+        />
+      )}
+    </>
   )
 }
 
@@ -779,9 +1031,47 @@ function RoleEditorModal({ role, catalogue, onClose, onSaved }) {
 
 function RolesPanel({ catalogue, onChanged }) {
   const [editing, setEditing] = useState(null)
+  const [creating, setCreating] = useState(false)
+  const [roleCreating, setRoleCreating] = useState(false)
+  const [roleError, setRoleError] = useState('')
+
+  async function createRole(payload) {
+    setRoleCreating(true)
+    setRoleError('')
+
+    try {
+      await request('/rbac/roles', { method: 'POST', body: JSON.stringify(payload) })
+      setCreating(false)
+      onChanged()
+    } catch (createError) {
+      setRoleError(createError.message || 'Unable to create the role.')
+    } finally {
+      setRoleCreating(false)
+    }
+  }
 
   return (
     <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-500">
+          A role is a named set of permissions. Creating one is useful when a responsibility does
+          not fit any of the built-in roles.
+        </p>
+        <Can permission="users.permissions">
+          <button
+            type="button"
+            onClick={() => {
+              setRoleError('')
+              setCreating(true)
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+          >
+            <Plus size={14} />
+            New role
+          </button>
+        </Can>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {(catalogue?.roles || []).map((role) => (
           <article
@@ -836,6 +1126,16 @@ function RolesPanel({ catalogue, onChanged }) {
             setEditing(null)
             onChanged()
           }}
+        />
+      )}
+
+      {creating && (
+        <CreateRoleModal
+          catalogue={catalogue}
+          creating={roleCreating}
+          error={roleError}
+          onClose={() => setCreating(false)}
+          onCreate={createRole}
         />
       )}
     </>
@@ -1168,6 +1468,7 @@ export default function UserRoles() {
         <CreateHrUserModal
           catalogue={catalogue}
           onClose={() => setCreateOpen(false)}
+          onRoleCreated={(roles) => setCatalogue((current) => ({ ...current, roles }))}
           onCreated={(result) => {
             setCreateOpen(false)
             upsertUser(result.user)

@@ -14,6 +14,9 @@
 //   - an HR account cannot grant itself a permission it does not hold
 //   - an account that may edit HR users still cannot touch an HR Admin
 //   - the protected HR Admin role cannot be edited
+//   - a role can be created, and creating one obeys the same escalation rule as
+//     changing one: it needs the manage-permissions permission, and it cannot
+//     carry more than its creator holds
 //   - an EMPLOYEE token cannot reach the HR API at all
 //   - deactivating an account blocks both a new login and an existing token
 //
@@ -516,6 +519,190 @@ check(
       token: afterGrant.json?.token,
     })
   ).status === 200,
+)
+
+// ---------------------------------------------------------------------------
+suite('Creating a role')
+//
+// A new role is the one way to shape what somebody can do that is not already
+// on the list, so the rules around it are the rules around escalation: only
+// somebody who administers permissions may invent one, and it can never carry
+// more than its creator holds.
+
+// A restricted account that can view staff but not administer permissions, so
+// the route guard itself is what refuses the create.
+const viewerAccount = await api('/api/hr-manager/hr-users', {
+  method: 'POST',
+  token: adminToken,
+  body: { name: 'Verify Viewer', email: 'rbac.viewer@example.com', roleKey: 'hr_staff' },
+})
+const viewerLogin = await login('rbac.viewer@example.com', viewerAccount.json?.temporaryPassword)
+
+expectStatus(
+  'creating a role needs the manage-permissions permission',
+  await api('/api/hr-manager/rbac/roles', {
+    method: 'POST',
+    token: viewerLogin.json?.token,
+    body: { name: 'Sneaky Role', permissions: [] },
+  }),
+  403,
+)
+
+check(
+  'the refused sneaky role was not created',
+  (await api('/api/hr-manager/rbac/catalogue', { token: adminToken })).json?.roles?.some(
+    (role) => role.name === 'Sneaky Role',
+  ) !== true,
+)
+
+expectStatus(
+  'a role needs a name',
+  await api('/api/hr-manager/rbac/roles', {
+    method: 'POST',
+    token: adminToken,
+    body: { permissions: [] },
+  }),
+  400,
+)
+
+const newRole = await api('/api/hr-manager/rbac/roles', {
+  method: 'POST',
+  token: adminToken,
+  body: {
+    name: 'Payroll Reviewer',
+    description: 'Reads payroll but cannot run it.',
+    permissions: ['payroll.view', 'employees.view'],
+  },
+})
+expectStatus('an HR Admin can create a role', newRole, 201)
+check(
+  'the new role comes back with the permissions it was given',
+  newRole.json?.role?.permissions?.length === 2,
+  JSON.stringify(newRole.json?.role),
+)
+check(
+  'the role key is derived from the name',
+  newRole.json?.role?.key === 'payroll_reviewer',
+  newRole.json?.role?.key,
+)
+check(
+  'a newly created role is not protected',
+  newRole.json?.role?.isProtected === false,
+  JSON.stringify(newRole.json?.role),
+)
+
+check(
+  'the new role appears in the catalogue',
+  (await api('/api/hr-manager/rbac/catalogue', { token: adminToken })).json?.roles?.some(
+    (role) => role.key === 'payroll_reviewer',
+  ) === true,
+)
+
+// Creating the same name twice must not collide, because the key is derived
+// from the name - the second one gets a suffix instead of a constraint error.
+const duplicateName = await api('/api/hr-manager/rbac/roles', {
+  method: 'POST',
+  token: adminToken,
+  body: { name: 'Payroll Reviewer', permissions: [] },
+})
+expectStatus('a duplicate role name is accepted with a distinct key', duplicateName, 201)
+check(
+  'the duplicate gets a suffixed key',
+  duplicateName.json?.role?.key === 'payroll_reviewer_2',
+  duplicateName.json?.role?.key,
+)
+
+expectStatus(
+  'an unknown permission is refused',
+  await api('/api/hr-manager/rbac/roles', {
+    method: 'POST',
+    token: adminToken,
+    body: { name: 'Bad Role', permissions: ['not.a.real.permission'] },
+  }),
+  400,
+)
+
+check(
+  'a refused role was not created',
+  (await api('/api/hr-manager/rbac/catalogue', { token: adminToken })).json?.roles?.some(
+    (role) => role.name === 'Bad Role',
+  ) !== true,
+)
+
+expectStatus(
+  'permissions must be an array',
+  await api('/api/hr-manager/rbac/roles', {
+    method: 'POST',
+    token: adminToken,
+    body: { name: 'Shape Role', permissions: 'payroll.view' },
+  }),
+  400,
+)
+
+// The escalation rule, on the create path. HR Admin holds everything, so the
+// only way to prove a lesser admin cannot build a role that outranks them is to
+// have one try. An account holding users.permissions but not users.delete
+// cannot grant a permission it does not hold, and a role is just a bundle of
+// grants, so it must be refused the same way.
+const limitedAdmin = await api('/api/hr-manager/hr-users', {
+  method: 'POST',
+  token: adminToken,
+  body: { name: 'Verify Limited', email: 'rbac.limited@example.com', roleKey: 'custom_staff' },
+})
+// Grant it users.permissions so it passes the route guard, but not
+// users.delete - so it has the power to manage access without holding
+// everything, which is the only way to test the actor's own limit rather than
+// the route's.
+await api(`/api/hr-manager/hr-users/${limitedAdmin.json?.user?.id}/permissions`, {
+  method: 'PUT',
+  token: adminToken,
+  body: { overrides: { 'users.permissions': 'ALLOW' } },
+})
+
+// Re-sign in so the token carries the new grant; a token issued before it
+// would still hold the old, smaller set.
+const limitedLogin = await login('rbac.limited@example.com', limitedAdmin.json?.temporaryPassword)
+check(
+  'the limited admin holds the permission that lets it past the route guard',
+  limitedLogin.json?.permissions?.includes('users.permissions') === true,
+  JSON.stringify(limitedLogin.json?.permissions),
+)
+
+const overreach = await api('/api/hr-manager/rbac/roles', {
+  method: 'POST',
+  token: limitedLogin.json?.token,
+  body: { name: 'Overreach', permissions: ['users.delete'] },
+})
+expectStatus('an admin cannot create a role granting more than it holds', overreach, 403)
+check(
+  'the refusal names the permission that was beyond the actor',
+  overreach.json?.code === 'PERMISSION_EXCEEDS_ACTOR' &&
+    overreach.json?.permissions?.includes('users.delete') === true,
+  JSON.stringify(overreach.json),
+)
+
+check(
+  'the refused overreach role was not created',
+  (await api('/api/hr-manager/rbac/catalogue', { token: adminToken })).json?.roles?.some(
+    (role) => role.name === 'Overreach',
+  ) !== true,
+)
+
+expectStatus(
+  'an HR Admin can still edit a role it just created',
+  await api('/api/hr-manager/rbac/roles/payroll_reviewer', {
+    method: 'PUT',
+    token: adminToken,
+    body: { permissions: ['payroll.view'] },
+  }),
+  200,
+)
+
+check(
+  'the edit took effect',
+  (await api('/api/hr-manager/rbac/catalogue', { token: adminToken })).json?.roles?.find(
+    (role) => role.key === 'payroll_reviewer',
+  )?.permissions?.length === 1,
 )
 
 // ---------------------------------------------------------------------------
