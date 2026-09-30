@@ -33,9 +33,31 @@ const ROOT = path.resolve(
   '..',
 )
 
-const HR_EMAIL = 'samuelwondimu467@gmail.com'
-const HR_PASSWORD = 'samuel@21'
+// The HR Admin this suite signs in as.
+//
+// These are read from the environment rather than written here on purpose. This
+// file is committed and published, so a credential sitting in it is a live
+// account's real password handed to anyone who clones the repository. That is
+// exactly how the previous value ended up public.
+//
+//   HR_EMAIL=you@example.com HR_PASSWORD=... npm run verify:employee-flow
+//
+// The suite adds employees, issues password resets and changes passwords
+// against the real dev.db, so it should only ever run against an account the
+// operator has named deliberately. Without both variables it exits before
+// starting a server or opening the database.
+const HR_EMAIL = (process.env.HR_EMAIL || '').trim()
+const HR_PASSWORD = process.env.HR_PASSWORD || ''
 const NEW_PASSWORD = 'Flow-Check-9271x!'
+
+if (!HR_EMAIL || !HR_PASSWORD) {
+  console.error(
+    'HR_EMAIL and HR_PASSWORD must be set to the HR Admin account this suite signs in as.\n' +
+      'Example: HR_EMAIL=hr@example.com HR_PASSWORD=... npm run verify:employee-flow\n' +
+      'Nothing was run and the database was not touched.',
+  )
+  process.exit(2)
+}
 
 const stamp = Date.now().toString().slice(-6)
 
