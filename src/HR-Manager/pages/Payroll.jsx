@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  Image as ImageIcon,
   Loader2,
   MoreHorizontal,
   MinusCircle,
@@ -20,6 +21,9 @@ import {
 import { Button, PageTitle, SummaryCard, Table } from '../../components/ui'
 import TableDataTools from '../components/TableDataTools'
 import { useAccess } from '../../lib/rbac'
+import { authHeaders } from '../../lib/hrApi'
+import { exportPayrollTotalImage } from '../lib/payroll-total-image'
+import { HR_SETTINGS } from '../data/settingsData'
 
 const API_BASE = 'http://localhost:4000/api/hr-manager'
 
@@ -834,10 +838,10 @@ function PayrollModal({
               ? 'PUT'
               : 'POST',
 
-            headers: {
+            headers: authHeaders({
               'Content-Type':
                 'application/json',
-            },
+            }),
 
             body: JSON.stringify(
               payload,
@@ -1286,6 +1290,12 @@ export default function Payroll() {
     setPayrollError,
   ] = useState('')
 
+  // Confirms a completed action, such as the total-as-image download. Without
+  // it the button appears to do nothing: the only other feedback is the
+  // browser's download shelf, which most people do not look at.
+  const [notice, setNotice] =
+    useState('')
+
   const [modalOpen, setModalOpen] =
     useState(false)
 
@@ -1308,6 +1318,7 @@ export default function Payroll() {
   ] = useState(null)
   const [actionMenuId, setActionMenuId] = useState(null)
   const [deleteCandidate, setDeleteCandidate] = useState(null)
+  const [savingTotalImage, setSavingTotalImage] = useState(false)
 
   async function loadEmployees() {
     try {
@@ -1317,6 +1328,7 @@ export default function Payroll() {
       const response =
         await fetch(
           `${API_BASE}/employees`,
+          { headers: authHeaders() },
         )
 
       const data =
@@ -1360,6 +1372,7 @@ export default function Payroll() {
           `${API_BASE}/settings`,
           {
             cache: 'no-store',
+            headers: authHeaders(),
           },
         )
 
@@ -1412,6 +1425,7 @@ export default function Payroll() {
       const response =
         await fetch(
           `${API_BASE}/attendance?startDate=${start}&endDate=${end}`,
+          { headers: authHeaders() },
         )
 
       if (!response.ok) {
@@ -1444,6 +1458,7 @@ export default function Payroll() {
     try {
       setPayrollLoading(true)
       setPayrollError('')
+      setNotice('')
 
       const response =
         await fetch(
@@ -1452,6 +1467,7 @@ export default function Payroll() {
           )}`,
           {
             cache: 'no-store',
+            headers: authHeaders(),
           },
         )
 
@@ -1881,10 +1897,10 @@ export default function Payroll() {
             {
               method: 'POST',
 
-              headers: {
+              headers: authHeaders({
                 'Content-Type':
                   'application/json',
-              },
+              }),
 
               body: JSON.stringify({
                 employeeId:
@@ -1960,6 +1976,7 @@ export default function Payroll() {
           `${API_BASE}/payroll/${record.id}`,
           {
             method: 'DELETE',
+            headers: authHeaders(),
           },
         )
 
@@ -2027,7 +2044,7 @@ export default function Payroll() {
       if (!record.employeeId || !record.payrollMonth) continue
       const response = await fetch(`${API_BASE}/payroll`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(record),
       })
       const result = await response.json()
@@ -2036,6 +2053,32 @@ export default function Payroll() {
     }
     await loadSavedPayroll()
     return `Imported ${imported} payroll record(s). Existing employee/month records are unchanged.`
+  }
+
+  async function handleExportTotalImage() {
+    if (!payroll.length) {
+      setPayrollError('There are no payroll records for this month to total up.')
+      return
+    }
+
+    setSavingTotalImage(true)
+    try {
+      const { filename } = await exportPayrollTotalImage({
+        month: payrollMonth,
+        summary,
+        companyName: HR_SETTINGS.company.name,
+        currency: HR_SETTINGS.company.currency,
+      })
+      setPayrollError('')
+      setNotice(`Saved the payroll total for ${payrollMonth} as ${filename}.`)
+    } catch (error) {
+      setNotice('')
+      setPayrollError(
+        error.message || 'The payroll total could not be saved as an image.',
+      )
+    } finally {
+      setSavingTotalImage(false)
+    }
   }
 
   return (
@@ -2077,6 +2120,15 @@ export default function Payroll() {
           </div>
         )}
 
+        {notice && (
+          <div
+            role="status"
+            className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          >
+            {notice}
+          </div>
+        )}
+
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {[
             { title: 'Payroll Employees', description: 'Employees with payroll records', value: summary.employees, icon: Users, iconVariant: 'blue', valueLabel: 'Employees' },
@@ -2099,182 +2151,6 @@ export default function Payroll() {
           <button type="button" onClick={() => moveMonth(1)} className="rounded-lg border border-slate-300 bg-white p-2.5 text-slate-600 hover:bg-slate-50" title="Next month"><ChevronRight size={18} /></button>
         </div>
 
-        <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/[0.03]">
-          <div className="flex flex-col gap-4 border-b border-slate-100 bg-gradient-to-r from-sky-50/80 via-white to-teal-50/70 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <span
-                aria-hidden="true"
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-teal-500 text-white shadow-sm shadow-sky-500/25"
-              >
-                <Calculator size={19} strokeWidth={2.2} />
-              </span>
-
-              <div className="min-w-0">
-                <h2 className="text-lg font-bold tracking-tight text-slate-950">
-                  Payroll Rules
-                </h2>
-
-                <p className="mt-1 text-sm leading-relaxed text-slate-500">
-                  Current payroll calculations loaded from HR Settings.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-sky-100 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 shadow-sm ring-1 ring-inset ring-sky-100">
-                Employee Pension:{' '}
-                {Number(
-                  payrollConfiguration.employeePensionRate *
-                    100,
-                ).toFixed(2)}
-                %
-              </span>
-
-              <span className="rounded-full border border-teal-100 bg-white px-3 py-1.5 text-xs font-semibold text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100">
-                Employer Pension:{' '}
-                {Number(
-                  payrollConfiguration.employerPensionRate *
-                    100,
-                ).toFixed(2)}
-                %
-              </span>
-
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-inset ring-slate-100">
-                Contractual / Intern: Excluded
-              </span>
-
-              <span className="rounded-full border border-sky-100 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 shadow-sm ring-1 ring-inset ring-sky-100">
-                Overtime: Hours ÷{' '}
-                {Number(
-                  payrollConfiguration.standardMonthlyWorkingHours,
-                )}{' '}
-                ×{' '}
-                {Number(
-                  payrollConfiguration.overtimeRateMultiplier,
-                )}
-              </span>
-            </div>
-          </div>
-
-          <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
-            <RuleTile
-              icon={Clock3}
-              label="Standard Monthly Hours"
-              accent="sky"
-              value={Number(
-                payrollConfiguration.standardMonthlyWorkingHours,
-              )}
-            />
-
-            <RuleTile
-              icon={CircleDollarSign}
-              label="Overtime Multiplier"
-              accent="teal"
-              value={
-                <>
-                  {Number(
-                    payrollConfiguration.overtimeRateMultiplier,
-                  )}
-                  <span className="text-teal-500">×</span>
-                </>
-              }
-            />
-
-            <RuleTile
-              icon={Users}
-              label="Employee Pension"
-              accent="sky"
-              value={
-                <>
-                  {Number(
-                    payrollConfiguration.employeePensionRate *
-                      100,
-                  ).toFixed(2)}
-                  <span className="text-sky-500">%</span>
-                </>
-              }
-            />
-
-            <RuleTile
-              icon={Building2}
-              label="Employer Pension"
-              accent="teal"
-              value={
-                <>
-                  {Number(
-                    payrollConfiguration.employerPensionRate *
-                      100,
-                  ).toFixed(2)}
-                  <span className="text-teal-500">%</span>
-                </>
-              }
-            />
-          </div>
-
-          <div className="px-5 pb-5">
-            <div className="overflow-hidden rounded-2xl border border-slate-200/80 shadow-sm">
-              <div className="overflow-x-auto">
-                <Table className="w-full min-w-[700px] text-left text-sm">
-                  <Table.Header className="bg-slate-50/90">
-                    <Table.Row className="border-b border-slate-200">
-                      <Table.Head className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        Taxable Income
-                      </Table.Head>
-
-                      <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        Rate
-                      </Table.Head>
-
-                      <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        Subtraction
-                      </Table.Head>
-                    </Table.Row>
-                  </Table.Header>
-
-                  <Table.Body>
-                    {PAYE_BRACKETS.map(
-                      (
-                        bracket,
-                        index,
-                      ) => (
-                        <Table.Row
-                          key={`${bracket.min}-${index}`}
-                          className="border-b border-slate-100 transition-colors last:border-0 hover:bg-sky-50/40"
-                        >
-                          <Table.Cell className="px-4 py-3 font-medium text-slate-700">
-                            {bracket.max ===
-                            Infinity
-                              ? `${formatCurrency(
-                                  bracket.min,
-                                )}+`
-                              : `${formatCurrency(
-                                  bracket.min,
-                                )} – ${formatCurrency(
-                                  bracket.max,
-                                )}`}
-                          </Table.Cell>
-
-                          <Table.Cell className="px-4 py-3 text-right font-bold tabular-nums text-slate-950">
-                            {bracket.rate *
-                              100}
-                            %
-                          </Table.Cell>
-
-                          <Table.Cell className="px-4 py-3 text-right tabular-nums text-slate-600">
-                            {formatCurrency(
-                              bracket.subtraction,
-                            )}
-                          </Table.Cell>
-                        </Table.Row>
-                      ),
-                    )}
-                  </Table.Body>
-                </Table>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <section>
           <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -2292,6 +2168,26 @@ export default function Payroll() {
 
             <div className="flex flex-wrap items-center justify-end gap-3">
             <TableDataTools filename={`payroll-${payrollMonth}`} rows={payroll} onImport={importPayrollRecords} />
+            <button
+              type="button"
+              onClick={handleExportTotalImage}
+              disabled={savingTotalImage || !payroll.length}
+              title={
+                payroll.length
+                  ? `Save the ${payroll.length} payroll record total as a PNG image`
+                  : 'There are no payroll records for this month to total up'
+              }
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0092B8] hover:bg-slate-50 hover:text-[#007A99] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingTotalImage ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <ImageIcon size={14} />
+              )}
+              {savingTotalImage
+                ? 'Saving image...'
+                : `Total as image${payroll.length ? ` (${payroll.length})` : ''}`}
+            </button>
             </div>
           </div>
 
@@ -2556,6 +2452,182 @@ export default function Payroll() {
             </Table>
           </div>
         </div>
+        </section>
+
+        <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/[0.03]">
+          <div className="flex flex-col gap-4 border-b border-slate-100 bg-gradient-to-r from-sky-50/80 via-white to-teal-50/70 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span
+                aria-hidden="true"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-teal-500 text-white shadow-sm shadow-sky-500/25"
+              >
+                <Calculator size={19} strokeWidth={2.2} />
+              </span>
+
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold tracking-tight text-slate-950">
+                  Payroll Rules
+                </h2>
+
+                <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                  Current payroll calculations loaded from HR Settings.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-sky-100 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 shadow-sm ring-1 ring-inset ring-sky-100">
+                Employee Pension:{' '}
+                {Number(
+                  payrollConfiguration.employeePensionRate *
+                    100,
+                ).toFixed(2)}
+                %
+              </span>
+
+              <span className="rounded-full border border-teal-100 bg-white px-3 py-1.5 text-xs font-semibold text-teal-800 shadow-sm ring-1 ring-inset ring-teal-100">
+                Employer Pension:{' '}
+                {Number(
+                  payrollConfiguration.employerPensionRate *
+                    100,
+                ).toFixed(2)}
+                %
+              </span>
+
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-inset ring-slate-100">
+                Contractual / Intern: Excluded
+              </span>
+
+              <span className="rounded-full border border-sky-100 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 shadow-sm ring-1 ring-inset ring-sky-100">
+                Overtime: Hours ÷{' '}
+                {Number(
+                  payrollConfiguration.standardMonthlyWorkingHours,
+                )}{' '}
+                ×{' '}
+                {Number(
+                  payrollConfiguration.overtimeRateMultiplier,
+                )}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+            <RuleTile
+              icon={Clock3}
+              label="Standard Monthly Hours"
+              accent="sky"
+              value={Number(
+                payrollConfiguration.standardMonthlyWorkingHours,
+              )}
+            />
+
+            <RuleTile
+              icon={CircleDollarSign}
+              label="Overtime Multiplier"
+              accent="teal"
+              value={
+                <>
+                  {Number(
+                    payrollConfiguration.overtimeRateMultiplier,
+                  )}
+                  <span className="text-teal-500">×</span>
+                </>
+              }
+            />
+
+            <RuleTile
+              icon={Users}
+              label="Employee Pension"
+              accent="sky"
+              value={
+                <>
+                  {Number(
+                    payrollConfiguration.employeePensionRate *
+                      100,
+                  ).toFixed(2)}
+                  <span className="text-sky-500">%</span>
+                </>
+              }
+            />
+
+            <RuleTile
+              icon={Building2}
+              label="Employer Pension"
+              accent="teal"
+              value={
+                <>
+                  {Number(
+                    payrollConfiguration.employerPensionRate *
+                      100,
+                  ).toFixed(2)}
+                  <span className="text-teal-500">%</span>
+                </>
+              }
+            />
+          </div>
+
+          <div className="px-5 pb-5">
+            <div className="overflow-hidden rounded-2xl border border-slate-200/80 shadow-sm">
+              <div className="overflow-x-auto">
+                <Table className="w-full min-w-[700px] text-left text-sm">
+                  <Table.Header className="bg-slate-50/90">
+                    <Table.Row className="border-b border-slate-200">
+                      <Table.Head className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Taxable Income
+                      </Table.Head>
+
+                      <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Rate
+                      </Table.Head>
+
+                      <Table.Head className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Subtraction
+                      </Table.Head>
+                    </Table.Row>
+                  </Table.Header>
+
+                  <Table.Body>
+                    {PAYE_BRACKETS.map(
+                      (
+                        bracket,
+                        index,
+                      ) => (
+                        <Table.Row
+                          key={`${bracket.min}-${index}`}
+                          className="border-b border-slate-100 transition-colors last:border-0 hover:bg-sky-50/40"
+                        >
+                          <Table.Cell className="px-4 py-3 font-medium text-slate-700">
+                            {bracket.max ===
+                            Infinity
+                              ? `${formatCurrency(
+                                  bracket.min,
+                                )}+`
+                              : `${formatCurrency(
+                                  bracket.min,
+                                )} – ${formatCurrency(
+                                  bracket.max,
+                                )}`}
+                          </Table.Cell>
+
+                          <Table.Cell className="px-4 py-3 text-right font-bold tabular-nums text-slate-950">
+                            {bracket.rate *
+                              100}
+                            %
+                          </Table.Cell>
+
+                          <Table.Cell className="px-4 py-3 text-right tabular-nums text-slate-600">
+                            {formatCurrency(
+                              bracket.subtraction,
+                            )}
+                          </Table.Cell>
+                        </Table.Row>
+                      ),
+                    )}
+                  </Table.Body>
+                </Table>
+              </div>
+            </div>
+          </div>
         </section>
 
       </div>

@@ -8,15 +8,25 @@ import {
   Clock3,
   Loader2,
   MapPin,
+  Pencil,
   Search,
   UserCheck,
   UserX,
   Users,
   X,
 } from 'lucide-react'
-import { PageTitle, SummaryCard, Table } from '../../components/ui'
+import { Modal, PageTitle, SummaryCard, Table } from '../../components/ui'
 import TableDataTools from '../components/TableDataTools'
 import { useAccess } from '../../lib/rbac'
+import { authHeaders } from '../../lib/hrApi'
+import {
+  EDITABLE_STATUSES,
+  attendanceStatusPayload,
+  describeStatusChange,
+  isAttending,
+  statusFormFrom,
+  statusLabel,
+} from '../lib/attendance-status'
 
 const API_URL = 'http://localhost:4000/api/hr-manager'
 
@@ -497,6 +507,203 @@ function StatusBadge({ status }) {
   )
 }
 
+/**
+ * Lets HR correct one employee's day.
+ *
+ * The times and hours fields only appear for a status that means the employee
+ * was in the office. For the others they are not merely hidden - the payload
+ * zeroes them - because a day marked absent must not go on carrying a punch
+ * from a check-in that was never reversed. The live data had exactly that:
+ * absent days sitting at 850 late minutes.
+ */
+function StatusEditorModal({
+  open,
+  employeeName,
+  employeeCode,
+  department,
+  date,
+  dayName,
+  record,
+  saving,
+  error,
+  onClose,
+  onSave,
+}) {
+  // Seeded once per mount. The parent unmounts this between edits (and keys it
+  // by cell), so the previous day's times can never carry over into the next
+  // edit without this having to re-seed in an effect.
+  const [form, setForm] = useState(() => statusFormFrom(record))
+
+  const attending = isAttending(form.status)
+
+  const change = (field) => (event) => {
+    const { value } = event.target
+    setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Edit attendance"
+      description={`${employeeName} · ${date}`}
+      size="md"
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSave(form)
+        }}
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0092B8]/10 text-xs font-bold text-[#0092B8]">
+              {getInitials(employeeName)}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-semibold text-slate-800">
+                  {employeeName}
+                </span>
+
+                {record && (
+                  <StatusBadge status={record.status} />
+                )}
+              </div>
+
+              <div className="mt-0.5 truncate text-xs text-slate-500">
+                {employeeCode}
+                {department ? ` · ${department}` : ''} ·{' '}
+                {dayName} {date}
+              </div>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold text-slate-700">
+              Status
+            </span>
+
+            <select
+              value={form.status}
+              onChange={change('status')}
+              autoFocus
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#0092B8] focus:ring-2 focus:ring-[#0092B8]/20"
+            >
+              {EDITABLE_STATUSES.map((option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {attending ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  Check in
+                </span>
+
+                <input
+                  type="time"
+                  value={form.checkIn}
+                  onChange={change('checkIn')}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition-colors focus:border-[#0092B8] focus:ring-2 focus:ring-[#0092B8]/20"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  Check out
+                </span>
+
+                <input
+                  type="time"
+                  value={form.checkOut}
+                  onChange={change('checkOut')}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition-colors focus:border-[#0092B8] focus:ring-2 focus:ring-[#0092B8]/20"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  Regular hours
+                </span>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={form.regular}
+                  onChange={change('regular')}
+                  placeholder="0"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition-colors focus:border-[#0092B8] focus:ring-2 focus:ring-[#0092B8]/20"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  Overtime hours
+                </span>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={form.overtime}
+                  onChange={change('overtime')}
+                  placeholder="0"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition-colors focus:border-[#0092B8] focus:ring-2 focus:ring-[#0092B8]/20"
+                />
+              </label>
+            </div>
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+              Marking a day absent clears its check-in, check-out and
+              hours. Payroll reads those hours, so leaving them behind
+              would pay for a day the employee did not work.
+            </p>
+          )}
+
+          {error && (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700"
+            >
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#0092B8] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#007A99] disabled:opacity-50"
+            >
+              {saving && <Loader2 size={15} className="animate-spin" />}
+              {saving ? 'Saving...' : 'Save status'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 function LocationBadge({ record }) {
   if (!record) {
     return (
@@ -763,6 +970,16 @@ function Attendance() {
   const [acceptingId, setAcceptingId] =
     useState(null)
 
+  // The employee-day currently open in the status editor, or null.
+  const [editingCell, setEditingCell] =
+    useState(null)
+
+  const [savingAttendance, setSavingAttendance] =
+    useState(false)
+
+  const [statusEditorError, setStatusEditorError] =
+    useState('')
+
   const daysInMonth =
     getDaysInMonth(
       year,
@@ -829,10 +1046,16 @@ function Attendance() {
         ] = await Promise.all([
           fetch(
             `${API_URL}/employees`,
+            {
+              headers: authHeaders(),
+            },
           ),
 
           fetch(
             `${API_URL}/attendance?startDate=${monthStart}&endDate=${monthEnd}`,
+            {
+              headers: authHeaders(),
+            },
           ),
         ])
 
@@ -1230,10 +1453,10 @@ function Attendance() {
           `${API_URL}/attendance/${record.id}/accept-late`,
           {
             method: 'PUT',
-            headers: {
+            headers: authHeaders({
               'Content-Type':
                 'application/json',
-            },
+            }),
             body: JSON.stringify({
               reviewedBy,
               reviewRemarks:
@@ -1275,6 +1498,176 @@ function Attendance() {
       )
     } finally {
       setAcceptingId(null)
+    }
+  }
+
+  // The one entry point both the calendar grid and the records table go through,
+  // so the two cannot drift apart in what they send.
+  function openEditor({
+    employeeId,
+    employeeName,
+    employeeCode,
+    department,
+    date,
+    dayName,
+    record,
+  }) {
+    setStatusEditorError('')
+    setApiError('')
+    setSuccessMessage('')
+
+    setEditingCell({
+      employeeId: String(employeeId || ''),
+      employeeName,
+      employeeCode,
+      department,
+      date,
+      dayName,
+      record: record || null,
+    })
+  }
+
+  function openStatusEditor(row, day) {
+    const date = getDateKey(
+      year,
+      month,
+      day,
+    )
+
+    const info = getDayInfo(
+      year,
+      month,
+      day,
+    )
+
+    // The record's employeeId is the Employee row's UUID, which is what the
+    // attendance table stores. The row's own employeeId is the display code
+    // and only resolves to an employee some of the time, so it is the last
+    // resort rather than the first choice.
+    openEditor({
+      employeeId:
+        row.employee?.id ||
+        row.employee?.employeeId ||
+        row.employeeId ||
+        '',
+      employeeName: row.name,
+      employeeCode: row.employeeId,
+      department: row.department,
+      date,
+      dayName: info?.dayName || '',
+      record: row.attendance?.[date] || null,
+    })
+  }
+
+  // The records table works from an attendance record rather than a grid row, so
+  // it resolves the employee the same way the table itself does.
+  function openStatusEditorForRecord(record) {
+    const employee = employees.find(
+      (item) =>
+        item.id === record.employeeId ||
+        item.employeeId === record.employeeId,
+    )
+
+    const [yearPart, monthPart, dayPart] = String(
+      record.date || '',
+    )
+      .split('-')
+      .map(Number)
+
+    openEditor({
+      employeeId: record.employeeId,
+      employeeName:
+        record.employeeName ||
+        getEmployeeName(employee),
+      employeeCode:
+        employee?.employeeId || record.employeeId,
+      department:
+        record.department ||
+        employee?.department ||
+        'Unassigned',
+      date: record.date,
+      dayName:
+        yearPart && monthPart && dayPart
+          ? new Date(
+              yearPart,
+              monthPart - 1,
+              dayPart,
+            ).toLocaleDateString('en-US', {
+              weekday: 'short',
+            })
+          : '',
+      record,
+    })
+  }
+
+  async function saveAttendanceStatus(form) {
+    if (!editingCell) {
+      return
+    }
+
+    setSavingAttendance(true)
+    setStatusEditorError('')
+
+    try {
+      const body = attendanceStatusPayload({
+        employeeId: editingCell.employeeId,
+        date: editingCell.date,
+        status: form.status,
+        checkIn: form.checkIn,
+        checkOut: form.checkOut,
+        regular: form.regular,
+        overtime: form.overtime,
+      })
+
+      const change = describeStatusChange(
+        editingCell.record?.status,
+        body.status,
+      )
+
+      const existingId = editingCell.record?.id
+
+      const response = await fetch(
+        existingId
+          ? `${API_URL}/attendance/${existingId}`
+          : `${API_URL}/attendance`,
+        {
+          method: existingId ? 'PUT' : 'POST',
+          headers: authHeaders({
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify(body),
+        },
+      )
+
+      const data = await response
+        .json()
+        .catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            'Failed to save the attendance status.',
+        )
+      }
+
+      setEditingCell(null)
+      setApiError('')
+      setSuccessMessage(
+        `${editingCell.employeeName} · ${editingCell.date} — ${change}.`,
+      )
+
+      await loadData(false)
+
+      window.setTimeout(() => {
+        setSuccessMessage('')
+      }, 5000)
+    } catch (error) {
+      setStatusEditorError(
+        error.message ||
+          'Failed to save the attendance status.',
+      )
+    } finally {
+      setSavingAttendance(false)
     }
   }
 
@@ -1323,7 +1716,7 @@ function Attendance() {
       if (!employeeId || !record.date || !record.status) continue
       const response = await fetch(`${API_URL}/attendance`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ ...record, employeeId, date: String(record.date).slice(0, 10) }),
       })
       const result = await response.json()
@@ -1732,9 +2125,60 @@ function Attendance() {
                                   key={
                                     dateKey
                                   }
-                                  className={`border-b border-r border-slate-200 px-1 py-2 text-center ${
+                                  onClick={
+                                    canManage
+                                      ? () =>
+                                          openStatusEditor(
+                                            row,
+                                            day,
+                                          )
+                                      : undefined
+                                  }
+                                  onKeyDown={
+                                    canManage
+                                      ? (event) => {
+                                          if (
+                                            event.key ===
+                                              'Enter'
+                                          ) {
+                                            event.preventDefault()
+                                            openStatusEditor(
+                                              row,
+                                              day,
+                                            )
+                                          }
+                                        }
+                                      : undefined
+                                  }
+                                  role={
+                                    canManage
+                                      ? 'button'
+                                      : undefined
+                                  }
+                                  tabIndex={
+                                    canManage ? 0 : undefined
+                                  }
+                                  title={
+                                    canManage
+                                      ? record
+                                        ? `Edit ${statusLabel(
+                                            record.status,
+                                          )} — ${row.name}, ${dateKey}`
+                                        : `Add attendance — ${row.name}, ${dateKey}`
+                                      : undefined
+                                  }
+                                  aria-label={
+                                    canManage
+                                      ? `Edit attendance for ${row.name} on ${dateKey}`
+                                      : undefined
+                                  }
+                                  className={`group border-b border-r border-slate-200 px-1 py-2 text-center align-middle ${
                                     info.isWeekend
                                       ? 'bg-slate-50'
+                                      : ''
+                                  } ${
+                                    canManage
+                                      ? 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0092B8] hover:bg-[#0092B8]/5'
                                       : ''
                                   }`}
                                 >
@@ -1763,11 +2207,29 @@ function Attendance() {
                                           )}
                                         </span>
                                       )}
+
+                                      {canManage && (
+                                        <Pencil
+                                          size={11}
+                                          className="mt-0.5 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                                          aria-hidden="true"
+                                        />
+                                      )}
                                     </div>
                                   ) : (
-                                    <span className="text-xs text-slate-300">
-                                      —
-                                    </span>
+                                    <div className="flex min-w-[58px] flex-col items-center gap-1">
+                                      <span className="text-xs text-slate-300">
+                                        —
+                                      </span>
+
+                                      {canManage && (
+                                        <Pencil
+                                          size={11}
+                                          className="text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                                          aria-hidden="true"
+                                        />
+                                      )}
+                                    </div>
                                   )}
                                 </td>
                               )
@@ -1866,6 +2328,12 @@ function Attendance() {
                     <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
                       Late
                     </th>
+
+                    {canManage && (
+                      <th className="px-5 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
 
@@ -1967,6 +2435,33 @@ function Attendance() {
                               {formatLateHours(record.late)}
                             </span>
                           </td>
+
+                          {canManage && (
+                            <td className="px-5 py-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openStatusEditorForRecord(
+                                    record,
+                                  )
+                                }
+                                disabled={
+                                  savingAttendance
+                                }
+                                title={`Edit ${statusLabel(
+                                  record.status,
+                                )} — ${name}`}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-[#0092B8] hover:text-[#0092B8] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <Pencil
+                                  size={13}
+                                  aria-hidden="true"
+                                />
+
+                                Edit
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       )
                     },
@@ -1978,6 +2473,33 @@ function Attendance() {
         </div>
 
       </div>
+
+      {editingCell && (
+        <StatusEditorModal
+          key={`${editingCell.employeeId}:${editingCell.date}`}
+          open
+          employeeName={
+            editingCell.employeeName
+          }
+          employeeCode={
+            editingCell.employeeCode
+          }
+          department={
+            editingCell.department
+          }
+          date={editingCell.date}
+          dayName={editingCell.dayName}
+          record={editingCell.record}
+          saving={savingAttendance}
+          error={statusEditorError}
+          onClose={() => {
+            if (savingAttendance) return
+            setEditingCell(null)
+            setStatusEditorError('')
+          }}
+          onSave={saveAttendanceStatus}
+        />
+      )}
     </div>
   )
 }
