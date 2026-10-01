@@ -73,6 +73,11 @@ export async function verifySmtpConfiguration() {
   if (!status.configured) {
     return {
       ok: false,
+      // "Nobody has filled in the mail settings yet" is a normal state
+      // for a fresh install, not a fault. It is reported separately from
+      // a genuine misconfiguration so startup can stay quiet about it
+      // instead of printing the same alarming block either way.
+      state: 'unconfigured',
       message:
         `Email is not configured. Missing environment ${status.missing.length === 1 ? 'variable' : 'variables'}: ${status.missing.join(', ')}.`,
       hint:
@@ -85,6 +90,7 @@ export async function verifySmtpConfiguration() {
 
     return {
       ok: true,
+      state: 'ready',
       message: `Email is ready. Sending as "${fromAddress()}" via ${status.host}:${status.port}.`,
     }
   } catch (error) {
@@ -108,6 +114,9 @@ export async function verifySmtpConfiguration() {
 
     return {
       ok: false,
+      // The settings are present but the server will not accept them.
+      // That is a real fault and deserves a loud report.
+      state: 'misconfigured',
       message: `Email is configured but could not connect to ${status.host}:${status.port} (${code}).`,
       hint:
         hints[code] ||

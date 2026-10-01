@@ -43,16 +43,32 @@ server.on('error', (error) => {
  * employees their temporary password, and both of those endpoints already
  * return a clear error rather than pretending to succeed. Crashing the whole
  * HR system over a missing mail server would be a far worse outcome.
+ *
+ * Two failure states are reported differently on purpose:
+ *
+ *   unconfigured  Nobody has filled in the mail settings yet. This is the
+ *                 normal state of a fresh checkout and of a local dev run
+ *                 that never needed email, so it gets a single quiet line.
+ *
+ *   misconfigured The settings are present but the mail server rejected
+ *                 them. That is a genuine fault someone has to fix, so it
+ *                 keeps the full boxed warning.
  */
 async function reportEmailStatus() {
-  const { ok, message, hint } = await verifySmtpConfiguration()
-
-  const line = ok
-    ? `[email] OK  ${message}`
-    : `[email] NOT READY  ${message}`
+  const { ok, state, message, hint } = await verifySmtpConfiguration()
 
   if (ok) {
-    console.log(line)
+    console.log(`[email] OK  ${message}`)
+    return
+  }
+
+  if (state === 'unconfigured') {
+    console.log(
+      `[email] not set up yet - password reset, email-change confirmation and new-employee passwords are unavailable. (${message})`,
+    )
+    console.log(
+      '[email] to enable it, fill in the SMTP_* lines in .env then run "npm run email:check".',
+    )
     return
   }
 

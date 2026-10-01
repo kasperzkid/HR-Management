@@ -14,6 +14,7 @@ import {
   downloadMyStatusDocument,
   getAttendance,
   getAttendanceConfig,
+  getAttendanceStatus,
   checkIn,
   checkOut,
   emergencyCheckOut,
@@ -56,6 +57,9 @@ router.post('/employees/:id/reset-password', resetEmployeePassword)
 // Attendance
 router.get('/attendance', getAttendance)
 router.get('/attendance/config', getAttendanceConfig)
+// Today's punch state together with the HR-configured windows, so the
+// employee portal never re-derives the attendance date or the schedule.
+router.get('/attendance/status', getAttendanceStatus)
 router.post('/attendance/check-in', checkIn)
 router.post('/attendance/check-out', checkOut)
 router.post('/attendance/emergency-check-out', emergencyCheckOut)

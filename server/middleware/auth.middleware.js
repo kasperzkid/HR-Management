@@ -15,7 +15,7 @@ export function requireAuth(req, res, next) {
 
     const token = authorization.slice(7).trim()
 
-    if (!token) {
+    if (!token || token === 'undefined' || token === 'null') {
       return res.status(401).json({
         message: 'Authentication required',
       })
@@ -27,7 +27,9 @@ export function requireAuth(req, res, next) {
 
     next()
   } catch (error) {
-    console.error('Authentication error:', error)
+    if (error.name !== 'JsonWebTokenError' && error.name !== 'TokenExpiredError') {
+      console.error('Authentication error:', error)
+    }
 
     return res.status(401).json({
       message: 'Invalid or expired authentication token',

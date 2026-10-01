@@ -7,31 +7,9 @@
 import prisma from '../db.js'
 
 const DEFAULT_SETTINGS = {
-  departments: [
-    'HR',
-    'Finance',
-    'Sales',
-    'Marketing',
-    'Operations',
-    'IT',
-    'Procurement',
-    'Customer Service',
-    'Production',
-    'Logistics',
-  ],
+  departments: [],
 
-  jobTitles: [
-    'Manager',
-    'Officer',
-    'Specialist',
-    'Assistant',
-    'Supervisor',
-    'Director',
-    'Coordinator',
-    'Analyst',
-    'Intern',
-    'Technician',
-  ],
+  jobTitles: [],
 
   employmentTypes: [
     'Permanent',
@@ -475,6 +453,61 @@ function validateSettings(settings) {
     )
   }
 
+  // Ordering. Without these an admin can save, say, a 09:00 check-in
+  // window opening against an 08:30 cutoff, and the punch button then
+  // has no valid minute in which it could ever be enabled — with no
+  // error to explain why nobody can check in.
+  const toMinutes = (value) => {
+    if (!isValidTime(value)) return null
+    const [hours, minutes] = value
+      .split(':')
+      .map(Number)
+    return hours * 60 + minutes
+  }
+
+  const checkInStartMinutes = toMinutes(
+    attendance.checkInStartTime,
+  )
+  const checkInCutoffMinutes = toMinutes(
+    attendance.requiredCheckInTime,
+  )
+  const checkOutStartMinutes = toMinutes(
+    attendance.checkOutStartTime,
+  )
+  const checkOutEndMinutes = toMinutes(
+    attendance.checkOutEndTime,
+  )
+
+  if (
+    checkInStartMinutes !== null &&
+    checkInCutoffMinutes !== null &&
+    checkInStartMinutes > checkInCutoffMinutes
+  ) {
+    errors.push(
+      'Check-in window start must be the same time or earlier than the required check-in time.',
+    )
+  }
+
+  if (
+    checkOutStartMinutes !== null &&
+    checkOutEndMinutes !== null &&
+    checkOutStartMinutes > checkOutEndMinutes
+  ) {
+    errors.push(
+      'Required check-out time must be the same time or earlier than the check-out window end.',
+    )
+  }
+
+  if (
+    checkInCutoffMinutes !== null &&
+    checkOutStartMinutes !== null &&
+    checkInCutoffMinutes > checkOutStartMinutes
+  ) {
+    errors.push(
+      'The required check-in time must be earlier than the required check-out time.',
+    )
+  }
+
   const latitude =
     attendance.officeLatitude
 
@@ -544,6 +577,17 @@ async function readSettingsFromDatabase() {
   const settings = cloneDefaults()
 
   for (const record of records) {
+    if (record.key === 'app_settings') {
+      const parsed = parseStoredValue(record.value, null)
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (k in settings && (settings[k] === undefined || (Array.isArray(settings[k]) && settings[k].length === 0))) {
+            settings[k] = v
+          }
+        }
+      }
+      continue
+    }
     if (!(record.key in settings)) {
       continue
     }
@@ -554,17 +598,9 @@ async function readSettingsFromDatabase() {
     )
   }
 
-  settings.departments =
-    normalizeStringList(
-      settings.departments,
-      DEFAULT_SETTINGS.departments,
-    )
+  settings.departments = normalizeStringList(settings.departments, [])
 
-  settings.jobTitles =
-    normalizeStringList(
-      settings.jobTitles,
-      DEFAULT_SETTINGS.jobTitles,
-    )
+  settings.jobTitles = normalizeStringList(settings.jobTitles, [])
 
   settings.employmentTypes =
     normalizeStringList(

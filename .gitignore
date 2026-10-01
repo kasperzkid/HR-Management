@@ -37,6 +37,10 @@ prisma/verify-*.db-journal
 # person should build their own copy with `npm run db:push && npm run db:seed`.
 prisma/dev.db
 prisma/dev.db-journal
+server/prisma/*.db
+server/prisma/*.db-journal
+*.db
+*.db-journal
 
 # Server runtime data
 server/uploads

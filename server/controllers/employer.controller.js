@@ -558,13 +558,27 @@ function getCurrentTimeKey() {
    Defaults: check-in 08:00, cutoff 08:30, check-out 17:30.
 ========================================================= */
 
+function toEthiopianTime(hours, minutes) {
+  const ethHour = ((hours - 6 + 24) % 12) || 12
+  let period
+  if (hours >= 6 && hours < 12) {
+    period = 'ቀን'
+  } else if (hours >= 12 && hours < 18) {
+    period = 'ከሰዓት'
+  } else if (hours >= 18 && hours < 24) {
+    period = 'ምሽት'
+  } else {
+    period = 'ሌሊት'
+  }
+  return { hour: ethHour, minute: minutes, period }
+}
+
 function formatTimeDisplay(timeStr) {
   if (!timeStr) return ''
   const [h, m] = String(timeStr).split(':').map(Number)
   if (!Number.isFinite(h) || !Number.isFinite(m)) return timeStr
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  const displayHour = h % 12 || 12
-  return `${displayHour}:${String(m).padStart(2, '0')} ${ampm}`
+  const { hour, minute, period } = toEthiopianTime(h, m)
+  return `${hour}:${String(minute).padStart(2, '0')} ${period} (${timeStr})`
 }
 
 function timeToMinutes(time) {
@@ -636,11 +650,75 @@ function getCheckInTiming(time, configuration = {}) {
   }
 
   return {
-    allowed: false,
-    status: 'TOO_LATE',
+    allowed: true,
+    status: 'LATE',
     lateMinutes:
       minutes -
       cutoffMinutes,
+  }
+}
+
+// Check-out timing. Deliberately mirrors the check-in shape: the
+// window OPENS at checkOutStartTime and stays open, so an employee who
+// works late is never locked out of their own record. checkOutEndTime
+// is not a gate — it is the scheduled end the departure is MEASURED
+// against, which is what gives the HR-configured end time a real
+// effect (early departure / overtime) without stranding anyone.
+function getCheckOutTiming(
+  time,
+  configuration = {},
+) {
+  const minutes =
+    timeToMinutes(time)
+
+  if (
+    minutes === null
+  ) {
+    return {
+      allowed: false,
+      status: 'INVALID',
+      earlyDepartureMinutes: 0,
+      overtimeMinutes: 0,
+    }
+  }
+
+  const startMinutes =
+    timeToMinutes(configuration.checkOutStartTime || '17:30') ??
+    (17 * 60 + 30)
+
+  const endMinutes =
+    timeToMinutes(configuration.checkOutEndTime || '19:00') ??
+    (19 * 60)
+
+  if (
+    minutes > endMinutes
+  ) {
+    return {
+      allowed: true,
+      status: 'OVERTIME',
+      earlyDepartureMinutes: 0,
+      overtimeMinutes:
+        minutes - endMinutes,
+    }
+  }
+
+  if (
+    minutes < endMinutes
+  ) {
+    return {
+      allowed: true,
+      status: 'EARLY_DEPARTURE',
+      earlyDepartureMinutes:
+        endMinutes - minutes,
+      overtimeMinutes: 0,
+    }
+  }
+
+  return {
+    allowed: true,
+    status: 'ON_TIME',
+    earlyDepartureMinutes: 0,
+    overtimeMinutes: 0,
   }
 }
 
@@ -821,15 +899,6 @@ export async function checkIn(req, res) {
         })
       }
 
-      if (timing.status === 'TOO_LATE') {
-        const cutoffDisplay = formatTimeDisplay(configuration.requiredCheckInTime || '08:30')
-        return res.status(403).json({
-          message: `Check-in window closed at ${cutoffDisplay}.`,
-          code: 'CHECK_IN_WINDOW_CLOSED',
-          checkInEnd: configuration.requiredCheckInTime || '08:30',
-        })
-      }
-
       return res.status(400).json({
         message:
           'Invalid check-in time.',
@@ -892,6 +961,8 @@ export async function checkIn(req, res) {
     const status =
       timing.status === 'PRESENT'
         ? 'PRESENT'
+        : timing.status === 'LATE'
+        ? 'LATE'
         : 'ABSENT'
 
     const lateMinutes =
@@ -988,6 +1059,11 @@ export async function checkIn(req, res) {
 
       lateMinutes,
 
+      // The windows that produced this decision, so the client stays in
+      // step with HR Settings without a second round trip.
+      attendanceConfig:
+        configuration,
+
       location: {
         verified:
           location.verified,
@@ -1040,21 +1116,34 @@ export async function checkOut(req, res) {
       checkOut ||
       getCurrentTimeKey()
 
-    const checkoutMinutes =
-      timeToMinutes(
+    // Availability comes from one helper, so the window that gates the
+    // button is the same one that decides what the record says.
+    // It opens at checkOutStartTime and stays open; checkOutEndTime is
+    // the yardstick for early departure / overtime, not a gate.
+    const checkoutTiming =
+      getCheckOutTiming(
         attendanceTime,
+        configuration,
       )
 
-    const requiredCheckoutMinutes =
-      timeToMinutes(configuration.checkOutStartTime || '17:30') ??
-      (17 * 60 + 30)
-
-    const checkoutEndMinutes =
-      timeToMinutes(configuration.checkOutEndTime || '19:00') ?? (19 * 60)
-
     if (
-      checkoutMinutes === null
+      !checkoutTiming.allowed
     ) {
+      if (
+        checkoutTiming.status ===
+        'TOO_EARLY'
+      ) {
+        const checkoutDisplay = formatTimeDisplay(configuration.checkOutStartTime || '17:30')
+        return res.status(403).json({
+          message:
+            `Check-out is available at ${checkoutDisplay}.`,
+          code:
+            'CHECK_OUT_NOT_OPEN',
+          checkOutTime:
+            configuration.checkOutStartTime || '17:30',
+        })
+      }
+
       return res.status(400).json({
         message:
           'Invalid check-out time.',
@@ -1063,29 +1152,6 @@ export async function checkOut(req, res) {
       })
     }
 
-    if (
-      checkoutMinutes <
-      requiredCheckoutMinutes
-    ) {
-      const checkoutDisplay = formatTimeDisplay(configuration.checkOutStartTime || '17:30')
-      return res.status(403).json({
-        message:
-          `Check-out is available at ${checkoutDisplay}.`,
-        code:
-          'CHECK_OUT_NOT_OPEN',
-        checkOutTime:
-          configuration.checkOutStartTime || '17:30',
-      })
-    }
-
-    if (checkoutMinutes > checkoutEndMinutes) {
-      const checkoutEndDisplay = formatTimeDisplay(configuration.checkOutEndTime || '19:00')
-      return res.status(403).json({
-        message: `Check-out window closed at ${checkoutEndDisplay}.`,
-        code: 'CHECK_OUT_WINDOW_CLOSED',
-        checkOutEndTime: configuration.checkOutEndTime || '19:00',
-      })
-    }
 
     const location =
       isInsideOffice(
@@ -1176,6 +1242,18 @@ export async function checkOut(req, res) {
               ? 'VERIFIED'
               : 'NOT_CONFIGURED',
 
+          // The HR-configured checkOutEndTime is applied here: it is what makes
+          // the end time HR typed in mean something. Departing before it
+          // records the shortfall; departing after it records the excess
+          // as overtime. Payroll already reads these two columns, and
+          // until now nothing ever wrote them, so every employee was
+          // implicitly zero.
+          earlyDeparture:
+            checkoutTiming.earlyDepartureMinutes,
+
+          overtime:
+            checkoutTiming.overtimeMinutes,
+
           status:
             attendance.status ||
             'PRESENT',
@@ -1184,13 +1262,35 @@ export async function checkOut(req, res) {
 
     res.json({
       message:
-        'Check-out recorded successfully.',
+        checkoutTiming.status ===
+        'OVERTIME'
+        ? `Check-out recorded. ${checkoutTiming.overtimeMinutes} minute(s) past the scheduled end time, logged as overtime.`
+        : checkoutTiming.status ===
+        'EARLY_DEPARTURE'
+        ? `Check-out recorded. ${checkoutTiming.earlyDepartureMinutes} minute(s) before the scheduled end time, logged as an early departure.`
+        : 'Check-out recorded successfully.',
 
       attendance:
         updated,
 
       record:
         updated,
+
+      // The verdict and the numbers behind it, so the employee sees
+      // the same conclusion the record carries.
+      checkoutStatus:
+        checkoutTiming.status,
+
+      earlyDepartureMinutes:
+        checkoutTiming.earlyDepartureMinutes,
+
+      overtimeMinutes:
+        checkoutTiming.overtimeMinutes,
+
+      // The windows that produced this decision, so the client stays in
+      // step with HR Settings without a second round trip.
+      attendanceConfig:
+        configuration,
 
       location: {
         verified:
@@ -1224,60 +1324,130 @@ export async function getAttendanceStatus(
     const employee =
       await getCurrentEmployee(req)
 
-    if (!employee) {
-      return res.status(403).json({
-        message:
-          'This account is not linked to an employee',
-      })
-    }
-
     const attendanceDate =
       getTodayDateKey()
 
-    const attendance =
-      await prisma.attendance.findFirst({
-        where: {
-          employeeId:
-            employee.id,
+    let attendance = null
+    let leaveRequest = null
 
-          date:
-            attendanceDate,
-        },
+    if (employee) {
+      attendance =
+        await prisma.attendance.findFirst({
+          where: {
+            employeeId:
+              employee.id,
 
-        orderBy: {
-          createdAt:
-            'desc',
-        },
-      })
-
-    const leaveRequest =
-      await prisma.leaveRequest.findFirst({
-        where: {
-          employeeId:
-            employee.id,
-
-          startDate: {
-            lte:
+            date:
               attendanceDate,
           },
 
-          endDate: {
-            gte:
-              attendanceDate,
+          orderBy: {
+            createdAt:
+              'desc',
+          },
+        })
+
+      leaveRequest =
+        await prisma.leaveRequest.findFirst({
+          where: {
+            employeeId:
+              employee.id,
+
+            startDate: {
+              lte:
+                attendanceDate,
+            },
+
+            endDate: {
+              gte:
+                attendanceDate,
+            },
+
+            approvalStatus:
+              'Approved',
           },
 
-          approvalStatus:
-            'Approved',
-        },
+          orderBy: {
+            createdAt:
+              'desc',
+          },
+        })
+    }
 
-        orderBy: {
-          createdAt:
-            'desc',
-        },
-      })
+    const configuration =
+      await getAttendanceConfiguration()
+
+    const currentTime =
+      getCurrentTimeKey()
+
+    const checkInTiming =
+      getCheckInTiming(
+        currentTime,
+        configuration,
+      )
+
+    // Same helper the check-out endpoint uses, so the flag this endpoint
+    // advertises and the verdict the punch actually gets can never
+    // disagree.
+    const checkOutTiming =
+      getCheckOutTiming(
+        currentTime,
+        configuration,
+      )
 
     res.json({
       loaded: true,
+
+      // The attendance day and clock the server is working to, so
+      // the client never has to re-derive the timezone.
+      date: attendanceDate,
+      time: currentTime,
+
+      // The HR-configured schedule, delivered with the punch state
+      // so the two can never be out of step.
+      attendanceConfig: configuration,
+
+      checkInStartTime:
+        configuration.checkInStartTime ||
+        '08:00',
+
+      requiredCheckInTime:
+        configuration.requiredCheckInTime ||
+        '08:30',
+
+      checkOutStartTime:
+        configuration.checkOutStartTime ||
+        '17:30',
+
+      checkOutEndTime:
+        configuration.checkOutEndTime ||
+        '19:00',
+
+      // Advertised for the Attendance page's diagnostics and for any
+      // non-browser client. The header widget deliberately ignores
+      // these: they are a snapshot of the server's clock at poll
+      // time, so gating a live button on them could leave it stale
+      // for up to a full poll interval. The client derives
+      // availability from the same config against its own ticking
+      // clock instead, and the server still has the final say on the
+      // punch itself.
+      checkInWindowOpen:
+        checkInTiming.allowed,
+
+      checkInWindowState:
+        checkInTiming.status,
+
+      lateMinutesNow:
+        checkInTiming.lateMinutes,
+
+      checkOutWindowOpen:
+        checkOutTiming.allowed,
+
+      checkOutWindowState:
+        checkOutTiming.status,
+
+      record: attendance,
+      attendance,
 
       checkedIn:
         Boolean(
@@ -1312,6 +1482,12 @@ export async function getAttendanceStatus(
       reviewRemarks:
         attendance?.reviewRemarks ||
         null,
+
+      // An emergency check-out is stored as a PENDING_REVIEW record
+      // awaiting HR sign-off — there is no separate column.
+      isEmergency:
+        attendance?.status ===
+        'PENDING_REVIEW',
 
       onLeave:
         leaveRequest

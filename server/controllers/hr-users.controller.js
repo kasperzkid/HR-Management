@@ -288,6 +288,59 @@ export async function createRole(req, res) {
   }
 }
 
+
+/**
+ * Delete a custom or non-protected role.
+ */
+export async function deleteRole(req, res) {
+  try {
+    const key = String(req.params.key || '').trim()
+
+    if (!key) {
+      return res.status(400).json({ message: 'Role key is required.' })
+    }
+
+    const role = await prisma.role.findUnique({
+      where: { key },
+      include: {
+        _count: {
+          select: { users: true },
+        },
+      },
+    })
+
+    if (!role) {
+      return res.status(404).json({ message: 'Role not found.' })
+    }
+
+    if (role.isProtected || role.key === ADMIN_ROLE_KEY) {
+      return res.status(403).json({
+        code: 'PROTECTED_ROLE',
+        message: 'The system administrator role cannot be deleted.',
+      })
+    }
+
+    if (role._count.users > 0) {
+      return res.status(400).json({
+        code: 'ROLE_IN_USE',
+        message: `Cannot delete the "${role.name}" role because it is currently assigned to ${role._count.users} user(s). Reassign them first.`,
+      })
+    }
+
+    await prisma.$transaction([
+      prisma.rolePermission.deleteMany({ where: { roleId: role.id } }),
+      prisma.role.delete({ where: { id: role.id } }),
+    ])
+
+    return res.json({
+      message: `Role "${role.name}" was successfully deleted.`,
+      key,
+    })
+  } catch (error) {
+    return fail(res, error, 'Failed to delete the role')
+  }
+}
+
 export async function listAssignableRoles(req, res) {
   try {
     const { permissions } = await actorContext(req)

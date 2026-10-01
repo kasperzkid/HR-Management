@@ -22,14 +22,30 @@ console.log(`  SMTP_USER      : ${status.user ?? '(not set)'}`)
 console.log(`  SMTP_PASSWORD  : ${status.passwordSet ? 'set' : 'NOT SET'}`)
 console.log(`  SMTP_FROM      : ${status.from ?? '(not set)'}`)
 
-const { ok, message, hint } = await verifySmtpConfiguration()
+const { ok, state, message, hint } = await verifySmtpConfiguration()
+
+const headline = ok
+  ? 'READY - email will be delivered.'
+  : state === 'unconfigured'
+  ? 'NOT SET UP YET - the mail settings have not been filled in.'
+  : 'NOT READY - the mail settings are present but the server rejected them.'
 
 console.log('')
-console.log(ok ? '  READY - email will be delivered.' : '  NOT READY')
+console.log(`  ${headline}`)
 console.log(`  ${message}`)
 
 if (!ok) {
   if (hint) console.log(`  ${hint}`)
+
+  if (state === 'unconfigured') {
+    console.log('')
+    console.log('  Nothing else in the system is affected. To turn email on:')
+    console.log('    1. Open .env and fill in SMTP_HOST / SMTP_PORT / SMTP_SECURE /')
+    console.log('       SMTP_USER / SMTP_PASSWORD / SMTP_FROM (see .env.example).')
+    console.log('    2. Run "npm run email:check" again.')
+    console.log('    3. Restart the server.')
+  }
+
   console.log('')
   process.exit(1)
 }

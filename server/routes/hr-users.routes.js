@@ -34,6 +34,7 @@ import {
   setHrUserPermissions,
   resetHrUserPassword,
   deleteHrUser,
+  deleteRole,
 } from '../controllers/hr-users.controller.js'
 
 const router = Router()
@@ -56,6 +57,7 @@ router.post('/rbac/roles', requirePermission('users.permissions'), createRole)
 
 // Changing what a role grants is the permission-management permission itself.
 router.put('/rbac/roles/:key', requirePermission('users.permissions'), updateRolePermissions)
+router.delete('/rbac/roles/:key', requirePermission('users.permissions'), deleteRole)
 
 // ── HR users ─────────────────────────────────────────────────────────
 
